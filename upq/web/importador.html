@@ -147,6 +147,10 @@ mjx-container[display="true"] { margin: .6em 0 !important; }
 .chave.on { background: var(--acento); } .chave.on::after { left: 17px; }
 .avisos { border-radius: 6px; padding: 10px 12px 10px 30px; margin: 0; font-size: 13px; }
 .avisos.erro { background: var(--erro-fundo); } .avisos.alerta { background: var(--alerta-fundo); }
+.gab-tabela { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.gab-tabela img { height: 40px; width: auto; border-radius: 4px; border: 1px solid var(--borda); background: #fff; }
+.gab-manual { display: grid; gap: 8px; grid-column: 1 / -1; }
+.gab-manual img { max-width: 100%; max-height: 520px; width: auto; border: 1px solid var(--borda); border-radius: 6px; background: #fff; justify-self: start; }
 .original summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--suave); }
 .original img { width: 100%; height: auto; margin-top: 8px; border-radius: 6px; border: 1px solid var(--borda); background: #fff; }
 .barra-sel { position: sticky; bottom: env(safe-area-inset-bottom, 0px); margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; background: var(--painel); border: 1px solid var(--acento); border-radius: var(--raio); box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
@@ -457,10 +461,9 @@ function formatarReferencias(texto) {
 function normalizarIA(r, q, ctx) {
   const alternativas = {};
   for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = String(a.texto ?? '').trim(); }
+  // O gabarito é sempre o da tabela do PDF; a letra que a IA devolver é ignorada.
   const oficial = ctx.gabarito[nn(q.numero)];
   const obs = [r.observacoes].filter(Boolean);
-  const gabIA = String(r.gabarito || '').trim().toUpperCase();
-  if (oficial && gabIA && oficial !== gabIA) obs.push(`IA indicou ${gabIA}, gabarito oficial é ${oficial}`);
   const instituicao = r.instituicao ? String(r.instituicao).trim() : null;
   const ano = Number.isInteger(+r.ano) && +r.ano > 1900 ? +r.ano : null;
   return {
@@ -469,7 +472,7 @@ function normalizarIA(r, q, ctx) {
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: formatarReferencias(String(r.enunciado || '').trim()), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, revisar: !!r.revisar || !oficial || (gabIA && oficial !== gabIA),
+    pagina: q.pagina, textoPdf: q.textoPdf, revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -497,10 +500,22 @@ async function processar(job, {reprocessar = false} = {}) {
     const m = job.m;
     if (!job.ctx) {
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
-      let gabarito = m.gabaritoPdf;
-      if (!Object.keys(gabarito).length && m.paginaGabarito && comImagens()) gabarito = await lerGabarito(m.paginaGabarito);
+      // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
+      // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).
+      const completo = g => m.questoes.every(q => g[nn(q.numero)]);
+      let gabarito = m.gabaritoPdf, origem = 'tabela do PDF';
+      if (job.gabaritoDigitado) { gabarito = job.gabaritoDigitado; origem = 'digitado a partir da tabela'; }
+      if (!completo(gabarito) && m.paginaGabarito && comImagens()) {
+        atualizar(job, {mensagem: 'Lendo a tabela de gabarito com o Claude…'});
+        gabarito = await lerGabarito(m.paginaGabarito).catch(() => ({}));
+        origem = 'tabela do PDF (lida pelo Claude)';
+      }
+      if (!completo(gabarito)) {
+        const faltam = m.questoes.filter(q => !gabarito[nn(q.numero)]).map(q => nn(q.numero));
+        return atualizar(job, {estado: 'gabarito', mensagem: `Não consegui ler a tabela de gabarito (${m.gabaritoMotivo || `faltam as questões ${faltam.join(', ')}`}). Nada foi enviado ao Claude ainda.`});
+      }
       const classe = m.tipo === 'lista' ? await classificar(m) : null;
-      job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
+      job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, gabaritoOrigem: origem, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
                  classificacao: classe, simulado: m.tipo === 'simulado' ? dadosSimulado(m.arquivo) : null};
       const porLote = porChamada();
       job.pendentes = [];
@@ -567,11 +582,14 @@ async function salvarNoBanco(job) {
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
     for (const f of q.figuras) figuras.push({nome: f.nome, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
-    const final = {...base, imagem: up.id, figuras};
+    const recGab = m.gabaritoRecortes?.[nn(q.numero)];
+    const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
+    const final = {...base, imagem: up.id, figuras, gabaritoRecorte};
     Object.assign(final, validarQuestao(final, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
     questoes.push(final);
     atualizar(job, {progresso: ++feitas / m.questoes.length});
   }
+  const gabaritoImagem = m.paginaGabarito ? (await cap.assets.upload(m.paginaGabarito, {type: 'image/jpeg'})).id : null;
   atualizar(job, {etapa: 3, mensagem: 'Gravando no banco…', progresso: 0.5});
   const tags = [...new Set(questoes.flatMap(q => q.assuntos))];
   const nPartes = Math.ceil(questoes.length / QUESTOES_POR_PARTE);
@@ -580,7 +598,7 @@ async function salvarNoBanco(job) {
   for (const [pid, parte] of estado.partes)   // reprocessamento com menos questões: some com as partes que sobraram
     if (parte.importacao === id && parte.parte >= nPartes) await cap.db.doc(`partes/${pid}`).delete();
   await cap.db.doc(`importacoes/${id}`).set({arquivo: m.arquivo, hash: m.hash, titulo: m.titulo, tipo: m.tipo,
-    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito,
+    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito, gabaritoOrigem: ctx.gabaritoOrigem, gabaritoImagem,
     classificacao: ctx.classificacao, criado_em: estado.importacoes.get(id)?.criado_em || agora(), atualizado_em: agora()});
   const padrao = [...estado.listas.entries()].find(([, l]) => l.origem === id);
   const listaId = padrao ? padrao[0] : id;
@@ -661,6 +679,13 @@ function desenharEnvios() {
     if (acao === 'abrir') ir('lista', {lista: job.lista});
     else if (acao === 'continuar') enfileirar(job);
     else if (acao === 'reprocessar') enfileirar(job, {reprocessar: true});
+    else if (acao === 'usar-gabarito') {
+      const letras = (alvo.querySelector(`[data-gab-job="${job.id}"]`).value.toUpperCase().match(/[A-E]/g) || []);
+      const n = job.m.questoes.length;
+      if (letras.length !== n) { alvo.querySelector(`[data-gab-info="${job.id}"]`).textContent = `${letras.length} letras; a lista tem ${n} questões.`; return; }
+      job.gabaritoDigitado = Object.fromEntries(job.m.questoes.map((q, i) => [nn(q.numero), letras[i]]));
+      enfileirar(job);
+    }
     else if (acao === 'descartar') { estado.jobs.splice(estado.jobs.indexOf(job), 1); desenharEnvios(); }
     else if (acao === 'ver-existente') { const l = [...estado.listas.entries()].find(([, x]) => x.origem === job.idImp); if (l) ir('lista', {lista: l[0]}); }
   }));
@@ -669,7 +694,7 @@ function cartaoEnvio(e) {
   const etapas = ETAPAS.map((nome, i) => {
     let cls = i < e.etapa ? 'feita' : i === e.etapa ? 'atual' : '';
     if (e.estado === 'concluido') cls = 'feita';
-    if (i === e.etapa && e.estado === 'parado') cls = 'parada';
+    if (i === e.etapa && (e.estado === 'parado' || e.estado === 'gabarito')) cls = 'parada';
     if (i === e.etapa && e.estado === 'falhou') cls = 'falhou';
     const largura = cls === 'feita' ? 100 : i === e.etapa ? Math.round((e.progresso || 0) * 100) : 0;
     return `<div class="etapa ${cls}"><i><b style="width:${largura}%"></b></i>${nome}</div>`;
@@ -678,10 +703,16 @@ function cartaoEnvio(e) {
   const acoes = e.estado === 'concluido' ? b('abrir', 'Ver lista', true)
     : e.estado === 'parado' ? b('continuar', 'Continuar', true) + b('descartar', 'Descartar')
     : e.estado === 'duplicado' ? b('ver-existente', 'Ver a lista') + b('reprocessar', 'Reprocessar', true) + b('descartar', 'Cancelar')
+    : e.estado === 'gabarito' ? b('descartar', 'Descartar')
     : e.estado === 'falhou' ? b('descartar', 'Fechar')
     : e.estado === 'fila' ? b('descartar', 'Tirar da fila') : '';
+  const manual = e.estado !== 'gabarito' ? '' : `<div class="gab-manual">
+    ${e.m?.paginaGabarito ? `<img src="${e.urlGabarito ||= URL.createObjectURL(e.m.paginaGabarito)}" alt="Página da tabela de gabarito">` : '<div class="sub">O PDF não tem página de gabarito depois das questões.</div>'}
+    <label class="rotulo-campo">Último recurso: digite as letras da tabela, em ordem (${e.m?.questoes.length || 0} questões)
+      <input class="campo" data-gab-job="${e.id}" placeholder="Ex.: CCDABBCDDB…" autocomplete="off" spellcheck="false"></label>
+    <div class="form-linha"><button class="botao primario" data-job="${e.id}" data-acao="usar-gabarito">Usar e continuar</button><span class="sub" data-gab-info="${e.id}"></span></div></div>`;
   return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>
-    <div class="acoes-envio">${acoes}</div><div class="etapas">${etapas}</div></div>`;
+    <div class="acoes-envio">${acoes}</div><div class="etapas">${etapas}</div>${manual}</div>`;
 }
 // Uma lista por vez: as chamadas ao Claude de listas diferentes não competem entre si.
 let filaRodando = false;
@@ -943,6 +974,8 @@ function detalheQuestao(q, comBotoes) {
       <div><div class="rotulo">Ano</div><div class="valor num">${q.ano || '—'}</div></div></div>
     <div><div class="rotulo">Alternativas</div><div class="alternativas">
       <div class="alt cab-alt"><span>#</span><span>Conteúdo da alternativa</span><span style="justify-self:center">Correta?</span></div>${alts}</div></div>
+    <div><div class="rotulo">Gabarito (tabela do PDF)</div><div class="gab-tabela"><span class="valor num">${esc(q.gabarito || '—')}</span>
+      ${q.gabaritoRecorte ? `<img src="${blobUrl(q.gabaritoRecorte)}" alt="Linha da questão ${q.numero} na tabela de gabarito" loading="lazy">` : ''}</div></div>
     <details class="original"><summary>Ver original no PDF (${esc(q.lista_origem)}, página ${q.pagina})</summary><img src="${blobUrl(q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
 }
 function formEdicao(q) {

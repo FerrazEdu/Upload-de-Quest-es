@@ -33,7 +33,7 @@ import pymupdf
 ETAPAS = ["Fixação", "Treinamento", "Aprofundamento", "Desafios"]
 RE_QUESTAO = re.compile(r"^\s*Quest[aã]o\s*(\d[\d ]*)")
 MARGEM_TOPO = 30          # abaixo da faixa de cabeçalho da página
-FIGURA_MIN = 40           # lado mínimo (pt) para uma imagem contar como figura
+FIGURA_MIN = 30           # lado mínimo (pt) para uma imagem contar como figura (alternativas em imagem são pequenas)
 DPI_QUESTAO = 200
 DPI_FIGURA = 300
 
@@ -65,6 +65,18 @@ def fim_da_coluna(pagina):
         and pymupdf.Rect(im["bbox"]).y0 > pagina.rect.height * 0.8
     ]
     return min(candidatos) if candidatos else pagina.rect.height - 30
+
+
+def ordem_de_leitura(figuras: list) -> list:
+    """Figuras por faixas horizontais (lado a lado → esquerda para a direita), de cima para baixo."""
+    faixas = []
+    for f in sorted(figuras, key=lambda f: f.y0):
+        if faixas and f.y0 < faixas[-1]["y1"] - 0.5 * min(f.height, faixas[-1]["h"]):
+            faixas[-1]["f"].append(f)
+            faixas[-1]["y1"] = max(faixas[-1]["y1"], f.y1)
+        else:
+            faixas.append({"y1": f.y1, "h": f.height, "f": [f]})
+    return [f for u in faixas for f in sorted(u["f"], key=lambda f: f.x0)]
 
 
 def aparar_figura(figura, linhas_texto):
@@ -148,8 +160,8 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
                 regiao = pymupdf.Rect(x0 + 2, y - 2, x1 - 2, y_fim)
                 figuras = []
                 for k, f in enumerate(
-                    sorted((f for f in figuras_pagina if regiao.contains(pymupdf.Point((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2))),
-                           key=lambda f: (f.y0, f.x0)), start=1):
+                    ordem_de_leitura([f for f in figuras_pagina
+                                      if regiao.contains(pymupdf.Point((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2))]), start=1):
                     f = aparar_figura(f, linhas_texto)
                     nome = f"Q{numero:02d}_fig{k}.png"
                     # Renderiza o recorte em vez de extrair o arquivo da imagem: assim

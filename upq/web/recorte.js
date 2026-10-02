@@ -9,7 +9,7 @@ const UPQRecorte = (() => {
   const ETAPAS = ['Fixação', 'Treinamento', 'Aprofundamento', 'Desafios'];
   const RE_QUESTAO = /^\s*Quest[aã]o\s*(\d[\d ]*)/;
   const MARGEM_TOPO = 30;          // abaixo da faixa de cabeçalho da página (pt)
-  const FIGURA_MIN = 40;           // lado mínimo (pt) para uma imagem contar como figura
+  const FIGURA_MIN = 30;           // lado mínimo (pt) para uma imagem contar como figura (alternativas em imagem são pequenas)
   const ESCALA = 3;                // render da página: 3 px por pt (≈ 216 dpi)
   const MAX_PX_QUESTAO = 1150000;  // o Claude reduz imagens a ~1,2 MP: o recorte já sai nesse tamanho
 
@@ -77,6 +77,20 @@ const UPQRecorte = (() => {
 
   // A imagem embutida às vezes é maior que a área visível e invade o texto vizinho:
   // corta nas linhas que cruzam a borda de cima ou de baixo (rótulos inteiros dentro ficam).
+  // Ordem de leitura das figuras: por faixas horizontais (figuras lado a lado, como alternativas
+  // A e B numa mesma linha, ficam da esquerda para a direita), depois de cima para baixo.
+  function ordemDeLeitura(figs) {
+    figs.sort((a, b) => a.y0 - b.y0);
+    const faixas = [];
+    for (const f of figs) {
+      const u = faixas[faixas.length - 1];
+      if (u && f.y0 < u.y1 - 0.5 * Math.min(f.y1 - f.y0, u.y1 - u.y0)) { u.f.push(f); u.y1 = Math.max(u.y1, f.y1); }
+      else faixas.push({y1: f.y1, f: [f]});
+    }
+    figs.splice(0, figs.length, ...faixas.flatMap(u => u.f.sort((a, b) => a.x0 - b.x0)));
+    return figs;
+  }
+
   function aparar(f, linhas) {
     const r = {...f};
     for (const t of linhas) {
@@ -124,23 +138,40 @@ const UPQRecorte = (() => {
     return {};
   }
 
+  // Tabela de gabarito em texto: "12 C" na mesma linha, ou número e letra em pedaços alinhados.
+  // Devolve {pares, caixas}: caixas[NN] = retângulo (pt) da linha da tabela, para o recorte.
   function gabaritoEmTexto(linhas) {
-    const pares = {};
-    const texto = linhas.map(l => l.texto).join('\n');
-    for (const m of texto.matchAll(/^\s*(\d{1,3})\s*[\n ]\s*([A-E])\s*$/gm)) pares[String(+m[1]).padStart(2, '0')] = m[2];
-    return pares;
+    const pares = {}, caixas = {};
+    const nn = n => String(+n).padStart(2, '0');
+    const uniao = (a, b) => ({x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1)});
+    const numeros = [], letras = [];
+    for (const l of linhas) {
+      const t = l.texto.trim();
+      let m;
+      if ((m = t.match(/^(\d{1,3})\s+([A-E])$/))) { pares[nn(m[1])] = m[2]; caixas[nn(m[1])] = uniao(l, l); }
+      else if (/^\d{1,3}$/.test(t)) numeros.push(l);
+      else if (/^[A-E]$/.test(t)) letras.push(l);
+    }
+    for (const n of numeros) {
+      const l = letras.filter(x => Math.abs(x.base - n.base) < 3 && x.x0 > n.x1).sort((a, b) => a.x0 - b.x0)[0];
+      if (l && !pares[nn(n.texto)]) { pares[nn(n.texto)] = l.texto.trim(); caixas[nn(n.texto)] = uniao(n, l); }
+    }
+    return {pares, caixas};
   }
 
   // Quadro de gabarito desenhado como imagem: lê as letras A–E pela forma (sem IA).
-  // Coluna da direita do quadro = letras, uma por linha, na ordem das questões.
-  function gabaritoNaImagem(canvas) {
+  // Funciona com uma ou várias tabelas lado a lado ("Questão | Gabarito"), de qualquer tamanho.
+  // A ordem das linhas é conferida pela quantidade de dígitos de cada número (1–9: um; 10+: dois).
+  // Devolve {pares: {"01": "C", ...}, motivo} — pares vazio quando não dá para ler com segurança.
+  function componentes(canvas, limiar) {
     const W = canvas.width, H = canvas.height;
     const px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
     const tinta = new Uint8Array(W * H);
-    for (let i = 0, j = 0; i < tinta.length; i++, j += 4)
-      tinta[i] = Math.max(px[j], px[j + 1], px[j + 2]) < 120 ? 1 : 0;   // preto/cinza escuro (não o vermelho)
-    const rot = new Int32Array(W * H), comps = [];
-    const fila = new Int32Array(W * H);
+    for (let i = 0, j = 0; i < tinta.length; i++, j += 4) {
+      const mx = Math.max(px[j], px[j + 1], px[j + 2]), mn = Math.min(px[j], px[j + 1], px[j + 2]);
+      tinta[i] = mx < limiar && mx - mn < 90 ? 1 : 0;   // escuro e pouco saturado (não o vermelho/azul do layout)
+    }
+    const rot = new Int32Array(W * H), fila = new Int32Array(W * H), comps = [];
     for (let i = 0; i < tinta.length; i++) {
       if (!tinta[i] || rot[i]) continue;
       const c = {x0: W, y0: H, x1: 0, y1: 0, n: 0, id: comps.length + 1};
@@ -148,41 +179,86 @@ const UPQRecorte = (() => {
       while (ini < fim) {
         const k = fila[ini++], x = k % W, y = (k - x) / W;
         c.n++; if (x < c.x0) c.x0 = x; if (x > c.x1) c.x1 = x; if (y < c.y0) c.y0 = y; if (y > c.y1) c.y1 = y;
-        for (const v of [k - 1, k + 1, k - W, k + W]) {
-          if (v < 0 || v >= tinta.length || !tinta[v] || rot[v]) continue;
-          if ((v === k - 1 && x === 0) || (v === k + 1 && x === W - 1)) continue;
-          rot[v] = c.id; fila[fim++] = v;
-        }
+        if (x > 0 && tinta[k - 1] && !rot[k - 1]) { rot[k - 1] = c.id; fila[fim++] = k - 1; }
+        if (x < W - 1 && tinta[k + 1] && !rot[k + 1]) { rot[k + 1] = c.id; fila[fim++] = k + 1; }
+        if (y > 0 && tinta[k - W] && !rot[k - W]) { rot[k - W] = c.id; fila[fim++] = k - W; }
+        if (y < H - 1 && tinta[k + W] && !rot[k + W]) { rot[k + W] = c.id; fila[fim++] = k + W; }
       }
       comps.push(c);
     }
-    const alt = ESCALA * 5, altMax = ESCALA * 20;     // glifos de 5 a 20 pt de altura
-    const glifos = comps.filter(c => c.y1 - c.y0 >= alt && c.y1 - c.y0 <= altMax && c.x1 - c.x0 <= altMax && c.n > 30);
-    if (glifos.length < 4) return {};
-    // separa as duas colunas pelo maior vão entre os centros em x
-    const xs = glifos.map(c => (c.x0 + c.x1) / 2).sort((a, b) => a - b);
-    let corte = 0, vao = 0;
-    for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > vao) { vao = xs[i] - xs[i - 1]; corte = (xs[i] + xs[i - 1]) / 2; }
-    if (vao < ESCALA * 30) return {};
-    const letras = glifos.filter(c => (c.x0 + c.x1) / 2 > corte).sort((a, b) => a.y0 - b.y0);
-    const numeros = glifos.filter(c => (c.x0 + c.x1) / 2 < corte);
-    // linhas da coluna de números (um número de dois dígitos são dois glifos na mesma linha)
+    return {comps, rot, W};
+  }
+
+  // retângulo (pt) que cobre o número e a letra de uma linha da tabela
+  function caixaDe(num, letra) {
+    const g = [...num.g, ...letra.g];
+    return {x0: Math.min(...g.map(c => c.x0)) / ESCALA, y0: Math.min(...g.map(c => c.y0)) / ESCALA,
+            x1: Math.max(...g.map(c => c.x1)) / ESCALA, y1: Math.max(...g.map(c => c.y1)) / ESCALA};
+  }
+
+  function gabaritoNaImagem(canvas, inicio = 1) {
+    let melhor = {pares: {}, motivo: 'nenhum quadro de gabarito reconhecido'};
+    for (const limiar of [120, 160, 90]) {
+      const r = lerQuadro(canvas, limiar, inicio);
+      if (Object.keys(r.pares).length) return r;
+      if (r.pontos > (melhor.pontos || 0)) melhor = r;
+    }
+    return melhor;
+  }
+
+  function lerQuadro(canvas, limiar, inicio) {
+    const {comps, rot, W} = componentes(canvas, limiar);
+    const glifos = comps.filter(c => { const h = c.y1 - c.y0 + 1, w = c.x1 - c.x0 + 1;
+      return h >= ESCALA * 3 && h <= ESCALA * 30 && w <= ESCALA * 30 && w >= 2 && c.n > 12; });
+    // linhas: glifos com o centro vertical alinhado
+    glifos.sort((a, b) => (a.y0 + a.y1) - (b.y0 + b.y1));
     const linhas = [];
-    for (const c of numeros.sort((a, b) => a.y0 - b.y0)) {
-      const meio = (c.y0 + c.y1) / 2, l = linhas[linhas.length - 1];
-      if (l && Math.abs(meio - l) < ESCALA * 4) continue;
-      linhas.push(meio);
+    for (const g of glifos) {
+      const yc = (g.y0 + g.y1) / 2, h = g.y1 - g.y0 + 1, l = linhas[linhas.length - 1];
+      if (l && Math.abs(yc - l.yc) < 0.45 * Math.max(h, l.h)) { l.g.push(g); l.yc = (l.yc * (l.g.length - 1) + yc) / l.g.length; l.h = Math.max(l.h, h); }
+      else linhas.push({yc, h, g: [g]});
     }
-    if (linhas.length !== letras.length) return {};
-    const pares = {};
-    for (let i = 0; i < letras.length; i++) {
-      const c = letras[i];
-      if (Math.abs((c.y0 + c.y1) / 2 - linhas[i]) > ESCALA * 4) return {};
-      const letra = classificarLetra(c, rot, W);
-      if (!letra) return {};
-      pares[String(i + 1).padStart(2, '0')] = letra;
+    // em cada linha, glifos próximos formam um "item" (o número 12 = dois glifos)
+    const linhasQuadro = [];
+    for (const l of linhas) {
+      l.g.sort((a, b) => a.x0 - b.x0);
+      const itens = [];
+      for (const g of l.g) {
+        const u = itens[itens.length - 1];
+        if (u && g.x0 - u.x1 < 0.6 * l.h) { u.g.push(g); u.x1 = Math.max(u.x1, g.x1); } else itens.push({x0: g.x0, x1: g.x1, g: [g]});
+      }
+      // padrão de linha do quadro: [número, letra] repetido (número: 1–3 glifos; letra: 1 glifo)
+      if (itens.length < 2 || itens.length % 2) continue;
+      let ok = true;
+      for (let i = 0; i < itens.length; i += 2) if (itens[i].g.length > 3 || itens[i + 1].g.length !== 1) ok = false;
+      if (ok) linhasQuadro.push(itens);
     }
-    return pares;
+    if (!linhasQuadro.length) return {pares: {}, motivo: 'nenhuma linha "número | letra" encontrada', pontos: 0};
+    // mesma quantidade de tabelas (pares por linha) na maioria das linhas; tabelas em colunas
+    const colunas = [];
+    for (const itens of linhasQuadro)
+      for (let i = 0; i < itens.length; i += 2) {
+        const xc = (itens[i].x0 + itens[i + 1].x1) / 2;
+        let col = colunas.find(c => Math.abs(c.xc - xc) < ESCALA * 40);
+        if (!col) colunas.push(col = {xc, celulas: []});
+        col.celulas.push({digitos: itens[i].g.length, letra: itens[i + 1].g[0], y: itens[i].g[0].y0, caixa: caixaDe(itens[i], itens[i + 1])});
+      }
+    colunas.sort((a, b) => a.xc - b.xc);
+    const tentativas = [
+      colunas.flatMap(c => c.celulas.sort((a, b) => a.y - b.y)),                                   // tabela por tabela
+      linhasQuadro.flatMap(itens => itens.filter((_, i) => i % 2 === 0).map((n, k) => ({digitos: n.g.length, letra: itens[2 * k + 1].g[0], caixa: caixaDe(n, itens[2 * k + 1])}))),  // linha a linha
+    ];
+    const confere = cel => cel.every((c, i) => c.digitos === String(inicio + i).length);
+    const celulas = tentativas.find(confere);
+    if (!celulas) return {pares: {}, motivo: `quadro com ${tentativas[0].length} linhas, mas a numeração não fecha`, pontos: tentativas[0].length};
+    const pares = {}, caixas = {};
+    for (let i = 0; i < celulas.length; i++) {
+      const letra = classificarLetra(celulas[i].letra, rot, W);
+      if (!letra) return {pares: {}, caixas: {}, motivo: `não reconheci a letra da questão ${inicio + i}`, pontos: celulas.length};
+      pares[String(inicio + i).padStart(2, '0')] = letra;
+      caixas[String(inicio + i).padStart(2, '0')] = celulas[i].caixa;
+    }
+    return {pares, caixas, motivo: null, pontos: celulas.length};
   }
 
   function classificarLetra(c, rot, W) {
@@ -261,7 +337,8 @@ const UPQRecorte = (() => {
           const dentro = imagens.filter(f => {
             const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
             return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1;
-          }).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+          });
+          ordemDeLeitura(dentro);
           const nn = String(numero).padStart(2, '0');
           const figuras = [];
           for (let k = 0; k < dentro.length; k++) {
@@ -288,21 +365,46 @@ const UPQRecorte = (() => {
     const repetidos = [...new Set(numeros.filter((n, i) => numeros.indexOf(n) !== i))];
 
     const ultima = Math.max(0, ...questoes.map(q => q.pagina));
-    const pGab = semQuestao.find(p => p.pn > ultima);
-    let paginaGabarito = null, gabaritoPdf = {};
-    if (pGab) {
-      gabaritoPdf = gabaritoEmTexto(pGab.linhas);
-      if (!Object.keys(gabaritoPdf).length) {
-        const c = await renderizar(pGab.page);
-        gabaritoPdf = gabaritoNaImagem(c);
-        paginaGabarito = await recortar(c, {x0: 0, y0: 0, x1: pGab.vp.width, y1: pGab.vp.height}, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg'});
+    // Tabela de gabarito: nas páginas sem questão depois da última questão (pode ocupar mais de
+    // uma); em último caso, no fim da página da última questão.
+    const candidatas = semQuestao.filter(p => p.pn > ultima);
+    const pUltima = paginas.find(p => p.pn === ultima);
+    if (pUltima) candidatas.push(pUltima);
+    let paginaGabarito = null, gabaritoPdf = {}, gabaritoMotivo = 'nenhuma página de gabarito depois das questões';
+    const motivos = [], gabaritoRecortes = {};
+    for (const pg of candidatas) {
+      const proximo = Object.keys(gabaritoPdf).length + 1;
+      let {pares, caixas} = gabaritoEmTexto(pg.linhas);
+      const c = await renderizar(pg.page);
+      if (!Object.keys(pares).length) {
+        const r = gabaritoNaImagem(c, proximo);
+        ({pares, caixas = {}} = r);
+        if (r.motivo) motivos.push(`página ${pg.pn}: ${r.motivo}`);
       }
+      // recorte da linha da tabela de cada questão (número + letra), para conferência
+      for (const [n, cx] of Object.entries(caixas)) {
+        const h = cx.y1 - cx.y0, mx = Math.max(12, h * 1.2);
+        gabaritoRecortes[n] = await recortar(c, {x0: cx.x0 - mx, y0: cx.y0 - h * 0.6, x1: cx.x1 + mx, y1: cx.y1 + h * 0.6});
+      }
+      if (Object.keys(pares).length || !paginaGabarito)
+        paginaGabarito = paginaGabarito && !Object.keys(pares).length ? paginaGabarito
+          : await recortar(c, {x0: 0, y0: 0, x1: pg.vp.width, y1: pg.vp.height}, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg'});
+      Object.assign(gabaritoPdf, pares);
+      if (Object.keys(gabaritoPdf).length >= maior) break;
+    }
+    const lidas = Object.keys(gabaritoPdf).length;
+    const completo = maior > 0 && [...Array(maior).keys()].every(i => gabaritoPdf[String(i + 1).padStart(2, '0')]);
+    if (completo) gabaritoMotivo = null;
+    else {
+      gabaritoMotivo = lidas ? `a tabela tem ${lidas} respostas, a lista tem ${maior} questões` : (motivos.join('; ') || gabaritoMotivo);
+      gabaritoPdf = {};
+      for (const n of Object.keys(gabaritoRecortes)) delete gabaritoRecortes[n];
     }
     const nome = arquivo.name || 'lista.pdf';
     return {
       arquivo: nome, hash: hashPdf, titulo: tituloLista || nome.replace(/\.pdf$/i, '').replace(/_/g, ' '),
       tipo: /simulado/i.test(nome + ' ' + tituloLista) ? 'simulado' : 'lista',
-      etapas: inicio, questoes, faltando, repetidos, paginaGabarito, gabaritoPdf, paginas: doc.numPages,
+      etapas: inicio, questoes, faltando, repetidos, paginaGabarito, gabaritoPdf, gabaritoMotivo, gabaritoRecortes, paginas: doc.numPages,
     };
   }
 

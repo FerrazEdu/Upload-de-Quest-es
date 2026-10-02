@@ -15,7 +15,8 @@ Quando pedirem "transcreva a lista X", faça exatamente o que `upq/transcrever.p
     "classificacao": {"disciplina": "...", "topico": "...", "assunto": "...",
                       "descartados": [], "confiante": true, "justificativa": "..."}}
    ```
-   - gabarito: use `gabarito_pdf` do manifesto; se vier vazio, leia a imagem `pagina_gabarito`.
+   - gabarito: OBRIGATÓRIO e sempre da tabela do fim da lista (`gabarito_pdf`; se vier vazio,
+     leia a imagem `pagina_gabarito`). A tabela é sempre a correta; nunca use outra fonte.
    - classificação (só em `tipo: lista`): um par da base em `dados/base_topicos.txt`, grafia exata,
      igual para a lista inteira. Em simulado, `"classificacao": null`.
 4. Para CADA questão do manifesto, crie `saida/<nome>/ia/QNN.json` no formato `QuestaoIA`

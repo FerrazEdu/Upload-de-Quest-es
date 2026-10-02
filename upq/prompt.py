@@ -33,6 +33,13 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    são transcritos logo abaixo dela, como referência (regra 8) — exceto quando já aparecem
    DENTRO da imagem recortada da figura (confira a imagem da figura): aí não repita. Não
    descreva a figura no enunciado nem invente dados que só ela mostra.
+   ALTERNATIVAS EM IMAGEM: quando as alternativas são figuras (gráficos, esquemas, fórmulas
+   estruturais), o texto de cada alternativa é a sua figura: ![Alternativa A: descrição
+   curta](figura:NOME), com texto antes ou depois se houver. As figuras estão nomeadas na ordem
+   de leitura (de cima para baixo; lado a lado, da esquerda para a direita), então as últimas
+   figuras da questão costumam ser as alternativas, na ordem A, B, C... Se uma única figura
+   reúne todas as alternativas, coloque-a no fim do enunciado, transcreva em cada alternativa o
+   que estiver legível dela e marque revisar = true.
 7. Não transcreva: número da questão, cabeçalho com banca/ano, letras das alternativas,
    cabeçalho/rodapé da página, marcas d'água.
 8. Referências (créditos de figura e fontes de texto: "Fonte: ...", "Disponível em: ...
