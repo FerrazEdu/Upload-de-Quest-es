@@ -31,6 +31,20 @@ PDF ──segmentar──▶ recortes + figuras + manifesto ──transcrever (I
 pip install -r requirements.txt
 ```
 
+## Importador no claude.ai (sem chave de API, sem servidor)
+
+`python -m upq.artefato` monta `dist/importador-questoes.html`, publicado como artefato do
+claude.ai (capacidades `db`, `assets`, `sample`, `downloads`, `user`). Tudo roda no navegador:
+
+- **recorte** do PDF com pdf.js (`upq/web/recorte.js`, mesma geometria de `upq/segmentar.py`);
+- **transcrição** pelo Claude do próprio claude.ai (capacidade `sample`, 4 questões por chamada,
+  conta no plano de quem usa). Se bater limite, o card mostra **Continuar**;
+- **validação** (porta de `upq/validar.py`), **banco** de questões, **listas virtuais**, edição,
+  "Marcar como revisada" e **Baixar planilha (.xlsx)** / JSON.
+
+Banco do artefato: `importacoes/<hash16>`, `partes/<hash16>-<k>` (até 20 questões cada) e
+`listas/<id>`; imagens e figuras ficam em `assets`. A aba precisa ficar aberta enquanto processa.
+
 ## App web
 
 ```

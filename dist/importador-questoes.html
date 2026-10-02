@@ -1,0 +1,1226 @@
+<title>Importador de Questões</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script>
+window.MathJax = {
+  tex: {inlineMath: [['$', '$']], displayMath: [['$$', '$$']], processEscapes: true},
+  svg: {fontCache: 'global'}, options: {ignoreHtmlClass: 'sem-tex'}, startup: {typeset: false}
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" async></script>
+<script type="module">
+import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/legacy/build/pdf.min.mjs';
+import * as pdfjsWorker from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/legacy/build/pdf.worker.min.mjs';
+globalThis.pdfjsWorker = pdfjsWorker;   // sem Worker separado: o pdf.js roda na própria página
+window.pdfjsLib = pdfjsLib;
+window.dispatchEvent(new Event('pdfjs-pronto'));
+</script>
+<style>
+/* Layout: barra lateral com as telas (Enviar lista, Banco de questões, Listas) + área de trabalho.
+   Escuro por padrão, como o painel da plataforma; o tema claro segue o sistema. */
+:root {
+  --bg: #121418; --painel: #1a1d23; --campo: #20242b; --borda: #2c313a; --borda-forte: #3a414c;
+  --texto: #e8eaee; --suave: #9aa1ad; --fraco: #6c7380;
+  --acento: #5b8cff; --acento-fundo: #1f2a44; --acento-texto: #ffffff;
+  --ok: #3fb67a; --ok-fundo: #173327; --alerta: #e0a43a; --alerta-fundo: #3a2e17;
+  --erro: #ef5d5d; --erro-fundo: #3d1d1f;
+  --fonte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --raio: 8px; color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f3f4f7; --painel: #ffffff; --campo: #f6f7f9; --borda: #dfe2e8; --borda-forte: #c9ced7;
+  --texto: #181b21; --suave: #5b6270; --fraco: #8a909b;
+  --acento: #2f63e6; --acento-fundo: #e7eeff; --acento-texto: #ffffff;
+  --ok: #1f8a55; --ok-fundo: #e2f4ea; --alerta: #a86b00; --alerta-fundo: #fbf0d9;
+  --erro: #c43a3a; --erro-fundo: #fbe5e5; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f3f4f7; --painel: #ffffff; --campo: #f6f7f9; --borda: #dfe2e8; --borda-forte: #c9ced7;
+  --texto: #181b21; --suave: #5b6270; --fraco: #8a909b;
+  --acento: #2f63e6; --acento-fundo: #e7eeff; --acento-texto: #ffffff;
+  --ok: #1f8a55; --ok-fundo: #e2f4ea; --alerta: #a86b00; --alerta-fundo: #fbf0d9;
+  --erro: #c43a3a; --erro-fundo: #fbe5e5; color-scheme: light; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--texto); font: 14px/1.5 var(--fonte); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100%; }
+.lateral { background: var(--painel); border-right: 1px solid var(--borda); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; }
+.marca { font-weight: 700; font-size: 15px; padding: 0 10px 14px; letter-spacing: .01em; }
+.marca small { display: block; font-weight: 400; color: var(--fraco); font-size: 12px; }
+.nav { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--suave); }
+.nav:hover { background: var(--campo); color: var(--texto); }
+.nav[aria-current="page"] { background: var(--acento-fundo); color: var(--texto); font-weight: 600; }
+.nav svg { width: 16px; height: 16px; flex: none; }
+.nav .contagem { margin-left: auto; font-size: 12px; color: var(--fraco); font-variant-numeric: tabular-nums; }
+.modo { margin-top: auto; font-size: 12px; color: var(--fraco); padding: 10px; border-top: 1px solid var(--borda); }
+main { padding-block: 22px 40px; padding-inline: 24px; min-width: 0; }
+.cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+.migalha { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--suave); margin-bottom: 6px; }
+.migalha button { border: 0; background: none; padding: 0; color: var(--suave); cursor: pointer; }
+.migalha button:hover { color: var(--texto); text-decoration: underline; }
+.botao { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--borda-forte); background: var(--campo); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.botao:hover { border-color: var(--acento); }
+.botao.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+.botao.perigo { color: var(--erro); }
+.botao:disabled { opacity: .5; cursor: not-allowed; }
+.painel { background: var(--painel); border: 1px solid var(--borda); border-radius: var(--raio); }
+.aviso-topo { background: var(--alerta-fundo); border: 1px solid var(--borda); border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+.aviso-topo.info { background: var(--acento-fundo); }
+
+.soltar { border: 1.5px dashed var(--borda-forte); border-radius: var(--raio); background: var(--painel); padding: 36px 20px; text-align: center; display: grid; gap: 8px; justify-items: center; cursor: pointer; }
+.soltar.ativo { border-color: var(--acento); background: var(--acento-fundo); }
+.soltar.desligado { opacity: .55; cursor: not-allowed; }
+.soltar strong { font-size: 16px; } .soltar p { margin: 0; color: var(--suave); }
+.soltar svg { width: 34px; height: 34px; color: var(--acento); }
+.dica { color: var(--fraco); font-size: 13px; margin: 10px 0 0; }
+.envios { display: grid; gap: 10px; margin-top: 22px; }
+.envio { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; padding: 14px 16px; }
+.envio .nome { font-weight: 600; overflow-wrap: anywhere; }
+.envio .msg { color: var(--suave); font-size: 13px; }
+.envio .acoes-envio { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.etapas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.etapa { font-size: 12px; color: var(--fraco); display: grid; gap: 5px; }
+.etapa i { height: 4px; border-radius: 2px; background: var(--borda); display: block; overflow: hidden; }
+.etapa i b { display: block; height: 100%; background: var(--acento); }
+.etapa.feita { color: var(--suave); } .etapa.feita i, .etapa.feita i b { background: var(--ok); }
+.etapa.atual { color: var(--texto); font-weight: 500; }
+.etapa.parada { color: var(--alerta); } .etapa.parada i b { background: var(--alerta); }
+.etapa.falhou { color: var(--erro); } .etapa.falhou i b { background: var(--erro); }
+
+.filtros { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.filtros .busca { grid-column: span 2; }
+@media (max-width: 640px) { .filtros .busca { grid-column: auto; } }
+.campo { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+textarea.campo { width: 100%; min-height: 110px; font-family: var(--mono); font-size: 12.5px; resize: vertical; }
+.tabela-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-weight: 600; color: var(--suave); padding: 10px 12px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--borda); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr.clicavel { cursor: pointer; }
+tbody tr.clicavel:hover td { background: var(--campo); }
+tbody tr.sel td { background: var(--acento-fundo); }
+.num { font-variant-numeric: tabular-nums; }
+.sub { color: var(--fraco); font-size: 12px; }
+.tag { display: inline-block; border: 1px solid var(--borda-forte); border-radius: 5px; padding: 1px 7px; font-size: 12px; margin: 2px 4px 2px 0; white-space: nowrap; }
+.selo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.selo::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.selo.ok { color: var(--ok); background: var(--ok-fundo); } .selo.alerta { color: var(--alerta); background: var(--alerta-fundo); }
+.selo.erro { color: var(--erro); background: var(--erro-fundo); } .selo.info { color: var(--acento); background: var(--acento-fundo); }
+.vazio { padding: 28px 16px; color: var(--suave); text-align: center; }
+.resumo-lista { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--suave); font-size: 13px; margin-top: 4px; align-items: center; }
+.gerenciar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+.dois-paineis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .gerenciar, .dois-paineis { grid-template-columns: 1fr; } }
+.rolagem { max-height: calc(100vh - 230px); overflow: auto; }
+.painel > .titulo-painel { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--borda); }
+.painel > .titulo-painel h2 { font-size: 15px; margin: 0; }
+.corpo-painel { padding: 12px 14px 0; }
+.detalhe { padding: 18px; display: grid; gap: 16px; }
+.detalhe h2 { font-size: 16px; margin: 0; }
+.grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grade.duas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .grade, .grade.duas { grid-template-columns: 1fr; } }
+.rotulo { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+.valor { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 8px 10px; min-height: 37px; overflow-wrap: anywhere; }
+.enunciado { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 12px 14px; overflow-wrap: anywhere; }
+.enunciado p { margin: 0 0 10px; } .enunciado p:last-child { margin-bottom: 0; }
+.enunciado img, .alt img { max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; background: #fff; }
+.enunciado table { border-collapse: collapse; } .enunciado td, .enunciado th { border: 1px solid var(--borda-forte); padding: 4px 8px; }
+mjx-container { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+mjx-container[display="true"] { margin: .6em 0 !important; }
+.alternativas { border: 1px solid var(--borda); border-radius: 6px; overflow: hidden; }
+.alt { display: grid; grid-template-columns: 34px minmax(0, 1fr) 76px; gap: 10px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--borda); }
+.alt:first-child { border-top: 0; }
+.alt.cab-alt { background: var(--campo); font-size: 12px; color: var(--suave); font-weight: 600; }
+.alt .letra { width: 26px; height: 26px; border-radius: 6px; background: var(--acento); color: var(--acento-texto); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.alt .conteudo p { margin: 0; }
+.chave { width: 34px; height: 20px; border-radius: 99px; background: var(--borda-forte); position: relative; justify-self: center; }
+.chave::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--painel); }
+.chave.on { background: var(--acento); } .chave.on::after { left: 17px; }
+.avisos { border-radius: 6px; padding: 10px 12px 10px 30px; margin: 0; font-size: 13px; }
+.avisos.erro { background: var(--erro-fundo); } .avisos.alerta { background: var(--alerta-fundo); }
+.original summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--suave); }
+.original img { width: 100%; height: auto; margin-top: 8px; border-radius: 6px; border: 1px solid var(--borda); background: #fff; }
+.barra-sel { position: sticky; bottom: env(safe-area-inset-bottom, 0px); margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; background: var(--painel); border: 1px solid var(--acento); border-radius: var(--raio); box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+.barra-sel .cont { font-weight: 600; margin-right: auto; }
+.form-linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.form-linha .campo { flex: 1 1 200px; }
+td.marcar, th.marcar { width: 36px; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--acento); }
+.icone { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 0; cursor: pointer; background: var(--campo); color: var(--texto); }
+.icone.ver { background: var(--acento); color: var(--acento-texto); } .icone.tirar { background: var(--erro-fundo); color: var(--erro); }
+.icone.por { background: var(--ok-fundo); color: var(--ok); } .icone:disabled { opacity: .35; cursor: default; }
+.icone svg { width: 15px; height: 15px; }
+.acoes { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
+.edicao { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 8px; align-items: end; margin-bottom: 14px; }
+@media (max-width: 760px) { .edicao { grid-template-columns: 1fr; } }
+.edicao label, .rotulo-campo { font-size: 12.5px; font-weight: 600; display: grid; gap: 5px; }
+.edicao .campo, .rotulo-campo .campo, .rotulo-campo label { font-weight: 400; font-size: 14px; }
+.confirmar { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--erro); }
+.modal-fundo { position: fixed; inset: 0; background: rgb(0 0 0 / .55); display: grid; place-items: start center; padding: 32px 16px; overflow: auto; z-index: 10; }
+.modal { width: min(860px, 100%); }
+.modal .barra-modal { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.aviso-toast { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-width: min(420px, calc(100% - 32px)); background: var(--painel); border: 1px solid var(--borda-forte); border-radius: 6px; padding: 10px 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .3); z-index: 20; }
+.mais { padding: 10px 12px; color: var(--fraco); font-size: 13px; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .lateral { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--borda); }
+  .marca { padding: 0 8px 0 4px; } .marca small, .modo { display: none; }
+  .nav { width: auto; } main { padding-inline: 16px; }
+  .etapas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .envio { grid-template-columns: 1fr; } .envio .acoes-envio { justify-content: flex-start; }
+}
+</style>
+
+<div class="app">
+  <nav class="lateral" aria-label="Telas">
+    <div class="marca">Importador de Questões<small>PDF → banco de questões</small></div>
+    <button class="nav" data-tela="enviar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0-4 4m4-4 4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+      Enviar lista</button>
+    <button class="nav" data-tela="banco">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+      Banco de questões <span class="contagem" id="contagem-banco"></span></button>
+    <button class="nav" data-tela="listas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      Listas <span class="contagem" id="contagem-listas"></span></button>
+    <div class="modo" id="modo">Conectando…</div>
+  </nav>
+  <main id="principal"><div class="painel vazio">Carregando…</div></main>
+</div>
+<div id="camada"></div>
+
+<script>
+/* Recorte de uma lista em PDF (modelo Plataforma Assaad) no navegador, com pdf.js.
+ * Porta de upq/segmentar.py: usa só a geometria da página (barras "Questão NN",
+ * meio da página entre as colunas, rodapé) e as imagens desenhadas nela.
+ *
+ *   const m = await UPQRecorte.segmentar(arquivo, progresso => ...)
+ *   m.questoes[i] = {numero, pagina, coluna, regiao, etapa, textoPdf, imagem: Blob, figuras: [{nome, blob}]}
+ */
+const UPQRecorte = (() => {
+  const ETAPAS = ['Fixação', 'Treinamento', 'Aprofundamento', 'Desafios'];
+  const RE_QUESTAO = /^\s*Quest[aã]o\s*(\d[\d ]*)/;
+  const MARGEM_TOPO = 30;          // abaixo da faixa de cabeçalho da página (pt)
+  const FIGURA_MIN = 40;           // lado mínimo (pt) para uma imagem contar como figura
+  const ESCALA = 3;                // render da página: 3 px por pt (≈ 216 dpi)
+  const MAX_PX_QUESTAO = 1150000;  // o Claude reduz imagens a ~1,2 MP: o recorte já sai nesse tamanho
+
+  async function hash(buffer) {
+    const d = await crypto.subtle.digest('SHA-256', buffer);
+    return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Linhas de texto da página, por coluna, em pt com origem no canto superior esquerdo.
+  function linhasDaPagina(itens, viewport) {
+    const meio = viewport.width / 2;
+    const pedacos = [];
+    for (const it of itens) {
+      if (!it.str) continue;
+      const [x, y] = viewport.convertToViewportPoint(it.transform[4], it.transform[5]);
+      const h = it.height || Math.hypot(it.transform[2], it.transform[3]) || 8;
+      pedacos.push({str: it.str, x0: x, x1: x + (it.width || 0), base: y, h, col: x < meio ? 0 : 1});
+    }
+    pedacos.sort((a, b) => a.col - b.col || a.base - b.base || a.x0 - b.x0);
+    const linhas = [];
+    for (const p of pedacos) {
+      const l = linhas.length && linhas[linhas.length - 1];
+      if (l && l.col === p.col && Math.abs(l.base - p.base) < 2.5) l.pedacos.push(p);
+      else linhas.push({col: p.col, base: p.base, pedacos: [p]});
+    }
+    return linhas.map(l => {
+      l.pedacos.sort((a, b) => a.x0 - b.x0);
+      let texto = '', fim = null;
+      for (const p of l.pedacos) {
+        if (fim !== null && p.x0 - fim > 1.5 && !texto.endsWith(' ') && !p.str.startsWith(' ')) texto += ' ';
+        texto += p.str; fim = p.x1;
+      }
+      const h = Math.max(...l.pedacos.map(p => p.h));
+      return {texto, col: l.col, x0: Math.min(...l.pedacos.map(p => p.x0)), x1: Math.max(...l.pedacos.map(p => p.x1)),
+              y0: l.base - h, y1: l.base + h * 0.25, base: l.base};
+    });
+  }
+
+  // Retângulos (pt) das imagens desenhadas na página, seguindo a matriz de transformação.
+  async function imagensDaPagina(page, viewport) {
+    const {fnArray, argsArray} = await page.getOperatorList();
+    const OPS = pdfjsLib.OPS;
+    // Matrizes [a b c d e f] do PDF: mul(m1, m2) aplica m2 e depois m1.
+    const mul = (m1, m2) => [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1],
+      m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3],
+      m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
+    const aplicar = ([x, y], m) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+    let ctm = viewport.transform.slice();
+    const pilha = [], rects = [];
+    for (let i = 0; i < fnArray.length; i++) {
+      const fn = fnArray[i], args = argsArray[i];
+      if (fn === OPS.save) pilha.push(ctm.slice());
+      else if (fn === OPS.restore) ctm = pilha.pop() || ctm;
+      else if (fn === OPS.transform) ctm = mul(ctm, args);
+      else if (fn === OPS.paintFormXObjectBegin) { pilha.push(ctm.slice()); if (args && args[0]) ctm = mul(ctm, args[0]); }
+      else if (fn === OPS.paintFormXObjectEnd) ctm = pilha.pop() || ctm;
+      else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintJpegXObject) {
+        const pts = [[0, 0], [1, 0], [0, 1], [1, 1]].map(p => aplicar(p, ctm));
+        const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+        rects.push({x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys)});
+      }
+    }
+    return rects;
+  }
+
+  // A imagem embutida às vezes é maior que a área visível e invade o texto vizinho:
+  // corta nas linhas que cruzam a borda de cima ou de baixo (rótulos inteiros dentro ficam).
+  function aparar(f, linhas) {
+    const r = {...f};
+    for (const t of linhas) {
+      if (t.x1 < r.x0 || t.x0 > r.x1) continue;
+      if (t.y0 < r.y1 && r.y1 < t.y1) r.y1 = t.y0 - 1;
+      else if (t.y0 < r.y0 && r.y0 < t.y1) r.y0 = t.y1 + 1;
+    }
+    return r;
+  }
+
+  async function renderizar(page) {
+    const vp = page.getViewport({scale: ESCALA});
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({canvasContext: ctx, viewport: vp}).promise;
+    return canvas;
+  }
+
+  function recortar(canvas, r, {maxPx = Infinity, tipo = 'image/png', qualidade = 0.88} = {}) {
+    const sx = Math.max(0, r.x0 * ESCALA), sy = Math.max(0, r.y0 * ESCALA);
+    const sw = Math.min(canvas.width - sx, (r.x1 - r.x0) * ESCALA), sh = Math.min(canvas.height - sy, (r.y1 - r.y0) * ESCALA);
+    const fator = Math.min(1, Math.sqrt(maxPx / (sw * sh)));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw * fator)); c.height = Math.max(1, Math.round(sh * fator));
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return new Promise(res => c.toBlob(res, tipo, qualidade));
+  }
+
+  function etapasPeloSumario(paginas) {
+    for (const p of paginas) {
+      if (!p.linhas.some(l => /Sumário/.test(l.texto))) continue;
+      const inicio = {};
+      for (const etapa of ETAPAS) {
+        const l = p.linhas.find(x => x.texto.trim() === etapa);
+        if (!l) continue;
+        const num = p.linhas.find(x => /^\s*\d{1,3}\s*$/.test(x.texto) && Math.abs(x.base - l.base) < 6);
+        if (num) inicio[etapa] = parseInt(num.texto, 10);
+      }
+      if (Object.keys(inicio).length) return inicio;
+    }
+    return {};
+  }
+
+  function gabaritoEmTexto(linhas) {
+    const pares = {};
+    const texto = linhas.map(l => l.texto).join('\n');
+    for (const m of texto.matchAll(/^\s*(\d{1,3})\s*[\n ]\s*([A-E])\s*$/gm)) pares[String(+m[1]).padStart(2, '0')] = m[2];
+    return pares;
+  }
+
+  async function segmentar(arquivo, progresso = () => {}) {
+    const buffer = arquivo instanceof ArrayBuffer ? arquivo : await arquivo.arrayBuffer();
+    const hashPdf = await hash(buffer.slice(0));
+    const doc = await pdfjsLib.getDocument({data: new Uint8Array(buffer), isEvalSupported: false}).promise;
+    const paginas = [];
+    let tituloLista = '';
+    for (let pn = 1; pn <= doc.numPages; pn++) {
+      progresso({etapa: 'lendo', pagina: pn, total: doc.numPages});
+      const page = await doc.getPage(pn);
+      const vp = page.getViewport({scale: 1});
+      const {items} = await page.getTextContent();
+      const linhas = linhasDaPagina(items, vp);
+      if (!tituloLista) {
+        const t = linhas.find(l => l.texto.startsWith('Lista de Exercícios'));
+        if (t) tituloLista = t.texto.split('|').slice(1).join('|').trim();
+      }
+      const rodape = linhas.filter(l => l.y0 > vp.height * 0.85 && /Plataforma|Assaad/.test(l.texto));
+      const fundo = rodape.length ? Math.min(...rodape.map(l => l.y0)) - 8 : vp.height - 30;
+      const cabecalhos = linhas.filter(l => l.y0 > MARGEM_TOPO && RE_QUESTAO.test(l.texto))
+        .map(l => ({col: l.col, y: l.y0, numero: parseInt(l.texto.match(RE_QUESTAO)[1].replace(/ /g, ''), 10)}));
+      paginas.push({pn, page, vp, linhas, fundo, cabecalhos});
+    }
+
+    const questoes = [];
+    const semQuestao = [];
+    for (const p of paginas) {
+      if (!p.cabecalhos.length) { semQuestao.push(p); continue; }
+      progresso({etapa: 'recortando', pagina: p.pn, total: doc.numPages});
+      const canvas = await renderizar(p.page);
+      const imagens = (await imagensDaPagina(p.page, p.vp)).filter(r =>
+        r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
+      const meio = p.vp.width / 2;
+      for (const col of [0, 1]) {
+        const naColuna = p.cabecalhos.filter(c => c.col === col).sort((a, b) => a.y - b.y);
+        const [x0, x1] = col === 0 ? [0, meio] : [meio, p.vp.width];
+        for (let i = 0; i < naColuna.length; i++) {
+          const {y, numero} = naColuna[i];
+          const yFim = i + 1 < naColuna.length ? naColuna[i + 1].y - 2 : p.fundo - 2;
+          const regiao = {x0: x0 + 2, y0: y - 2, x1: x1 - 2, y1: yFim};
+          const dentro = imagens.filter(f => {
+            const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
+            return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1;
+          }).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+          const nn = String(numero).padStart(2, '0');
+          const figuras = [];
+          for (let k = 0; k < dentro.length; k++) {
+            const f = aparar(dentro[k], p.linhas);
+            figuras.push({nome: `Q${nn}_fig${k + 1}`, regiao: f, blob: await recortar(canvas, f)});
+          }
+          const textoPdf = p.linhas.filter(l => l.col === col && (l.y0 + l.y1) / 2 > regiao.y0 && (l.y0 + l.y1) / 2 < regiao.y1)
+            .sort((a, b) => a.base - b.base).map(l => l.texto).join('\n');
+          questoes.push({numero, pagina: p.pn, coluna: col + 1, regiao, textoPdf, figuras,
+            imagem: await recortar(canvas, regiao, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg', qualidade: 0.86})});
+        }
+      }
+    }
+
+    const inicio = etapasPeloSumario(paginas);
+    for (const q of questoes) {
+      const antes = Object.entries(inicio).filter(([, pg]) => pg <= q.pagina).map(([e]) => e);
+      q.etapa = antes.length ? antes[antes.length - 1] : null;
+    }
+    questoes.sort((a, b) => a.numero - b.numero);
+    const numeros = questoes.map(q => q.numero);
+    const maior = Math.max(0, ...numeros);
+    const faltando = [...Array(maior).keys()].map(i => i + 1).filter(n => !numeros.includes(n));
+    const repetidos = [...new Set(numeros.filter((n, i) => numeros.indexOf(n) !== i))];
+
+    const ultima = Math.max(0, ...questoes.map(q => q.pagina));
+    const pGab = semQuestao.find(p => p.pn > ultima);
+    let paginaGabarito = null, gabaritoPdf = {};
+    if (pGab) {
+      gabaritoPdf = gabaritoEmTexto(pGab.linhas);
+      if (!Object.keys(gabaritoPdf).length) {
+        const c = await renderizar(pGab.page);
+        paginaGabarito = await recortar(c, {x0: 0, y0: 0, x1: pGab.vp.width, y1: pGab.vp.height}, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg'});
+      }
+    }
+    const nome = arquivo.name || 'lista.pdf';
+    return {
+      arquivo: nome, hash: hashPdf, titulo: tituloLista || nome.replace(/\.pdf$/i, '').replace(/_/g, ' '),
+      tipo: /simulado/i.test(nome + ' ' + tituloLista) ? 'simulado' : 'lista',
+      etapas: inicio, questoes, faltando, repetidos, paginaGabarito, gabaritoPdf, paginas: doc.numPages,
+    };
+  }
+
+  return {segmentar, ETAPAS};
+})();
+
+</script>
+<script>
+const DADOS = {"sistema": "Você transcreve questões de listas de exercícios em PDF para o banco de questões\nde uma plataforma de ensino pré-vestibular. Cada mensagem traz VÁRIAS questões: uma imagem\nrecortada do PDF por questão (as figuras aparecem dentro dela), os NOMES das figuras de cada\nquestão, o texto extraído do PDF e o gabarito oficial. Devolva só o JSON pedido, com uma\nentrada por questão, na ordem das imagens.\n\nFONTE DA VERDADE\n- A IMAGEM é a fonte da verdade. O \"texto extraído do PDF\" ajuda com a ordem das palavras\n  e nomes próprios, mas tem erros conhecidos: símbolos trocados (π aparece como \"À\",\n  ≈ como \"H\"), expoentes e índices achatados (\"10 8\" ou \"108\" = 10⁸, \"N1\" = N₁), palavras\n  partidas e trechos repetidos. Sempre confira com a imagem.\n- Transcrição literal: não resuma, não parafraseie, não corrija nem atualize o conteúdo.\n  Preserve palavras, acentos, pontuação, números e unidades. O texto-base inteiro entra no\n  enunciado (contexto, textos de apoio, afirmativas, referências e o comando).\n- Reconstrua a questão inteira: nenhum trecho de uma alternativa pode vazar para outra.\n  Questão de A a D tem 4 alternativas — nunca invente a E.\n\nFORMATAÇÃO DO TEXTO (enunciado e alternativas)\nO texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (MathJax).\n\n1. Fórmulas, números com unidade, potências, índices, símbolos e variáveis vão em LaTeX:\n   - no meio da frase: $...$ · destacada/centralizada no PDF: $$...$$ em parágrafo próprio.\n   - vírgula decimal: $3{,}5$ (as chaves evitam espaço depois da vírgula).\n   - milhar com ponto: $3.600$ · notação científica: $4{,}0 \\times 10^{8}\\ \\text{m}$.\n   - unidades em \\text{}: $35\\ \\text{m/s}$, $9{,}8\\ \\text{m/s}^2$, $60\\ \\text{cm}$, $3000\\ \\text{rpm}$.\n   - aproximação e constantes: $\\pi \\approx 3$, $g = 10\\ \\text{m/s}^2$.\n   - vetores: $\\vec{F}$, $m\\vec{g}$ · índices: $N_1$, $x_2$, $v_{\\text{máx}}$ · graus: $45^\\circ$.\n   - frações: $\\frac{a}{b}$ · raízes: $\\sqrt{2}$ · trigonometria: $\\sin 45^\\circ$, $\\cos\\theta$.\n   - química: $\\mathrm{H_2O}$, $\\mathrm{Ca^{2+}}$, setas \\rightarrow e \\rightleftharpoons.\n   - comandos permitidos: os do MathJax padrão. Nada de \\ce, \\SI, \\usepackage ou pacotes.\n   - Valores numéricos isolados em alternativas também vão em LaTeX: $110$, $\\frac{\\pi}{2}$.\n   - Ano, data, número de questão e quantidades contadas no texto corrido ficam como texto\n     (\"em 2023\", \"Questão 05\", \"quatro posições (1, 2, 3 e 4)\").\n2. Cifrão de dinheiro sempre escapado: R\\$ 25,00. Todo $ sem barra abre ou fecha fórmula.\n3. **negrito** e *itálico* como no PDF (títulos de obras, termos estrangeiros e palavras\n   destacadas como **CORRETA**, **INCORRETA**, **EXCETO**).\n4. Parágrafos separados por uma linha em branco. Afirmativas I, II, III cada uma em seu\n   parágrafo, começando por \"I. \", \"II. \". Listas de dados (π = 3; g = 10 m/s²) uma por linha.\n5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.\n6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)\n   usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo\n   (o que a figura mostra, em até 15 palavras). Créditos/legendas da figura (\"Fonte: UNICAMP,\n   2023.\") são transcritos logo abaixo, em *itálico* — exceto quando já aparecem DENTRO da\n   imagem recortada da figura (confira na imagem da questão): aí não repita. Não descreva a\n   figura no enunciado nem invente dados que só ela mostra.\n7. Não transcreva: número da questão, cabeçalho com banca/ano, letras das alternativas,\n   cabeçalho/rodapé da página, marcas d'água.\n\nCABEÇALHO\n- instituicao e ano vêm da barra vermelha \"Questão NN ... BANCA ANO\". Ex.: \"UFMG 2025\" →\n  instituicao \"UFMG\", ano 2025. \"CESMAC MEDICINA 2022/1\" → instituicao \"CESMAC MEDICINA\",\n  ano 2022. \"(ADAPTADO)\" → adaptada true e não entra na instituição. Sem banca → null; sem\n  ano → null. Não confunda com datas citadas no enunciado.\n\nDISCIPLINA, TÓPICO E ASSUNTOS\n- Somente pares que existem no ANEXO — BASE DE TÓPICOS, copiados com a grafia exata.\n  O campo topico recebe o nome do TÓPICO, nunca o do assunto.\n- Em lista de exercícios a mensagem informa a disciplina e o tópico da lista: use-os.\n- assuntos: 1 ou 2 assuntos do tópico escolhido (os que aparecem depois de \"Tópico:\" no\n  anexo), com a grafia exata, pelo conteúdo que a questão cobra. Tópico sem assuntos listados\n  → assuntos = [nome do tópico].\n\nDIFICULDADE (inteiro de 1 a 5, obrigatório)\n1 = Muito Fácil · 2 = Fácil · 3 = Média · 4 = Difícil · 5 = Muito Difícil\n- Referência: aluno de pré-vestibular/ENEM que já estudou o tópico.\n- Pese: quantos conceitos ou etapas a questão encadeia; carga de interpretação; uso de\n  gráfico, tabela ou figura; volume de cálculo; proximidade entre as alternativas; conteúdo\n  além do tópico.\n- Guia: aplicação direta de um conceito ou fórmula → 2 · mais de uma etapa ou interpretação\n  de dados → 3 · integração de conceitos, várias etapas ou interpretação exigente → 4.\n  1 e 5 são raros; na dúvida entre um extremo e o vizinho, fique no vizinho.\n- A etapa da lista é o ponto de partida: Fixação → 1 a 2 (predomina 2) · Treinamento → 2 a 3\n  · Aprofundamento → 3 a 4 · Desafios → 4 a 5 (predomina 4). Fora da faixa só quando a\n  questão claramente não corresponde à etapa; nesse caso explique em observacoes.\n- A banca não define a dificuldade: classifique a questão.\n\nGABARITO\n- gabarito = a letra do gabarito oficial informada na mensagem. Nunca troque e não resolva\n  a questão: este trabalho é só de transcrição e classificação.\n\nREVISAR\nrevisar = true sempre que houver: trecho ilegível ou cortado no recorte, figura com\ninformação essencial que você não conseguiu ler, gabarito oficial ausente, dificuldade\nfora da faixa da etapa, ou qualquer dúvida de transcrição. Explique em observacoes\n(curto e objetivo). Caso contrário revisar = false e observacoes = null.\n\nANEXO — BASE DE TÓPICOS DA PLATAFORMA\nFormato: Tópico: assuntos que ele abrange. Os assuntos servem só para localizar o tópico.\n\nDISCIPLINA: História\n- Idade Antiga: Egito; Grécia; Primeiras civilizações; Roma\n- Idade Média: Cruzadas; Feudalismo; Império Bizantino\n- Idade Moderna: Estados Nacionais; Expansão marítima; História da América; Mercantilismo; Reforma e contrarreforma; Renascimento; Revolução industrial\n- Idade Contemporânea: Entreguerras; Guerra Fria; Imperialismo; Nazifascismo; Primaveira Árabe; Primeira Guerra Mundial; Revolução Francesa; Segunda Guerra Mundial\n- Brasil Colônia: Catequização; Ciclos econõmicos; Escravidão; Independência; Revoltas brasileiras\n- Brasil Império: Abolição da escravidão; Guerra do Paraguai; Período Regencial; Primeiro Reinado; Revoltas brasileiras; Segundo Reinado\n- Brasil República: Constituição Federal; Direitos Sociais; Ditadura militar; Era Vargas; Governo JK; Proclamação da República; Redemocratização; República Oligárquica; República Velha; Revoltas brasileiras\n\nDISCIPLINA: Geografia\n- Geografia Econômica: Blocos econômicos; Comércio; Conceitos geográficos; Desigualdade socioeconômica; DIT; Doutrinas econômicas; Fontes de energia; Globalização; Modais; Modelos de produção; Neoliberalismo; Setores da economia; Sistemas econômicos\n- Geografia Urbana e Demografia: Densidade demográfica; Fenômenos urbanos e problemas sociais; Indicadores demográficos; Migrações; Pirâmides etárias; Teorias demográficas; Transição demográfica\n- Geografia Agrária: Conflitos no campo; Estrutura fundiária; Modelos de produção agrícola; Reforma agrária; Revolução verde\n- Geopolítica: Blocos econômicos; Colonialismo e neocolonialismo; Conflitos geopolíticos; Imperialismo; Ordens mundiais; Sustentabilidade\n- Geografia Física: Cartografia; Ciclo das rochas; Eras geológicas; Geologia; Relevos; Tectonismo\n- Hidrografia\n- Climatologia: Climas do Brasil; El Nino e La Nina; Fatores do clima; Fenômenos climáticos\n- Impactos ambientais: Degradação dos solos; Desmatamento; Escassez hídrica; Mudanças climáticas; Poluição\n\nDISCIPLINA: Filosofia\n- Fundamentos da Filosofia: A Passagem do Mito ao Logos; Mito e Religião; O Que é Filosofia\n- Filosofia Clássica: Aristóteles; Platão; Pré-Socráticos; Sócrates\n- Filosofia Moderna: Contratualismo; Idealismo; Iluminismo; Kant; Racionalismo e empirismo\n- Filosofia Contemporânea: Educação; Escola de Frankfurt; Guerra Fria; Michel Foucault; Nietzche; Sartre\n- Filosofia Religiosa: Santo Agostinho; São Tomás de Aquino\n- Filosofia da Ciência\n- Ética e Moral\n- Política\n\nDISCIPLINA: Sociologia\n- Fundamentos da Sociologia: O Que é Sociologia; Sociologia e suas Áreas\n- Sociólogos Clássicos: Auguste Comte; Émile Durkheim; Marx e Engels; Max Weber\n- Cultura e Identidade\n- Instituições Sociais\n- Sociologia do Trabalho\n- Política\n- Movimentos Sociais: Abolição, racismo e antirracismo; Movimento feminista; Movimento LGBT; Movimento operário\n- Sociologia Brasileira\n- Tecnologia\n- Religião\n- Indústria Cultural, Consumo, Comunicação e Influência\n- Consciência Coletiva\n\nDISCIPLINA: Biologia\n- Fundamentos da Biologia: Introdução à Célula; Níveis de Organização Biológica; Noções de Metabolismo e Energia; O que é Vida\n- Método Científico\n- Bioquímica: Enzimas; Macromoléculas; Vitaminas\n- Citologia e Moléculas da Vida: Células; Divisão celular; Membrana Plasmática; Organelas; Transportes de membrana\n- Metabolismo Energético I: Fermentação; Respiração celular\n- Metabolismo Energético II: Fotossíntese; Quimiossíntese\n- Biologia Molecular: Bases nitrogenadas; DNA e RNA; Proteínas\n- Evolução e Classificação dos Seres Vivos: Cladogramas; Especiação; Origem da vida; Teorias evolutivas\n- Ecologia: Biomas e diversidade; Cadeia alimentar; Ciclos biogeoquímicos; Dinâmica de populações; Ecossistemas; Fluxos de energia e de matéria; Gráficos de relações ecológicas; Impactos antrópicos; Preservação e conservação ambiental; Problemas ambientais; Relações ecológicas; Sucessão ecológica\n- Impactos e Problemas Ambientais\n- Genética: 1° Lei de Mendel; 2° Lei de Mendel; Biotecnologia; Doenças genéticas; Engenharia genética; Fator Rh e Sistema ABO; Fundamentos da genética; Heredogramas; Interações gênicas\n- Histologia: Tecido Muscular\n- Fisiologia Humana: Sistema cardiorrespiratório; Sistema digestório; Sistema endócrino; Sistema excretor; Sistema hematopoietico; Sistema imunológico; Sistema nervoso; Sistema reprodutor\n- Botânica: Fisiologia vegetal; Fitormônios; Grupos vegetais; Histologia vegetal; Reprodução\n- Zoologia: Artrópodes e Equinodermos; Cordados; Primeiros filos\n- Doenças: Bacterioses; Protozooses e verminoses; Vírus e viroses\n- Microbiologia\n- Reprodução e Embriologia\n\nDISCIPLINA: Física\n- Energia e suas Transformações: Fontes de energia; Impactos Ambientais e Contexto Energético\n- Ferramental Matemático: Conversão de unidades; Potência de 10 e notação científica; Proporção entre grandezas físicas; Triângulo retângulo na Física\n- Grandezas Físicas\n- Termologia I: Calorimetria; Dilatação; Termometria\n- Cinemática I: Fundamentos da cinemática; Movimento uniforme; Movimento uniformemente variado; Queda livre e lançamento vertical\n- Ondulatória I: Espectro eletromagnético; Fenômenos ondulatórios; Propriedades das ondas\n- Dinâmica I: Força de atrito; Força elástica e lei de Hooke; Forças particulares; Leis de Newton; Polias fixas e móveis\n- Vetores\n- Eletrostática: Campo e potencial elétrico; Eletrização; Força elétrica\n- Eletrodinâmica I: 1º Lei de Ohm; 2º Lei de Ohm; Amperímetro e voltímetro; Circuitos elétricos; Potência elétrica; Tensão e corrente\n- Potência e Eficiência\n- Cinemática II: Acoplamento no MCU; Cinemática vetorial; Lançamento horizontal; Lançamento oblíquo; Movimento circular\n- Termologia II: Gases; Termodinâmica\n- Dinâmica II: Dinâmica do MCU; Plano inclinado\n- Dinâmica III: Colisões; Energia cinética e mecânica; Energia potencial elástica; Energia potencial gravitacional; Força elástica; Impulso e quantidade de movimento; Movimento Harmônico Simples\n- Estática: Equilíbrio de corpos\n- Hidrostática: Densidade; Empuxo; Pressão\n- Eletrodinâmica II: Associação de pilhas e baterias; Geradores, receptores e capacitores; Ponte de Wheatstone\n- Magnetismo e Eletromagnetismo\n- Óptica: Espelhos; Fenômenos ópticos; Lentes\n- Ondulatória II: Acústica\n- Gravitação\n- Física Moderna: Física nuclear; Mecânica quântica; Radiação de corpo negro; Relatividade\n\nDISCIPLINA: Química\n- Propriedades da Matéria\n- Processos de Separação de Misturas\n- Atomística: Alotropia; Efeitos luminosos; Leis ponderais; Modelo atômico atual; Modelos atômicos; Propriedades atômicas\n- Estequiometria: Cálculos estequiométricos; Variáveis no cálculo estequiométrico\n- Tabela Periódica e suas Propriedades: Elementos químicos; Famílias e períodos; Propriedades periódicas\n- Química Orgânica: Compostos orgânicos; Funções orgânicas; Isomeria; Reações orgânicas\n- Ligações Químicas, Propriedades dos Compostos e Polaridade: Forças intermoleculares; Ligações químicas; Polaridade\n- Geometria Molecular: Arranjos geométricos espaciais; Teoria da Repulsão dos Pares de Elétrons\n- Radioatividade: Decaimento radioativo; Partículas; Reações nucleares\n- Propriedades Coligativas: Crioscopia; Osmoscopia; Tonoscopia\n- Eletroquímica: Eletrólise; Oxirredução; Pilhas; Reações\n- Química Ambiental\n- Química Inorgânica: Ácidos; Bases; Funções inorgânicas; Ionização e dissociação iônica; NOX; Óxidos; Reações inorgânicas; Sais\n- Termoquímica: Equações termoquímicas; Lei de Hess\n- Soluções: Concentração; Diluição e mistura de soluções; Dispersões\n- Equilíbrio Químico\n- Cinética Química\n- Reações Químicas\n- Gases e suas Transformações\n- Polímeros\n\nDISCIPLINA: Linguagens e Códigos\n- Funções da Linguagem\n- Figuras de Linguagem\n- Tipologias Textuais\n- Gêneros Textuais\n- Campanhas Publicitárias, Anúncios e Influência\n- Crítica Social, Cultural e Artística\n- Variações Linguísticas: Normas linguísticas; Patrimônio linguístico\n- Poemas e Poesias\n- Expressividade e Lirismo\n- Progressão Textual e Temática\n- Mecanismos de Coesão e Coerência\n- Intertextualidade\n- Charges e HQs\n- Literatura: Arcadismo; Barroco; Classicismo; Contemporânea; Leituras obrigatórias; Modernismo; Naturalismo; Parnasianismo; Quinhentismo; Realismo; Romantismo; Simbolismo; Trovadorismo\n- Artes: Cubismo; Dadaísmo; Expressionismo; Futurismo; Surrealismo\n- Movimentos Artísticos\n- Recursos Argumentativos\n- Estratégias Argumentativas\n- Gramática: Colocação Pronominal; Concordância; Fonética e Fonologia; Morfologia; Ortografia e Acentuação; Pontuação; Regência; Semântica e Lexicologia; Sintaxe\n- Tecnologias\n- Interpretação de Texto\n- Educação Física\n- Linguagem Corporal\n\nDISCIPLINA: Espanhol\n- Interpretação de Texto\n- Charges e HQ's\n- Campanhas Publicitárias\n- Vocabulário e Semântica\n\nDISCIPLINA: Inglês\n- Vocabulário e Semântica\n- Interpretação de Texto\n- Charges e HQs\n- Campanhas Publicitárias\n\nDISCIPLINA: Matemática\n- Fundamentos da Matemática: Divisão; Frações; Multiplicação; Potenciação; Radiciação; Soma; Subtração\n- Razão, Proporção e Regra de Três: Divisão diretamente proporcional; Divisão inversamente proporcional; Regra de 3 composta; Regra de 3 simples\n- Razão e Proporção Avançada: Regra de 3 simples\n- Porcentagem: Aumento percentual; Redução percentual; Taxa percentual\n- Unidades de Medida e Conversões\n- Notação Cientifica\n- Escalas: Escalas lineares; Escalas superficiais; Escalas volumétricas\n- Vazão\n- Matemática Financeira: Aumentos; Descontos; Juros compostos; Juros Simples; Taxa percentual\n- Gráficos e Tabelas: Gráficos; Tabelas\n- Estatística: Desvio padrão e variância; Medidas de tendência central\n- Conjuntos\n- Álgebra: Números complexos; Polinômios\n- Inequações\n- Sistemas e Equações: Escalonamento; Primeiro grau; Segundo grau\n- Função do Primeiro Grau\n- Progressão Aritmética: Soma dos termos; Termo geral\n- Sequências Lógicas\n- Progressão Geométrica\n- Função do Segundo Grau\n- Geometria Plana: Ângulos; Área e perímetro; Circunferências e arcos; Polígonos e semelhança; Razões trigonométricas\n- Trigonometria\n- Geometria Espacial: Poliedros; Projeção ortogonal\n- Geometria Analítica: Circunferência; Plano cartesiano; Reta\n- Análise Combinatória: Arranjo; Combinação; Permutação; PFC\n- Probabilidade\n- Função Exponencial e Logarítmica\n- Função Trigonométrica\n- Logaritmo\n- Matrizes\n- Lógica\n- MMC e MDC\n- Conjuntos Numéricos\n- Função Racional\n\nDISCIPLINA: Redação\n- Cadernos de Aprimoramento Textual\n\nDISCIPLINA: Intensivo Revisional\n- Matemática\n- Biologia\n- Química\n- Física\n", "gabarito": "Esta é a página de gabarito de uma lista de exercícios. Leia o quadro e devolva\ntodos os pares número → letra, exatamente como impressos. Não deduza nada que não esteja\nlegível; se algum item estiver ilegível, deixe-o de fora.", "classificacao": "Classifique esta lista de exercícios em UM par disciplina + tópico da BASE DE\nTÓPICOS (copiado com a grafia exata). Use o título da capa e o conteúdo das questões. Se mais\nde um tópico couber, escolha o de assunto mais específico e cite o descartado. Se nenhum\ncouber com segurança, devolva confiante = false e explique.\n\nTítulo da lista: {titulo}\n\nInício de cada questão (texto extraído do PDF, pode ter símbolos trocados):\n{amostras}\n", "base": [["História", "Idade Antiga", ["Egito", "Grécia", "Primeiras civilizações", "Roma"]], ["História", "Idade Média", ["Cruzadas", "Feudalismo", "Império Bizantino"]], ["História", "Idade Moderna", ["Estados Nacionais", "Expansão marítima", "História da América", "Mercantilismo", "Reforma e contrarreforma", "Renascimento", "Revolução industrial"]], ["História", "Idade Contemporânea", ["Entreguerras", "Guerra Fria", "Imperialismo", "Nazifascismo", "Primaveira Árabe", "Primeira Guerra Mundial", "Revolução Francesa", "Segunda Guerra Mundial"]], ["História", "Brasil Colônia", ["Catequização", "Ciclos econõmicos", "Escravidão", "Independência", "Revoltas brasileiras"]], ["História", "Brasil Império", ["Abolição da escravidão", "Guerra do Paraguai", "Período Regencial", "Primeiro Reinado", "Revoltas brasileiras", "Segundo Reinado"]], ["História", "Brasil República", ["Constituição Federal", "Direitos Sociais", "Ditadura militar", "Era Vargas", "Governo JK", "Proclamação da República", "Redemocratização", "República Oligárquica", "República Velha", "Revoltas brasileiras"]], ["Geografia", "Geografia Econômica", ["Blocos econômicos", "Comércio", "Conceitos geográficos", "Desigualdade socioeconômica", "DIT", "Doutrinas econômicas", "Fontes de energia", "Globalização", "Modais", "Modelos de produção", "Neoliberalismo", "Setores da economia", "Sistemas econômicos"]], ["Geografia", "Geografia Urbana e Demografia", ["Densidade demográfica", "Fenômenos urbanos e problemas sociais", "Indicadores demográficos", "Migrações", "Pirâmides etárias", "Teorias demográficas", "Transição demográfica"]], ["Geografia", "Geografia Agrária", ["Conflitos no campo", "Estrutura fundiária", "Modelos de produção agrícola", "Reforma agrária", "Revolução verde"]], ["Geografia", "Geopolítica", ["Blocos econômicos", "Colonialismo e neocolonialismo", "Conflitos geopolíticos", "Imperialismo", "Ordens mundiais", "Sustentabilidade"]], ["Geografia", "Geografia Física", ["Cartografia", "Ciclo das rochas", "Eras geológicas", "Geologia", "Relevos", "Tectonismo"]], ["Geografia", "Hidrografia", []], ["Geografia", "Climatologia", ["Climas do Brasil", "El Nino e La Nina", "Fatores do clima", "Fenômenos climáticos"]], ["Geografia", "Impactos ambientais", ["Degradação dos solos", "Desmatamento", "Escassez hídrica", "Mudanças climáticas", "Poluição"]], ["Filosofia", "Fundamentos da Filosofia", ["A Passagem do Mito ao Logos", "Mito e Religião", "O Que é Filosofia"]], ["Filosofia", "Filosofia Clássica", ["Aristóteles", "Platão", "Pré-Socráticos", "Sócrates"]], ["Filosofia", "Filosofia Moderna", ["Contratualismo", "Idealismo", "Iluminismo", "Kant", "Racionalismo e empirismo"]], ["Filosofia", "Filosofia Contemporânea", ["Educação", "Escola de Frankfurt", "Guerra Fria", "Michel Foucault", "Nietzche", "Sartre"]], ["Filosofia", "Filosofia Religiosa", ["Santo Agostinho", "São Tomás de Aquino"]], ["Filosofia", "Filosofia da Ciência", []], ["Filosofia", "Ética e Moral", []], ["Filosofia", "Política", []], ["Sociologia", "Fundamentos da Sociologia", ["O Que é Sociologia", "Sociologia e suas Áreas"]], ["Sociologia", "Sociólogos Clássicos", ["Auguste Comte", "Émile Durkheim", "Marx e Engels", "Max Weber"]], ["Sociologia", "Cultura e Identidade", []], ["Sociologia", "Instituições Sociais", []], ["Sociologia", "Sociologia do Trabalho", []], ["Sociologia", "Política", []], ["Sociologia", "Movimentos Sociais", ["Abolição, racismo e antirracismo", "Movimento feminista", "Movimento LGBT", "Movimento operário"]], ["Sociologia", "Sociologia Brasileira", []], ["Sociologia", "Tecnologia", []], ["Sociologia", "Religião", []], ["Sociologia", "Indústria Cultural, Consumo, Comunicação e Influência", []], ["Sociologia", "Consciência Coletiva", []], ["Biologia", "Fundamentos da Biologia", ["Introdução à Célula", "Níveis de Organização Biológica", "Noções de Metabolismo e Energia", "O que é Vida"]], ["Biologia", "Método Científico", []], ["Biologia", "Bioquímica", ["Enzimas", "Macromoléculas", "Vitaminas"]], ["Biologia", "Citologia e Moléculas da Vida", ["Células", "Divisão celular", "Membrana Plasmática", "Organelas", "Transportes de membrana"]], ["Biologia", "Metabolismo Energético I", ["Fermentação", "Respiração celular"]], ["Biologia", "Metabolismo Energético II", ["Fotossíntese", "Quimiossíntese"]], ["Biologia", "Biologia Molecular", ["Bases nitrogenadas", "DNA e RNA", "Proteínas"]], ["Biologia", "Evolução e Classificação dos Seres Vivos", ["Cladogramas", "Especiação", "Origem da vida", "Teorias evolutivas"]], ["Biologia", "Ecologia", ["Biomas e diversidade", "Cadeia alimentar", "Ciclos biogeoquímicos", "Dinâmica de populações", "Ecossistemas", "Fluxos de energia e de matéria", "Gráficos de relações ecológicas", "Impactos antrópicos", "Preservação e conservação ambiental", "Problemas ambientais", "Relações ecológicas", "Sucessão ecológica"]], ["Biologia", "Impactos e Problemas Ambientais", []], ["Biologia", "Genética", ["1° Lei de Mendel", "2° Lei de Mendel", "Biotecnologia", "Doenças genéticas", "Engenharia genética", "Fator Rh e Sistema ABO", "Fundamentos da genética", "Heredogramas", "Interações gênicas"]], ["Biologia", "Histologia", ["Tecido Muscular"]], ["Biologia", "Fisiologia Humana", ["Sistema cardiorrespiratório", "Sistema digestório", "Sistema endócrino", "Sistema excretor", "Sistema hematopoietico", "Sistema imunológico", "Sistema nervoso", "Sistema reprodutor"]], ["Biologia", "Botânica", ["Fisiologia vegetal", "Fitormônios", "Grupos vegetais", "Histologia vegetal", "Reprodução"]], ["Biologia", "Zoologia", ["Artrópodes e Equinodermos", "Cordados", "Primeiros filos"]], ["Biologia", "Doenças", ["Bacterioses", "Protozooses e verminoses", "Vírus e viroses"]], ["Biologia", "Microbiologia", []], ["Biologia", "Reprodução e Embriologia", []], ["Física", "Energia e suas Transformações", ["Fontes de energia", "Impactos Ambientais e Contexto Energético"]], ["Física", "Ferramental Matemático", ["Conversão de unidades", "Potência de 10 e notação científica", "Proporção entre grandezas físicas", "Triângulo retângulo na Física"]], ["Física", "Grandezas Físicas", []], ["Física", "Termologia I", ["Calorimetria", "Dilatação", "Termometria"]], ["Física", "Cinemática I", ["Fundamentos da cinemática", "Movimento uniforme", "Movimento uniformemente variado", "Queda livre e lançamento vertical"]], ["Física", "Ondulatória I", ["Espectro eletromagnético", "Fenômenos ondulatórios", "Propriedades das ondas"]], ["Física", "Dinâmica I", ["Força de atrito", "Força elástica e lei de Hooke", "Forças particulares", "Leis de Newton", "Polias fixas e móveis"]], ["Física", "Vetores", []], ["Física", "Eletrostática", ["Campo e potencial elétrico", "Eletrização", "Força elétrica"]], ["Física", "Eletrodinâmica I", ["1º Lei de Ohm", "2º Lei de Ohm", "Amperímetro e voltímetro", "Circuitos elétricos", "Potência elétrica", "Tensão e corrente"]], ["Física", "Potência e Eficiência", []], ["Física", "Cinemática II", ["Acoplamento no MCU", "Cinemática vetorial", "Lançamento horizontal", "Lançamento oblíquo", "Movimento circular"]], ["Física", "Termologia II", ["Gases", "Termodinâmica"]], ["Física", "Dinâmica II", ["Dinâmica do MCU", "Plano inclinado"]], ["Física", "Dinâmica III", ["Colisões", "Energia cinética e mecânica", "Energia potencial elástica", "Energia potencial gravitacional", "Força elástica", "Impulso e quantidade de movimento", "Movimento Harmônico Simples"]], ["Física", "Estática", ["Equilíbrio de corpos"]], ["Física", "Hidrostática", ["Densidade", "Empuxo", "Pressão"]], ["Física", "Eletrodinâmica II", ["Associação de pilhas e baterias", "Geradores, receptores e capacitores", "Ponte de Wheatstone"]], ["Física", "Magnetismo e Eletromagnetismo", []], ["Física", "Óptica", ["Espelhos", "Fenômenos ópticos", "Lentes"]], ["Física", "Ondulatória II", ["Acústica"]], ["Física", "Gravitação", []], ["Física", "Física Moderna", ["Física nuclear", "Mecânica quântica", "Radiação de corpo negro", "Relatividade"]], ["Química", "Propriedades da Matéria", []], ["Química", "Processos de Separação de Misturas", []], ["Química", "Atomística", ["Alotropia", "Efeitos luminosos", "Leis ponderais", "Modelo atômico atual", "Modelos atômicos", "Propriedades atômicas"]], ["Química", "Estequiometria", ["Cálculos estequiométricos", "Variáveis no cálculo estequiométrico"]], ["Química", "Tabela Periódica e suas Propriedades", ["Elementos químicos", "Famílias e períodos", "Propriedades periódicas"]], ["Química", "Química Orgânica", ["Compostos orgânicos", "Funções orgânicas", "Isomeria", "Reações orgânicas"]], ["Química", "Ligações Químicas, Propriedades dos Compostos e Polaridade", ["Forças intermoleculares", "Ligações químicas", "Polaridade"]], ["Química", "Geometria Molecular", ["Arranjos geométricos espaciais", "Teoria da Repulsão dos Pares de Elétrons"]], ["Química", "Radioatividade", ["Decaimento radioativo", "Partículas", "Reações nucleares"]], ["Química", "Propriedades Coligativas", ["Crioscopia", "Osmoscopia", "Tonoscopia"]], ["Química", "Eletroquímica", ["Eletrólise", "Oxirredução", "Pilhas", "Reações"]], ["Química", "Química Ambiental", []], ["Química", "Química Inorgânica", ["Ácidos", "Bases", "Funções inorgânicas", "Ionização e dissociação iônica", "NOX", "Óxidos", "Reações inorgânicas", "Sais"]], ["Química", "Termoquímica", ["Equações termoquímicas", "Lei de Hess"]], ["Química", "Soluções", ["Concentração", "Diluição e mistura de soluções", "Dispersões"]], ["Química", "Equilíbrio Químico", []], ["Química", "Cinética Química", []], ["Química", "Reações Químicas", []], ["Química", "Gases e suas Transformações", []], ["Química", "Polímeros", []], ["Linguagens e Códigos", "Funções da Linguagem", []], ["Linguagens e Códigos", "Figuras de Linguagem", []], ["Linguagens e Códigos", "Tipologias Textuais", []], ["Linguagens e Códigos", "Gêneros Textuais", []], ["Linguagens e Códigos", "Campanhas Publicitárias, Anúncios e Influência", []], ["Linguagens e Códigos", "Crítica Social, Cultural e Artística", []], ["Linguagens e Códigos", "Variações Linguísticas", ["Normas linguísticas", "Patrimônio linguístico"]], ["Linguagens e Códigos", "Poemas e Poesias", []], ["Linguagens e Códigos", "Expressividade e Lirismo", []], ["Linguagens e Códigos", "Progressão Textual e Temática", []], ["Linguagens e Códigos", "Mecanismos de Coesão e Coerência", []], ["Linguagens e Códigos", "Intertextualidade", []], ["Linguagens e Códigos", "Charges e HQs", []], ["Linguagens e Códigos", "Literatura", ["Arcadismo", "Barroco", "Classicismo", "Contemporânea", "Leituras obrigatórias", "Modernismo", "Naturalismo", "Parnasianismo", "Quinhentismo", "Realismo", "Romantismo", "Simbolismo", "Trovadorismo"]], ["Linguagens e Códigos", "Artes", ["Cubismo", "Dadaísmo", "Expressionismo", "Futurismo", "Surrealismo"]], ["Linguagens e Códigos", "Movimentos Artísticos", []], ["Linguagens e Códigos", "Recursos Argumentativos", []], ["Linguagens e Códigos", "Estratégias Argumentativas", []], ["Linguagens e Códigos", "Gramática", ["Colocação Pronominal", "Concordância", "Fonética e Fonologia", "Morfologia", "Ortografia e Acentuação", "Pontuação", "Regência", "Semântica e Lexicologia", "Sintaxe"]], ["Linguagens e Códigos", "Tecnologias", []], ["Linguagens e Códigos", "Interpretação de Texto", []], ["Linguagens e Códigos", "Educação Física", []], ["Linguagens e Códigos", "Linguagem Corporal", []], ["Espanhol", "Interpretação de Texto", []], ["Espanhol", "Charges e HQ's", []], ["Espanhol", "Campanhas Publicitárias", []], ["Espanhol", "Vocabulário e Semântica", []], ["Inglês", "Vocabulário e Semântica", []], ["Inglês", "Interpretação de Texto", []], ["Inglês", "Charges e HQs", []], ["Inglês", "Campanhas Publicitárias", []], ["Matemática", "Fundamentos da Matemática", ["Divisão", "Frações", "Multiplicação", "Potenciação", "Radiciação", "Soma", "Subtração"]], ["Matemática", "Razão, Proporção e Regra de Três", ["Divisão diretamente proporcional", "Divisão inversamente proporcional", "Regra de 3 composta", "Regra de 3 simples"]], ["Matemática", "Razão e Proporção Avançada", ["Regra de 3 simples"]], ["Matemática", "Porcentagem", ["Aumento percentual", "Redução percentual", "Taxa percentual"]], ["Matemática", "Unidades de Medida e Conversões", []], ["Matemática", "Notação Cientifica", []], ["Matemática", "Escalas", ["Escalas lineares", "Escalas superficiais", "Escalas volumétricas"]], ["Matemática", "Vazão", []], ["Matemática", "Matemática Financeira", ["Aumentos", "Descontos", "Juros compostos", "Juros Simples", "Taxa percentual"]], ["Matemática", "Gráficos e Tabelas", ["Gráficos", "Tabelas"]], ["Matemática", "Estatística", ["Desvio padrão e variância", "Medidas de tendência central"]], ["Matemática", "Conjuntos", []], ["Matemática", "Álgebra", ["Números complexos", "Polinômios"]], ["Matemática", "Inequações", []], ["Matemática", "Sistemas e Equações", ["Escalonamento", "Primeiro grau", "Segundo grau"]], ["Matemática", "Função do Primeiro Grau", []], ["Matemática", "Progressão Aritmética", ["Soma dos termos", "Termo geral"]], ["Matemática", "Sequências Lógicas", []], ["Matemática", "Progressão Geométrica", []], ["Matemática", "Função do Segundo Grau", []], ["Matemática", "Geometria Plana", ["Ângulos", "Área e perímetro", "Circunferências e arcos", "Polígonos e semelhança", "Razões trigonométricas"]], ["Matemática", "Trigonometria", []], ["Matemática", "Geometria Espacial", ["Poliedros", "Projeção ortogonal"]], ["Matemática", "Geometria Analítica", ["Circunferência", "Plano cartesiano", "Reta"]], ["Matemática", "Análise Combinatória", ["Arranjo", "Combinação", "Permutação", "PFC"]], ["Matemática", "Probabilidade", []], ["Matemática", "Função Exponencial e Logarítmica", []], ["Matemática", "Função Trigonométrica", []], ["Matemática", "Logaritmo", []], ["Matemática", "Matrizes", []], ["Matemática", "Lógica", []], ["Matemática", "MMC e MDC", []], ["Matemática", "Conjuntos Numéricos", []], ["Matemática", "Função Racional", []], ["Redação", "Cadernos de Aprimoramento Textual", []], ["Intensivo Revisional", "Matemática", []], ["Intensivo Revisional", "Biologia", []], ["Intensivo Revisional", "Química", []], ["Intensivo Revisional", "Física", []]]};   // prompt e base de tópicos, gerados por upq/artefato.py
+const BASE = new Map(DADOS.base.map(([d, t, a]) => [d + '\u0000' + t, a]));
+const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'No banco'];
+const DIFICULDADE = {1: 'Muito Fácil', 2: 'Fácil', 3: 'Média', 4: 'Difícil', 5: 'Muito Difícil'};
+const FAIXA_ETAPA = {'Fixação': [1, 2], 'Treinamento': [2, 3], 'Aprofundamento': [3, 4], 'Desafios': [4, 5]};
+const QUESTOES_POR_PARTE = 20;     // questões por documento do banco (cada documento ≤ 256 KiB)
+const SIMULTANEAS = 2;             // chamadas ao Claude ao mesmo tempo
+const LIMITE_LINHAS = 300;
+
+// ============================================================ utilidades
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const nn = n => String(n).padStart(2, '0');
+const tituloCurto = t => (String(t || '').match(/Questão \d+/) || [t])[0];
+const agora = () => new Date().toISOString();
+const blobUrl = id => id ? '/_blob/' + id : '';
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'aviso-toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 4200);
+}
+const ICONE = {
+  ver: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  tirar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+  por: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>',
+  subir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>',
+  descer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+};
+
+// Markdown + LaTeX: guarda as fórmulas antes do Markdown para não perder _ e * dentro delas.
+function md(texto, figuras = {}) {
+  const guardadas = [];
+  const t = String(texto || '').replace(/\\\$/g, '\u0001')
+    .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, m => { guardadas.push(m); return `\u0002${guardadas.length - 1}\u0002`; })
+    .replace(/\(figura:([A-Za-z0-9_]+)\)/g, (m, n) => `(${figuras[n] || ''})`);
+  const html = window.marked ? marked.parse(t) : `<p>${esc(t)}</p>`;
+  return html.replace(/\u0002(\d+)\u0002/g, (m, i) => esc(guardadas[+i])).replace(/\u0001/g, '\\$');
+}
+function tipografar(el) {
+  if (window.MathJax?.typesetPromise) MathJax.typesetPromise([el]).catch(() => {});
+  else setTimeout(() => tipografar(el), 300);
+}
+function textoBusca(q) {
+  return String(q.enunciado || '').replace(/!\[[^\]]*\]\([^)]*\)|[$*_#>|\\]/g, ' ').replace(/\s+/g, ' ').slice(0, 400);
+}
+
+// ============================================================ capacidades do artefato
+const cap = {db: null, assets: null, sample: null, downloads: null, user: null, limites: null, prontas: false};
+const estado = {importacoes: new Map(), partes: new Map(), listas: new Map(), jobs: []};
+
+async function iniciarCapacidades() {
+  if (!window.claude?.use) { cap.prontas = true; return; }
+  const [db, assets, sample, downloads, user] = await Promise.all(
+    ['db', 'assets', 'sample', 'downloads', 'user'].map(n => claude.use(n).catch(() => null)));
+  Object.assign(cap, {db, assets, sample, downloads, user});
+  if (sample) cap.limites = await sample.limits().catch(() => null);
+  cap.prontas = true;
+  if (db) {
+    const erro = e => toast(`Banco do artefato indisponível: ${e.message || e.code}`);
+    db.collection('importacoes').limit(1000).onSnapshot(s => { estado.importacoes = new Map(s.docs.map(d => [d.id, d.data()])); aoMudarDados(); }, erro);
+    // Cada consulta devolve até 1000 documentos: as partes são lidas em 16 fatias (1º caractere do id).
+    const fatias = new Map();
+    for (const f of '0123456789abcdef') db.collection('partes').where('fatia', '==', f).limit(1000).onSnapshot(s => {
+      fatias.set(f, s.docs.map(d => [d.id, d.data()]));
+      estado.partes = new Map([...fatias.values()].flat()); aoMudarDados();
+    }, erro);
+    db.collection('listas').limit(1000).onSnapshot(s => { estado.listas = new Map(s.docs.map(d => [d.id, d.data()])); aoMudarDados(); }, erro);
+  }
+  desenhar();
+}
+let redesenhoPendente = null;
+function aoMudarDados() {   // vários snapshots chegam juntos: um redesenho por quadro
+  if (redesenhoPendente) return;
+  redesenhoPendente = requestAnimationFrame(() => { redesenhoPendente = null; desenharSeSeguro(); });
+}
+function desenharSeSeguro() {   // não redesenha por baixo de quem está digitando ou com a janela aberta
+  if (document.getElementById('camada').childElementCount) return;
+  const ativo = document.activeElement;
+  if (ativo && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ativo.tagName) && principal.contains(ativo)) return;
+  desenhar();
+}
+
+// O banco geral = todas as questões de todas as partes, com id "<importação>:<NN>".
+function banco() {
+  const qs = [];
+  for (const [parteId, parte] of estado.partes) {
+    const imp = estado.importacoes.get(parte.importacao);
+    for (const q of parte.questoes || []) qs.push({...q, id: `${parte.importacao}:${nn(q.numero)}`, origem: parte.importacao,
+      parte_id: parteId, lista_origem: imp?.titulo || '', criado_em: imp?.criado_em || ''});
+  }
+  return qs.sort((a, b) => a.criado_em.localeCompare(b.criado_em) || a.lista_origem.localeCompare(b.lista_origem) || a.numero - b.numero);
+}
+function indiceBanco() { return new Map(banco().map(q => [q.id, q])); }
+
+// ============================================================ validação (porta de upq/validar.py)
+const RE_MATH = /\$\$[\s\S]+?\$\$|\$[^$]+?\$/g;
+const RE_FIG = /!\[[^\]]*\]\(figura:([A-Za-z0-9_]+)\)/g;
+const UNICODE_MAT = '²³¹⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉√≤≥≠±×÷∞∫∑πΔ≈';
+const semAcento = s => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function checarLatex(campo, texto, erros, avisos) {
+  const limpo = texto.replace(/\\\$/g, '');
+  if ((limpo.match(/\$/g) || []).length % 2) erros.push(`${campo}: quantidade ímpar de "$" (fórmula aberta ou R$ sem escape)`);
+  if (/R\$\s?\d/.test(limpo)) erros.push(`${campo}: "R$" sem escape (use R\\$)`);
+  for (const f of limpo.match(RE_MATH) || []) {
+    if ((f.match(/\{/g) || []).length !== (f.match(/\}/g) || []).length) erros.push(`${campo}: chaves desbalanceadas em ${f.slice(0, 40)}`);
+    for (const p of ['\\ce{', '\\SI{', '\\usepackage']) if (f.includes(p)) erros.push(`${campo}: comando não suportado ${p}`);
+  }
+  const fora = limpo.replace(RE_MATH, ' ');
+  const achados = [...new Set([...fora].filter(c => UNICODE_MAT.includes(c)))];
+  if (achados.length) avisos.push(`${campo}: símbolo fora de LaTeX (${achados.join(' ')})`);
+}
+function conferirComPdf(textoPdf, transcrito) {
+  const avisos = [];
+  const corpo = String(textoPdf || '').split('\n').slice(1).filter(l => !/^\s*\(?(Fonte|Disponível em)/.test(l)).join('\n');
+  const digitos = transcrito.replace(/\D/g, '');
+  const faltam = [...new Set((corpo.replace(/\./g, '').match(/\d+/g) || []).filter(n => n.length >= 2 && !digitos.includes(n)))];
+  if (faltam.length) avisos.push(`números do PDF ausentes na transcrição: ${faltam.join(', ')}`);
+  const palavras = new Set(semAcento(corpo).match(/[a-z]{5,}/g) || []);
+  if (palavras.size) {
+    const t = semAcento(transcrito);
+    const cob = [...palavras].filter(w => t.includes(w)).length / palavras.size;
+    if (cob < 0.85) avisos.push(`só ${Math.round(cob * 100)}% das palavras do PDF aparecem na transcrição (trecho cortado?)`);
+  }
+  return avisos;
+}
+function validarQuestao(q, lista) {
+  const erros = [], avisos = [];
+  const assuntosBase = BASE.get(q.disciplina + '\u0000' + q.topico);
+  if (!assuntosBase) erros.push(`par fora da base de tópicos: ${q.disciplina} / ${q.topico}`);
+  if (lista?.tipo === 'lista' && lista.disciplina && (q.disciplina !== lista.disciplina || q.topico !== lista.topico)) erros.push('disciplina/tópico diferente do resto da lista');
+  const validos = assuntosBase && assuntosBase.length ? assuntosBase : [q.topico];
+  if (!q.assuntos?.length) erros.push('sem assunto');
+  for (const a of q.assuntos || []) if (!validos.includes(a)) erros.push(`assunto fora da base para ${q.topico}: ${a}`);
+  const letras = Object.keys(q.alternativas || {});
+  if (letras.join('') !== 'ABCDE'.slice(0, letras.length) || letras.length < 2) erros.push(`alternativas fora de ordem ou insuficientes: ${letras.join(', ')}`);
+  if (!letras.includes(q.gabarito)) erros.push(`gabarito ${q.gabarito} não está entre as alternativas`);
+  for (const [l, t] of Object.entries(q.alternativas || {})) {
+    if (!String(t).trim()) erros.push(`alternativa ${l} vazia`);
+    else if (/^\(?[a-eA-E][).]\s/.test(t)) avisos.push(`alternativa ${l} parece começar com a letra`);
+  }
+  const faixa = FAIXA_ETAPA[q.etapa];
+  if (faixa && !(faixa[0] <= q.dificuldade && q.dificuldade <= faixa[1])) avisos.push(`dificuldade ${q.dificuldade} fora da faixa ${faixa[0]}–${faixa[1]} de ${q.etapa}`);
+  const campos = {enunciado: q.enunciado, ...Object.fromEntries(Object.entries(q.alternativas || {}).map(([k, v]) => [`alternativa ${k}`, v]))};
+  for (const [nome, texto] of Object.entries(campos)) checarLatex(nome, String(texto || ''), erros, avisos);
+  const nomes = new Set((q.figuras || []).map(f => f.nome));
+  const usadas = new Set(Object.values(campos).flatMap(t => [...String(t || '').matchAll(RE_FIG)].map(m => m[1])));
+  const inexistentes = [...usadas].filter(n => !nomes.has(n));
+  if (inexistentes.length) erros.push(`figura inexistente referenciada: ${inexistentes.join(', ')}`);
+  const sobras = [...nomes].filter(n => !usadas.has(n));
+  if (sobras.length) avisos.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
+  avisos.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
+  if (q.revisar && !q.revisada) avisos.unshift(`IA pediu revisão: ${q.observacoes || '(sem motivo)'}`);
+  if (q.revisada) return {erros, avisos: []};
+  return {erros, avisos};
+}
+
+function titulo(tipo, tituloLista, numero, instituicao, ano, simulado) {
+  if (tipo === 'simulado') return `Questão ${nn(numero)} - ${simulado?.numero ?? '?'}º Simulado Autoral 2026 - ${simulado?.dia ?? '?'}º DIA`;
+  const origem = [instituicao, ano].filter(Boolean).join(' ');
+  return `Lista de Exercícios - ${tituloLista} - Questão ${nn(numero)}` + (origem ? ` - ${origem}` : '');
+}
+function dadosSimulado(nome) {
+  const s = nome.replace(/_/g, ' ');
+  const sim = s.match(/(\d+)\s*[ºo°]?\s*Simulado/i), dia = s.match(/(\d+)\s*[ºo°]?\s*DIA|DIA\s*(\d+)/i);
+  return {numero: sim ? +sim[1] : null, dia: dia ? +(dia[1] || dia[2]) : null};
+}
+
+// ============================================================ Claude (capacidade "sample")
+function textoBase() {
+  return DADOS.base.map(([d, t, a]) => `${d} | ${t}${a.length ? ': ' + a.join('; ') : ''}`).join('\n');
+}
+async function perguntar(prompt, opcoes = {}) {
+  if (!cap.sample) throw {code: 'sem_claude', message: 'O Claude não está disponível nesta visualização.'};
+  return cap.sample.json(prompt, {modelTier: 'default', ...opcoes});
+}
+async function lerGabarito(imagem) {
+  const r = await perguntar(DADOS.gabarito + '\n\nResponda somente com JSON: {"itens": [{"numero": 1, "letra": "C"}, ...]}', {images: [imagem]});
+  const g = {};
+  for (const it of r?.itens || []) if (/^[A-E]$/.test(String(it.letra).trim().toUpperCase())) g[nn(+it.numero)] = String(it.letra).trim().toUpperCase();
+  return g;
+}
+async function classificar(m) {
+  const amostras = m.questoes.map(q => `- ${nn(q.numero)}: ${q.textoPdf.split(/\s+/).slice(0, 40).join(' ')}`).join('\n');
+  const prompt = DADOS.classificacao.replace('{titulo}', m.titulo).replace('{amostras}', amostras)
+    + '\n\nBASE DE TÓPICOS (Disciplina | Tópico: assuntos):\n' + textoBase()
+    + '\n\nResponda somente com JSON: {"disciplina": "...", "topico": "...", "assunto": "...", "descartados": ["..."], "confiante": true, "justificativa": "..."}';
+  const c = await perguntar(prompt);
+  if (!BASE.has(c?.disciplina + '\u0000' + c?.topico)) throw {code: 'classificacao', message: `A IA sugeriu um tópico fora da base: ${c?.disciplina} / ${c?.topico}`};
+  return c;
+}
+function promptLote(lote, ctx) {
+  const blocos = lote.map((q, i) => {
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura da questão, de cima para baixo)`).join(', ') || 'nenhuma';
+    return `IMAGEM ${i + 1} = Questão ${nn(q.numero)}
+- Etapa: ${q.etapa || 'não informada'}
+- Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
+- Figuras desta questão (NOMES para usar em ![...](figura:NOME)): ${figs}
+- Texto extraído do PDF (apoio; contém erros de símbolos — confira na imagem):
+<<<
+${q.textoPdf}
+>>>`;
+  }).join('\n\n');
+  const fixos = ctx.disciplina ? `\nDisciplina e tópico da lista (use exatamente): ${ctx.disciplina} / ${ctx.topico}` : '';
+  return `${DADOS.sistema}
+
+=====
+Lista: "${ctx.titulo}"${fixos}
+Esta mensagem traz ${lote.length} imagem(ns), na ordem abaixo.
+
+${blocos}
+
+Responda somente com JSON, um objeto por imagem e na mesma ordem:
+{"questoes": [{"numero": 4, "instituicao": "UFMG", "ano": 2025, "adaptada": false, "disciplina": "...", "topico": "...",
+  "assuntos": ["..."], "dificuldade": 2, "enunciado": "Markdown com LaTeX", "alternativas": [{"letra": "A", "texto": "..."}],
+  "gabarito": "A", "revisar": false, "observacoes": null}]}`;
+}
+function normalizarIA(r, q, ctx) {
+  const alternativas = {};
+  for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = String(a.texto ?? '').trim(); }
+  const oficial = ctx.gabarito[nn(q.numero)];
+  const obs = [r.observacoes].filter(Boolean);
+  const gabIA = String(r.gabarito || '').trim().toUpperCase();
+  if (oficial && gabIA && oficial !== gabIA) obs.push(`IA indicou ${gabIA}, gabarito oficial é ${oficial}`);
+  const instituicao = r.instituicao ? String(r.instituicao).trim() : null;
+  const ano = Number.isInteger(+r.ano) && +r.ano > 1900 ? +r.ano : null;
+  return {
+    numero: q.numero, titulo: titulo(ctx.tipo, ctx.titulo, q.numero, instituicao, ano, ctx.simulado),
+    instituicao, ano, disciplina: ctx.disciplina || String(r.disciplina || ''), topico: ctx.topico || String(r.topico || ''),
+    assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
+    etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
+    enunciado: String(r.enunciado || '').trim(), alternativas, gabarito: oficial || gabIA,
+    pagina: q.pagina, textoPdf: q.textoPdf, revisar: !!r.revisar || !oficial || (oficial && gabIA && oficial !== gabIA),
+    observacoes: obs.join('; ') || (oficial ? null : 'gabarito oficial não encontrado'), revisada: false,
+  };
+}
+
+// ============================================================ processamento de um PDF
+function novoJob(arquivo) {
+  const job = {id: 'j' + Date.now() + Math.random().toString(36).slice(2, 6), arquivo: arquivo.name, file: arquivo,
+    etapa: 0, estado: 'rodando', mensagem: 'Lendo o PDF…', progresso: 0, m: null, ctx: null, resultados: new Map(), pendentes: []};
+  estado.jobs.unshift(job);
+  return job;
+}
+function atualizar(job, campos) { Object.assign(job, campos); if (tela.nome === 'enviar') desenharEnvios(); }
+
+async function processar(job, {reprocessar = false} = {}) {
+  try {
+    if (!job.m) {
+      atualizar(job, {etapa: 0, estado: 'rodando', mensagem: 'Recortando questões e figuras…', progresso: 0});
+      await pdfjsPronto;
+      job.m = await UPQRecorte.segmentar(job.file, p => atualizar(job, {mensagem: p.etapa === 'lendo' ? `Lendo a página ${p.pagina} de ${p.total}…` : `Recortando a página ${p.pagina} de ${p.total}…`, progresso: p.pagina / p.total}));
+      if (!job.m.questoes.length) return atualizar(job, {estado: 'falhou', mensagem: 'Nenhuma barra "Questão NN" encontrada. Este PDF segue outro modelo de lista.'});
+      job.idImp = job.m.hash.slice(0, 16);
+      if (estado.importacoes.has(job.idImp) && !reprocessar)
+        return atualizar(job, {estado: 'duplicado', mensagem: `Esta lista já está no banco (${job.m.questoes.length} questões). Reprocessar substitui a transcrição.`});
+    }
+    const m = job.m;
+    if (!job.ctx) {
+      atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
+      let gabarito = m.gabaritoPdf;
+      if (!Object.keys(gabarito).length && m.paginaGabarito) gabarito = await lerGabarito(m.paginaGabarito);
+      const classe = m.tipo === 'lista' ? await classificar(m) : null;
+      job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
+                 classificacao: classe, simulado: m.tipo === 'simulado' ? dadosSimulado(m.arquivo) : null};
+      const porLote = Math.max(1, Math.min(4, cap.limites?.images?.maxCount || 1));
+      job.pendentes = [];
+      for (let i = 0; i < m.questoes.length; i += porLote) job.pendentes.push({questoes: m.questoes.slice(i, i + porLote), tentativas: 0});
+    }
+    await transcreverPendentes(job);
+    if (job.pendentes.length) return;   // parou: o botão "Continuar" retoma
+    await salvarNoBanco(job);
+  } catch (e) {
+    console.error(e);
+    pararComErro(job, e);
+  }
+}
+
+function pararComErro(job, e) {
+  const codigo = e?.code;
+  const msgs = {
+    not_granted: 'O uso do Claude não foi permitido neste artefato. Recarregue a página e permita para continuar.',
+    rate_limited: 'Limite de uso do Claude atingido por agora. Espere alguns minutos e clique em Continuar.',
+    session_expired: 'Sua sessão expirou. Entre de novo no claude.ai e clique em Continuar.',
+    images_unavailable: 'Esta visualização não consegue enviar imagens ao Claude. Abra o artefato no claude.ai pelo navegador.',
+    sem_claude: 'O Claude não está disponível nesta visualização. Abra o artefato no claude.ai.',
+  };
+  atualizar(job, {estado: 'parado', mensagem: msgs[codigo] || `Parou: ${e?.message || codigo || e}. Clique em Continuar para tentar de novo.`});
+}
+
+async function transcreverPendentes(job) {
+  const total = job.m.questoes.length;
+  atualizar(job, {etapa: 1, estado: 'rodando', mensagem: `Transcrevendo com o Claude: ${job.resultados.size} de ${total} questões…`, progresso: job.resultados.size / total});
+  let erroFatal = null;
+  const trabalhador = async () => {
+    while (job.pendentes.length && !erroFatal) {
+      const lote = job.pendentes.shift();
+      try {
+        const r = await perguntar(promptLote(lote.questoes, job.ctx), {images: lote.questoes.map(q => q.imagem)});
+        const lista = Array.isArray(r?.questoes) ? r.questoes : [];
+        lote.questoes.forEach((q, i) => {
+          const achada = lista.find(x => +x.numero === q.numero) || (lista.length === lote.questoes.length ? lista[i] : null);
+          if (achada && String(achada.enunciado || '').trim()) job.resultados.set(q.numero, normalizarIA(achada, q, job.ctx));
+        });
+        const faltaram = lote.questoes.filter(q => !job.resultados.has(q.numero));
+        if (faltaram.length && lote.tentativas < 1) job.pendentes.push({questoes: faltaram, tentativas: lote.tentativas + 1});
+        else if (faltaram.length) { job.pendentes.unshift({questoes: faltaram, tentativas: 0}); erroFatal = {message: `a IA não devolveu as questões ${faltaram.map(q => nn(q.numero)).join(', ')}`}; }
+      } catch (e) {
+        const transitorio = ['invalid_json', 'upstream_error', 'empty_completion'].includes(e?.code);
+        if (transitorio && lote.tentativas < 1) job.pendentes.push({...lote, tentativas: lote.tentativas + 1});
+        else { job.pendentes.unshift({...lote, tentativas: 0}); erroFatal = e; }
+      }
+      atualizar(job, {mensagem: `Transcrevendo com o Claude: ${job.resultados.size} de ${total} questões…`, progresso: job.resultados.size / total});
+    }
+  };
+  await Promise.all(Array.from({length: SIMULTANEAS}, trabalhador));
+  if (erroFatal) throw erroFatal;
+}
+
+async function salvarNoBanco(job) {
+  if (!cap.db || !cap.assets) throw {message: 'só quem pode editar este artefato grava no banco'};
+  const m = job.m, ctx = job.ctx, id = job.idImp;
+  atualizar(job, {etapa: 2, estado: 'rodando', mensagem: 'Validando e guardando as imagens…', progresso: 0});
+  const questoes = [];
+  let feitas = 0;
+  for (const q of m.questoes) {
+    const base = job.resultados.get(q.numero);
+    const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
+    const figuras = [];
+    for (const f of q.figuras) figuras.push({nome: f.nome, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    const final = {...base, imagem: up.id, figuras};
+    Object.assign(final, validarQuestao(final, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
+    questoes.push(final);
+    atualizar(job, {progresso: ++feitas / m.questoes.length});
+  }
+  atualizar(job, {etapa: 3, mensagem: 'Gravando no banco…', progresso: 0.5});
+  const tags = [...new Set(questoes.flatMap(q => q.assuntos))];
+  const nPartes = Math.ceil(questoes.length / QUESTOES_POR_PARTE);
+  for (let k = 0; k < nPartes; k++)
+    await cap.db.doc(`partes/${id}-${k}`).set({importacao: id, fatia: id[0], parte: k, questoes: questoes.slice(k * QUESTOES_POR_PARTE, (k + 1) * QUESTOES_POR_PARTE)});
+  for (const [pid, parte] of estado.partes)   // reprocessamento com menos questões: some com as partes que sobraram
+    if (parte.importacao === id && parte.parte >= nPartes) await cap.db.doc(`partes/${pid}`).delete();
+  await cap.db.doc(`importacoes/${id}`).set({arquivo: m.arquivo, hash: m.hash, titulo: m.titulo, tipo: m.tipo,
+    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito,
+    classificacao: ctx.classificacao, criado_em: estado.importacoes.get(id)?.criado_em || agora(), atualizado_em: agora()});
+  const padrao = [...estado.listas.entries()].find(([, l]) => l.origem === id);
+  const listaId = padrao ? padrao[0] : id;
+  await cap.db.doc(`listas/${listaId}`).set({...(padrao?.[1] || {}), nome: `Lista de ${m.titulo}`, descricao: `Lista completa de ${m.titulo}`,
+    disciplina: ctx.disciplina, topico: ctx.topico, tags, origem: id, questoes: questoes.map(q => `${id}:${nn(q.numero)}`),
+    status: padrao?.[1]?.status || 'rascunho', criado_em: padrao?.[1]?.criado_em || agora(), atualizado_em: agora()});
+  const erros = questoes.filter(q => q.erros.length).length, avisos = questoes.filter(q => q.avisos.length).length;
+  atualizar(job, {estado: 'concluido', progresso: 1, lista: listaId,
+    mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.`});
+}
+
+let pdfjsPronto = new Promise(r => window.pdfjsLib ? r() : window.addEventListener('pdfjs-pronto', r, {once: true}));
+
+// ============================================================ telas
+const tela = {nome: 'enviar', lista: null, questaoBanco: null};
+const FILTRO_VAZIO = {busca: '', disciplina: '', topico: '', assunto: '', instituicao: '', ano: '', dificuldade: '', situacao: ''};
+const filtroBanco = {...FILTRO_VAZIO}, filtroBusca = {...FILTRO_VAZIO};
+const selecionadas = new Set();
+let criandoLista = false, confirmandoExclusao = false;
+const principal = document.getElementById('principal');
+document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => ir(b.dataset.tela)));
+function ir(nome, extra = {}) { Object.assign(tela, {nome, ...extra}); confirmandoExclusao = false; desenhar(); window.scrollTo(0, 0); }
+
+function situacaoQuestao(q) { return q.erros?.length ? 'erro' : q.avisos?.length ? 'revisar' : 'ok'; }
+function seloQuestao(q) {
+  const s = situacaoQuestao(q);
+  return s === 'erro' ? '<span class="selo erro">erro</span>' : s === 'revisar' ? '<span class="selo alerta">revisar</span>' : '';
+}
+function desenhar() {
+  const ativa = tela.nome === 'lista' ? 'listas' : tela.nome;
+  document.querySelectorAll('.nav').forEach(b => b.setAttribute('aria-current', b.dataset.tela === ativa ? 'page' : 'false'));
+  const qs = banco();
+  document.getElementById('contagem-banco').textContent = qs.length || '';
+  document.getElementById('contagem-listas').textContent = estado.listas.size || '';
+  document.getElementById('modo').textContent = !cap.prontas ? 'Conectando…'
+    : !cap.db ? 'Abra este artefato no claude.ai para usar o banco.'
+    : `${estado.importacoes.size} lista(s) importada(s) · dados guardados neste artefato`;
+  if (tela.nome === 'enviar') telaEnviar();
+  else if (tela.nome === 'banco') telaBanco(qs);
+  else if (tela.nome === 'listas') telaListas(qs);
+  else telaGerenciar(qs);
+}
+
+// ---------------- Enviar lista
+function telaEnviar() {
+  const semClaude = cap.prontas && (!cap.sample || !cap.limites?.images);
+  const semGravar = cap.prontas && (!cap.db || !cap.assets);
+  const bloqueado = !cap.prontas || semClaude || semGravar;
+  principal.innerHTML = `
+    <div class="cab"><h1>Enviar lista</h1></div>
+    ${!cap.prontas ? '<div class="aviso-topo info">Conectando ao claude.ai…</div>' : ''}
+    ${semClaude ? '<div class="aviso-topo">O Claude não está disponível nesta visualização (ou não aceita imagens aqui). Abra o artefato no claude.ai, no navegador, para processar listas.</div>' : ''}
+    ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
+    <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
+      <strong>Arraste os PDFs das listas para cá</strong>
+      <p>ou clique para escolher · as listas são processadas uma de cada vez</p>
+      <input type="file" id="arquivo" accept="application/pdf,.pdf" multiple hidden ${bloqueado ? 'disabled' : ''}>
+    </label>
+    <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${Math.max(1, Math.min(4, cap.limites?.images?.maxCount || 1))} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
+    <div class="envios" id="envios"></div>`;
+  const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
+  input.addEventListener('change', () => { receber(input.files); input.value = ''; });
+  ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); if (!bloqueado) zona.classList.add('ativo'); }));
+  ['dragleave', 'drop'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.remove('ativo'); }));
+  zona.addEventListener('drop', e => { if (!bloqueado) receber(e.dataTransfer.files); });
+  desenharEnvios();
+}
+function desenharEnvios() {
+  const alvo = document.getElementById('envios');
+  if (!alvo) return;
+  alvo.innerHTML = estado.jobs.map(cartaoEnvio).join('');
+  alvo.querySelectorAll('[data-acao]').forEach(b => b.addEventListener('click', () => {
+    const job = estado.jobs.find(j => j.id === b.dataset.job);
+    const acao = b.dataset.acao;
+    if (acao === 'abrir') ir('lista', {lista: job.lista});
+    else if (acao === 'continuar') enfileirar(job);
+    else if (acao === 'reprocessar') enfileirar(job, {reprocessar: true});
+    else if (acao === 'descartar') { estado.jobs.splice(estado.jobs.indexOf(job), 1); desenharEnvios(); }
+    else if (acao === 'ver-existente') { const l = [...estado.listas.entries()].find(([, x]) => x.origem === job.idImp); if (l) ir('lista', {lista: l[0]}); }
+  }));
+}
+function cartaoEnvio(e) {
+  const etapas = ETAPAS.map((nome, i) => {
+    let cls = i < e.etapa ? 'feita' : i === e.etapa ? 'atual' : '';
+    if (e.estado === 'concluido') cls = 'feita';
+    if (i === e.etapa && e.estado === 'parado') cls = 'parada';
+    if (i === e.etapa && e.estado === 'falhou') cls = 'falhou';
+    const largura = cls === 'feita' ? 100 : i === e.etapa ? Math.round((e.progresso || 0) * 100) : 0;
+    return `<div class="etapa ${cls}"><i><b style="width:${largura}%"></b></i>${nome}</div>`;
+  }).join('');
+  const b = (acao, txt, prim) => `<button class="botao ${prim ? 'primario' : ''}" data-job="${e.id}" data-acao="${acao}">${txt}</button>`;
+  const acoes = e.estado === 'concluido' ? b('abrir', 'Ver lista', true)
+    : e.estado === 'parado' ? b('continuar', 'Continuar', true) + b('descartar', 'Descartar')
+    : e.estado === 'duplicado' ? b('ver-existente', 'Ver a lista') + b('reprocessar', 'Reprocessar', true) + b('descartar', 'Cancelar')
+    : e.estado === 'falhou' ? b('descartar', 'Fechar')
+    : e.estado === 'fila' ? b('descartar', 'Tirar da fila') : '';
+  return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>
+    <div class="acoes-envio">${acoes}</div><div class="etapas">${etapas}</div></div>`;
+}
+// Uma lista por vez: as chamadas ao Claude de listas diferentes não competem entre si.
+let filaRodando = false;
+const fila = [];
+function enfileirar(job, opcoes = {}) {
+  atualizar(job, {estado: 'fila', mensagem: 'Na fila…'});
+  fila.push([job, opcoes]);
+  if (!filaRodando) rodarFila();
+}
+async function rodarFila() {
+  filaRodando = true;
+  while (fila.length) {
+    const [job, opcoes] = fila.shift();
+    if (!estado.jobs.includes(job)) continue;
+    await processar(job, opcoes);
+  }
+  filaRodando = false;
+}
+function receber(arquivos) {
+  for (const a of arquivos) {
+    if (!/\.pdf$/i.test(a.name)) { toast(`${a.name} não é PDF.`); continue; }
+    enfileirar(novoJob(a));
+  }
+}
+
+// ---------------- filtros
+function opcoes(qs, campo) {
+  const vals = qs.flatMap(q => campo === 'assunto' ? (q.assuntos || []) : [q[campo]]).filter(v => v !== null && v !== undefined && v !== '');
+  return [...new Set(vals)].sort((a, b) => campo === 'ano' ? b - a : String(a).localeCompare(String(b), 'pt-BR'));
+}
+function htmlFiltros(qs, f, pre) {
+  const sel = (campo, rotulo, txt = v => v, valores = opcoes(qs, campo)) => `<select class="campo" data-filtro="${campo}" id="${pre}-${campo}" aria-label="${rotulo}">
+    <option value="">${rotulo}</option>${valores.map(v => `<option value="${esc(v)}" ${String(v) === String(f[campo]) ? 'selected' : ''}>${esc(txt(v))}</option>`).join('')}</select>`;
+  return `<div class="filtros">
+    <input class="campo busca" data-filtro="busca" id="${pre}-busca" placeholder="Buscar no título ou no enunciado…" value="${esc(f.busca)}" aria-label="Buscar">
+    ${sel('disciplina', 'Disciplina')}${sel('topico', 'Tópico')}${sel('assunto', 'Assunto')}${sel('instituicao', 'Instituição')}
+    ${sel('ano', 'Ano')}${sel('dificuldade', 'Dificuldade', v => DIFICULDADE[v])}
+    ${sel('situacao', 'Situação', v => ({ok: 'Sem pendência', revisar: 'Para revisar', erro: 'Com erro'})[v], ['ok', 'revisar', 'erro'])}
+  </div>`;
+}
+function filtrar(qs, f) {
+  const termo = f.busca.trim().toLowerCase();
+  return qs.filter(q => (!termo || (q.titulo + ' ' + textoBusca(q)).toLowerCase().includes(termo))
+    && (!f.disciplina || q.disciplina === f.disciplina) && (!f.topico || q.topico === f.topico)
+    && (!f.assunto || (q.assuntos || []).includes(f.assunto)) && (!f.instituicao || q.instituicao === f.instituicao)
+    && (!f.ano || String(q.ano) === f.ano) && (!f.dificuldade || String(q.dificuldade) === f.dificuldade)
+    && (!f.situacao || situacaoQuestao(q) === f.situacao));
+}
+function ligarFiltros(f, redesenhar) {
+  principal.querySelectorAll('[data-filtro]').forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
+    f[el.dataset.filtro] = el.value; const id = el.id; redesenhar();
+    const n = document.getElementById(id); if (n) { n.focus(); if (n.tagName === 'INPUT') n.setSelectionRange(n.value.length, n.value.length); }
+  }));
+}
+
+// ---------------- Banco de questões
+function telaBanco(qs) {
+  const achadas = filtrar(qs, filtroBanco), visiveis = achadas.slice(0, LIMITE_LINHAS);
+  const todasMarcadas = visiveis.length > 0 && visiveis.every(q => selecionadas.has(q.id));
+  const listas = [...estado.listas.entries()];
+  const podeEditar = !!cap.db;
+  principal.innerHTML = `
+    <div class="cab"><div><h1>Banco de questões</h1>
+      <div class="resumo-lista"><span>${qs.length} questões no banco</span><span>${achadas.length} com estes filtros</span></div></div>
+      <button class="botao" id="limpar" ${Object.values(filtroBanco).some(Boolean) ? '' : 'disabled'}>Limpar filtros</button></div>
+    ${htmlFiltros(qs, filtroBanco, 'fb')}
+    <div class="gerenciar">
+      <div class="painel rolagem tabela-wrap"><table>
+        <thead><tr>${podeEditar ? `<th class="marcar"><input type="checkbox" id="marcar-todas" ${todasMarcadas ? 'checked' : ''} aria-label="Selecionar as questões filtradas"></th>` : ''}
+          <th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th></th></tr></thead>
+        <tbody>${visiveis.map(q => `
+          <tr class="clicavel ${q.id === tela.questaoBanco ? 'sel' : ''}" data-q="${esc(q.id)}" tabindex="0">
+            ${podeEditar ? `<td class="marcar"><input type="checkbox" data-marcar="${esc(q.id)}" ${selecionadas.has(q.id) ? 'checked' : ''} aria-label="Selecionar ${esc(q.titulo)}"></td>` : ''}
+            <td title="${esc(q.titulo)}"><div style="white-space:nowrap">${esc(tituloCurto(q.titulo))}</div><div class="sub">${esc(q.lista_origem)}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td class="num">${q.ano || '—'}</td><td>${DIFICULDADE[q.dificuldade] || '—'}</td><td>${seloQuestao(q)}</td></tr>`).join('')
+          || `<tr><td colspan="6" class="vazio">${qs.length ? 'Nenhuma questão com esses filtros.' : 'O banco está vazio. Envie um PDF em Enviar lista.'}</td></tr>`}</tbody></table>
+        ${achadas.length > LIMITE_LINHAS ? `<div class="mais">Mostrando ${LIMITE_LINHAS} de ${achadas.length}. Refine os filtros.</div>` : ''}</div>
+      <section class="painel detalhe" id="detalhe" aria-label="Detalhes da questão"></section>
+    </div>
+    ${selecionadas.size ? `<div class="barra-sel"><span class="cont">${selecionadas.size} questão(ões) selecionada(s)</span>
+      ${criandoLista ? `<form class="form-linha" id="form-nova" style="flex:1 1 100%">
+          <input class="campo" id="nova-nome" placeholder="Nome da lista, ex.: Lista de Revisão MCU" required>
+          <input class="campo" id="nova-descricao" placeholder="Descrição (opcional)">
+          <button class="botao primario" type="submit">Criar lista</button><button class="botao" type="button" id="cancelar-nova">Cancelar</button></form>`
+        : `<button class="botao primario" id="nova-lista">Criar lista com as selecionadas</button>
+          ${listas.length ? `<select class="campo" id="destino" aria-label="Lista de destino">${listas.map(([id, l]) => `<option value="${esc(id)}">${esc(l.nome)}</option>`).join('')}</select>
+          <button class="botao" id="adicionar">Adicionar à lista</button>` : ''}
+          <button class="botao" id="desmarcar">Limpar seleção</button>`}</div>` : ''}`;
+  const redesenhar = () => telaBanco(banco());
+  ligarFiltros(filtroBanco, redesenhar);
+  document.getElementById('limpar').onclick = () => { Object.assign(filtroBanco, FILTRO_VAZIO); redesenhar(); };
+  document.getElementById('marcar-todas')?.addEventListener('change', e => { visiveis.forEach(q => e.target.checked ? selecionadas.add(q.id) : selecionadas.delete(q.id)); redesenhar(); });
+  principal.querySelectorAll('[data-marcar]').forEach(c => {
+    c.addEventListener('click', e => e.stopPropagation());
+    c.addEventListener('change', () => { c.checked ? selecionadas.add(c.dataset.marcar) : selecionadas.delete(c.dataset.marcar); redesenhar(); });
+  });
+  principal.querySelectorAll('tr[data-q]').forEach(tr => {
+    const abrir = () => { tela.questaoBanco = tr.dataset.q; redesenhar(); };
+    tr.addEventListener('click', abrir); tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+  });
+  document.getElementById('nova-lista')?.addEventListener('click', () => { criandoLista = true; redesenhar(); document.getElementById('nova-nome')?.focus(); });
+  document.getElementById('cancelar-nova')?.addEventListener('click', () => { criandoLista = false; redesenhar(); });
+  document.getElementById('desmarcar')?.addEventListener('click', () => { selecionadas.clear(); redesenhar(); });
+  document.getElementById('form-nova')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const escolhidas = qs.filter(q => selecionadas.has(q.id));
+    const unico = campo => { const v = [...new Set(escolhidas.map(q => q[campo]))]; return v.length === 1 ? v[0] : null; };
+    const id = 'l' + Date.now().toString(36);
+    try {
+      await cap.db.doc(`listas/${id}`).set({nome: document.getElementById('nova-nome').value.trim(), descricao: document.getElementById('nova-descricao').value.trim(),
+        disciplina: unico('disciplina'), topico: unico('topico'), tags: [...new Set(escolhidas.flatMap(q => q.assuntos || []))],
+        origem: null, questoes: escolhidas.map(q => q.id), status: 'rascunho', criado_em: agora(), atualizado_em: agora()});
+      selecionadas.clear(); criandoLista = false; toast('Lista criada.'); ir('lista', {lista: id});
+    } catch (err) { toast(`Não foi possível criar a lista: ${err.message || err.code}`); }
+  });
+  document.getElementById('adicionar')?.addEventListener('click', async () => {
+    const id = document.getElementById('destino').value, l = estado.listas.get(id);
+    const novas = qs.filter(q => selecionadas.has(q.id) && !l.questoes.includes(q.id)).map(q => q.id);
+    await salvarLista(id, {questoes: [...l.questoes, ...novas]});
+    toast(`${novas.length} questão(ões) adicionada(s) a ${l.nome}.`); selecionadas.clear(); redesenhar();
+  });
+  const d = document.getElementById('detalhe'), q = qs.find(x => x.id === tela.questaoBanco);
+  d.innerHTML = q ? detalheQuestao(q, true) : '<p class="vazio">Clique numa questão para ver os detalhes.</p>';
+  if (q) { ligarDetalhe(d, q); tipografar(d); principal.querySelector('tr.sel')?.scrollIntoView({block: 'nearest'}); }
+}
+
+// ---------------- Listas
+function resumoLista(l, indice) {
+  const qs = (l.questoes || []).map(i => indice.get(i)).filter(Boolean);
+  return {total: qs.length, faltando: (l.questoes || []).length - qs.length,
+          erros: qs.filter(q => q.erros?.length).length, avisos: qs.filter(q => q.avisos?.length).length};
+}
+function situacaoLista(r) {
+  if (!r.total) return '<span class="selo info">Vazia</span>';
+  if (r.erros) return `<span class="selo erro">${r.erros} com erro</span>`;
+  if (r.avisos) return `<span class="selo alerta">${r.avisos} para revisar</span>`;
+  return '<span class="selo ok">Pronta</span>';
+}
+function telaListas(qs) {
+  const indice = new Map(qs.map(q => [q.id, q]));
+  const listas = [...estado.listas.entries()].sort((a, b) => (b[1].atualizado_em || '').localeCompare(a[1].atualizado_em || ''));
+  principal.innerHTML = `
+    <div class="cab"><h1>Listas de questões</h1>${cap.db ? '<button class="botao primario" id="nova">+ Nova lista</button>' : ''}</div>
+    <div class="painel tabela-wrap"><table>
+      <thead><tr><th>Nome</th><th>Qtd. questões</th><th>Descrição</th><th>Disciplina</th><th>Tópico</th><th>Tags</th><th>Situação</th></tr></thead>
+      <tbody>${listas.map(([id, l]) => { const r = resumoLista(l, indice); return `
+        <tr class="clicavel" data-lista="${esc(id)}" tabindex="0">
+          <td><strong>${esc(l.nome)}</strong>${l.origem ? '<div class="sub">do PDF importado</div>' : ''}</td>
+          <td class="num">${r.total}</td><td>${esc(l.descricao || '—')}</td><td>${esc(l.disciplina || '—')}</td><td>${esc(l.topico || '—')}</td>
+          <td>${(l.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</td><td>${situacaoLista(r)}</td></tr>`; }).join('')
+        || '<tr><td colspan="7" class="vazio">Nenhuma lista ainda. Envie um PDF ou crie uma lista a partir do banco.</td></tr>'}</tbody>
+    </table></div>`;
+  document.getElementById('nova')?.addEventListener('click', async () => {
+    const id = 'l' + Date.now().toString(36);
+    await cap.db.doc(`listas/${id}`).set({nome: 'Nova lista', descricao: '', disciplina: null, topico: null, tags: [], origem: null,
+      questoes: [], status: 'rascunho', criado_em: agora(), atualizado_em: agora()});
+    ir('lista', {lista: id});
+  });
+  principal.querySelectorAll('[data-lista]').forEach(tr => {
+    const abrir = () => ir('lista', {lista: tr.dataset.lista});
+    tr.addEventListener('click', abrir); tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+  });
+}
+async function salvarLista(id, campos) {
+  const l = estado.listas.get(id);
+  try { await cap.db.doc(`listas/${id}`).set({...l, ...campos, atualizado_em: agora()}); }
+  catch (e) { toast(`Não foi possível salvar: ${e.message || e.code}`); }
+}
+
+// ---------------- Gerenciamento de questões
+function telaGerenciar(qs) {
+  const l = estado.listas.get(tela.lista);
+  if (!l) { principal.innerHTML = '<div class="painel vazio">Lista não encontrada (talvez tenha sido excluída). <button class="botao" id="voltar">Voltar às listas</button></div>';
+    document.getElementById('voltar').onclick = () => ir('listas'); return; }
+  const indice = new Map(qs.map(q => [q.id, q])), r = resumoLista(l, indice);
+  const naLista = l.questoes.map(i => indice.get(i)).filter(Boolean), dentro = new Set(l.questoes);
+  const achadas = filtrar(qs, filtroBusca), visiveis = achadas.slice(0, LIMITE_LINHAS);
+  const pode = !!cap.db;
+  principal.innerHTML = `
+    <div class="migalha"><button data-voltar>Listas</button><span>›</span><span>Gerenciamento de questões</span></div>
+    <div class="cab"><div><h1>${esc(l.nome)}</h1>
+      <div class="resumo-lista"><span>${r.total} questões</span>${situacaoLista(r)}${l.origem ? '<span>lista do PDF importado</span>' : ''}</div></div>
+      <div class="form-linha">
+        ${cap.downloads ? '<button class="botao" id="baixar-xlsx">Baixar planilha (.xlsx)</button><button class="botao" id="baixar-json">Baixar JSON</button>' : ''}
+        ${pode ? (confirmandoExclusao ? `<span class="confirmar">Excluir esta lista? As questões continuam no banco.
+            <button class="botao perigo" id="sim-excluir">Excluir</button><button class="botao" id="nao-excluir">Cancelar</button></span>`
+          : '<button class="botao perigo" id="excluir">Excluir lista</button>') : ''}</div></div>
+    ${pode ? `<form class="edicao" id="form-lista">
+      <label>Nome<input class="campo" id="lista-nome" value="${esc(l.nome)}" required></label>
+      <label>Descrição<input class="campo" id="lista-descricao" value="${esc(l.descricao || '')}"></label>
+      <button class="botao" type="submit">Salvar nome e descrição</button></form>` : ''}
+    <div class="dois-paineis">
+      <section class="painel"><div class="titulo-painel"><h2>Questões selecionadas</h2><span class="sub">${naLista.length}</span></div>
+        <div class="rolagem tabela-wrap"><table><thead><tr><th>#</th><th>Título</th><th>Instituição</th><th>Ano</th><th></th></tr></thead>
+          <tbody>${naLista.map((q, i) => `<tr><td class="num">${i + 1}</td>
+            <td title="${esc(q.titulo)}">${esc(tituloCurto(q.titulo))} ${seloQuestao(q)}<div class="sub">${esc(q.lista_origem)}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td class="num">${q.ano || '—'}</td>
+            <td><div class="acoes">${pode ? `<button class="icone" data-mover="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${ICONE.subir}</button>
+              <button class="icone" data-mover="${i}" data-dir="1" ${i === naLista.length - 1 ? 'disabled' : ''} aria-label="Descer">${ICONE.descer}</button>` : ''}
+              <button class="icone ver" data-ver="${esc(q.id)}" aria-label="Ver questão">${ICONE.ver}</button>
+              ${pode ? `<button class="icone tirar" data-tirar="${esc(q.id)}" aria-label="Tirar da lista">${ICONE.tirar}</button>` : ''}</div></td></tr>`).join('')
+            || '<tr><td colspan="5" class="vazio">Lista vazia. Adicione questões pela busca ao lado.</td></tr>'}</tbody></table></div></section>
+      <section class="painel"><div class="titulo-painel"><h2>Buscar questões</h2><span class="sub">${achadas.length} no banco</span></div>
+        <div class="corpo-painel">${htmlFiltros(qs, filtroBusca, 'fg')}</div>
+        <div class="rolagem tabela-wrap"><table><thead><tr><th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th></th></tr></thead>
+          <tbody>${visiveis.map(q => `<tr><td title="${esc(q.titulo)}">${esc(tituloCurto(q.titulo))}<div class="sub">${esc(q.lista_origem)}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td class="num">${q.ano || '—'}</td><td>${DIFICULDADE[q.dificuldade] || '—'}</td>
+            <td><div class="acoes"><button class="icone ver" data-ver="${esc(q.id)}" aria-label="Ver questão">${ICONE.ver}</button>
+              ${pode ? `<button class="icone por" data-por="${esc(q.id)}" ${dentro.has(q.id) ? 'disabled title="Já está na lista"' : ''} aria-label="Adicionar à lista">${ICONE.por}</button>` : ''}</div></td></tr>`).join('')
+            || '<tr><td colspan="5" class="vazio">Nenhuma questão com esses filtros.</td></tr>'}</tbody></table>
+          ${achadas.length > LIMITE_LINHAS ? `<div class="mais">Mostrando ${LIMITE_LINHAS} de ${achadas.length}. Refine os filtros.</div>` : ''}</div></section>
+    </div>`;
+  const id = tela.lista;
+  principal.querySelector('[data-voltar]').onclick = () => ir('listas');
+  ligarFiltros(filtroBusca, () => telaGerenciar(banco()));
+  document.getElementById('form-lista')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const nome = document.getElementById('lista-nome').value.trim();
+    if (!nome) return toast('Dê um nome para a lista.');
+    await salvarLista(id, {nome, descricao: document.getElementById('lista-descricao').value.trim()}); toast('Lista salva.');
+    document.activeElement?.blur(); desenhar();
+  });
+  principal.querySelectorAll('[data-mover]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.mover, j = i + +b.dataset.dir, ordem = naLista.map(q => q.id);
+    [ordem[i], ordem[j]] = [ordem[j], ordem[i]]; salvarLista(id, {questoes: ordem});
+  });
+  principal.querySelectorAll('[data-tirar]').forEach(b => b.onclick = () => salvarLista(id, {questoes: l.questoes.filter(x => x !== b.dataset.tirar)}));
+  principal.querySelectorAll('[data-por]').forEach(b => b.onclick = () => salvarLista(id, {questoes: [...l.questoes, b.dataset.por]}));
+  principal.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => abrirModal(b.dataset.ver));
+  document.getElementById('excluir')?.addEventListener('click', () => { confirmandoExclusao = true; desenhar(); });
+  document.getElementById('nao-excluir')?.addEventListener('click', () => { confirmandoExclusao = false; desenhar(); });
+  document.getElementById('sim-excluir')?.addEventListener('click', async () => { confirmandoExclusao = false; await cap.db.doc(`listas/${id}`).delete(); toast('Lista excluída.'); ir('listas'); });
+  document.getElementById('baixar-xlsx')?.addEventListener('click', () => baixarXlsx(l, naLista));
+  document.getElementById('baixar-json')?.addEventListener('click', () => baixarJson(l, naLista));
+}
+
+// ---------------- detalhe e edição de uma questão
+function figurasDe(q) { return Object.fromEntries((q.figuras || []).map(f => [f.nome, blobUrl(f.asset)])); }
+function detalheQuestao(q, comBotoes) {
+  const figs = figurasDe(q);
+  const alts = Object.entries(q.alternativas || {}).map(([letra, texto]) => `
+    <div class="alt"><span class="letra">${letra}</span><div class="conteudo">${md(texto, figs)}</div>
+      <span class="chave ${letra === q.gabarito ? 'on' : ''}" role="img" aria-label="${letra === q.gabarito ? 'Correta' : 'Incorreta'}"></span></div>`).join('');
+  return `
+    <div class="cab" style="margin:0"><h2>Detalhes da questão</h2>${comBotoes && cap.db ? `<div class="form-linha">
+      ${q.avisos?.length && !q.erros?.length ? '<button class="botao" data-acao-q="revisada">Marcar como revisada</button>' : ''}
+      <button class="botao" data-acao-q="editar">Editar</button></div>` : ''}</div>
+    ${q.erros?.length ? `<ul class="avisos erro sem-tex">${q.erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    ${q.avisos?.length ? `<ul class="avisos alerta sem-tex">${q.avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    <div><div class="rotulo">Título da pergunta (uso interno)</div><div class="valor">${esc(q.titulo)}</div></div>
+    <div class="grade">
+      <div><div class="rotulo">Instituição</div><div class="valor">${esc(q.instituicao || '—')}</div></div>
+      <div><div class="rotulo">Disciplina</div><div class="valor">${esc(q.disciplina)}</div></div>
+      <div><div class="rotulo">Tópico</div><div class="valor">${esc(q.topico)}</div></div></div>
+    <div><div class="rotulo">Enunciado</div><div class="enunciado">${md(q.enunciado, figs)}</div></div>
+    <div><div class="rotulo">Assuntos</div><div class="valor">${(q.assuntos || []).map(a => `<span class="tag">${esc(a)}</span>`).join('') || '—'}</div></div>
+    <div class="grade duas">
+      <div><div class="rotulo">Dificuldade da questão</div><div class="valor">${DIFICULDADE[q.dificuldade] || '—'}${q.etapa ? ` <span class="sub sem-tex">· etapa ${esc(q.etapa)}</span>` : ''}</div></div>
+      <div><div class="rotulo">Ano</div><div class="valor num">${q.ano || '—'}</div></div></div>
+    <div><div class="rotulo">Alternativas</div><div class="alternativas">
+      <div class="alt cab-alt"><span>#</span><span>Conteúdo da alternativa</span><span style="justify-self:center">Correta?</span></div>${alts}</div></div>
+    <details class="original"><summary>Ver original no PDF (${esc(q.lista_origem)}, página ${q.pagina})</summary><img src="${blobUrl(q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
+}
+function formEdicao(q) {
+  const assuntos = BASE.get(q.disciplina + '\u0000' + q.topico) || [];
+  const opcoesAss = (assuntos.length ? assuntos : [q.topico]);
+  return `
+    <div class="cab" style="margin:0"><h2>Editar questão ${nn(q.numero)}</h2></div>
+    <p class="sub sem-tex">Texto em Markdown com LaTeX entre $...$. Figuras: ![descrição](figura:NOME) com ${(q.figuras || []).map(f => f.nome).join(', ') || 'nenhuma figura'}.</p>
+    <form id="form-q" class="detalhe" style="padding:0">
+      <div class="grade">
+        <label class="rotulo-campo">Instituição<input class="campo" name="instituicao" value="${esc(q.instituicao || '')}"></label>
+        <label class="rotulo-campo">Ano<input class="campo" name="ano" inputmode="numeric" value="${esc(q.ano || '')}"></label>
+        <label class="rotulo-campo">Dificuldade<select class="campo" name="dificuldade">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n === q.dificuldade ? 'selected' : ''}>${DIFICULDADE[n]}</option>`).join('')}</select></label></div>
+      <div class="rotulo-campo">Assuntos<div class="valor">${opcoesAss.map(a => `<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" name="assunto" value="${esc(a)}" ${(q.assuntos || []).includes(a) ? 'checked' : ''}> ${esc(a)}</label>`).join('')}</div></div>
+      <label class="rotulo-campo">Enunciado<textarea class="campo" name="enunciado" rows="10">${esc(q.enunciado)}</textarea></label>
+      ${'ABCDE'.split('').map(l => `<label class="rotulo-campo">Alternativa ${l}${l === 'E' ? ' (deixe vazia se não houver)' : ''}<textarea class="campo" name="alt_${l}" rows="2" style="min-height:52px">${esc(q.alternativas?.[l] || '')}</textarea></label>`).join('')}
+      <label class="rotulo-campo">Gabarito<select class="campo" name="gabarito">${'ABCDE'.split('').map(l => `<option ${l === q.gabarito ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <div class="form-linha"><button class="botao primario" type="submit">Salvar alterações</button><button class="botao" type="button" data-acao-q="cancelar">Cancelar</button></div>
+    </form>`;
+}
+async function gravarQuestao(q, mudancas) {
+  const parte = estado.partes.get(q.parte_id);
+  if (!parte) return toast('Não encontrei a questão no banco.');
+  const imp = estado.importacoes.get(parte.importacao);
+  const questoes = parte.questoes.map(x => {
+    if (x.numero !== q.numero) return x;
+    const nova = {...x, ...mudancas};
+    nova.titulo = titulo(imp?.tipo, imp?.titulo, nova.numero, nova.instituicao, nova.ano, imp?.tipo === 'simulado' ? dadosSimulado(imp.arquivo) : null);
+    return {...nova, ...validarQuestao(nova, {tipo: imp?.tipo, disciplina: imp?.disciplina, topico: imp?.topico})};
+  });
+  try { await cap.db.doc(`partes/${q.parte_id}`).set({...parte, questoes}); toast('Questão salva.'); }
+  catch (e) { toast(`Não foi possível salvar: ${e.message || e.code}`); }
+}
+function ligarDetalhe(raiz, q, aoFechar) {
+  raiz.querySelectorAll('[data-acao-q]').forEach(b => b.addEventListener('click', async () => {
+    const acao = b.dataset.acaoQ;
+    if (acao === 'editar') trocarConteudo(raiz, formEdicao(q), q, aoFechar);
+    else if (acao === 'cancelar') { trocarConteudo(raiz, detalheQuestao(q, true), q, aoFechar); }
+    else if (acao === 'revisada') { await gravarQuestao(q, {revisada: true}); aoFechar?.(); }
+  }));
+  raiz.querySelector('#form-q')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target), alternativas = {};
+    for (const l of 'ABCDE') { const t = String(f.get('alt_' + l) || '').trim(); if (t) alternativas[l] = t; }
+    const ano = parseInt(f.get('ano'), 10);
+    await gravarQuestao(q, {instituicao: String(f.get('instituicao') || '').trim() || null, ano: Number.isInteger(ano) ? ano : null,
+      dificuldade: +f.get('dificuldade'), assuntos: f.getAll('assunto').map(String), enunciado: String(f.get('enunciado') || '').trim(),
+      alternativas, gabarito: String(f.get('gabarito')), revisada: true});
+    aoFechar?.(); if (!aoFechar) { document.activeElement?.blur(); desenhar(); }
+  });
+}
+function trocarConteudo(raiz, html, q, aoFechar) {
+  const alvo = raiz.querySelector('.conteudo-modal') || raiz;
+  alvo.innerHTML = html; ligarDetalhe(raiz, q, aoFechar); tipografar(alvo);
+}
+function abrirModal(id) {
+  const q = banco().find(x => x.id === id);
+  if (!q) return;
+  const camada = document.getElementById('camada');
+  camada.innerHTML = `<div class="modal-fundo" id="modal-fundo"><section class="painel detalhe modal" role="dialog" aria-modal="true" aria-label="Detalhes da questão">
+    <div class="barra-modal"><button class="botao" id="fechar">Fechar</button></div><div class="conteudo-modal detalhe" style="padding:0">${detalheQuestao(q, true)}</div></section></div>`;
+  const fechar = () => { camada.innerHTML = ''; document.removeEventListener('keydown', teclaEsc); desenhar(); };
+  const teclaEsc = e => e.key === 'Escape' && fechar();
+  document.addEventListener('keydown', teclaEsc);
+  document.getElementById('fechar').onclick = fechar;
+  document.getElementById('fechar').focus();
+  document.getElementById('modal-fundo').addEventListener('click', e => e.target.id === 'modal-fundo' && fechar());
+  const modal = camada.querySelector('.modal');
+  ligarDetalhe(modal, q, fechar);
+  tipografar(modal);
+}
+
+// ---------------- exportação
+async function baixar(nome, dados) {
+  try { await cap.downloads.save({filename: nome, data: dados}); }
+  catch (e) { if (e?.code !== 'declined') toast(`Não foi possível baixar: ${e.message || e.code}`); }
+}
+const nomeArquivo = l => l.nome.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/_+/g, '_').slice(0, 80);
+function baixarXlsx(l, qs) {
+  if (!window.XLSX) return toast('A biblioteca de planilhas ainda está carregando. Tente de novo em alguns segundos.');
+  const linhas = [['Nº', 'Título', 'Instituição', 'Ano', 'Disciplina', 'Tópico', 'Dificuldade', 'Enunciado', 'Alternativa A', 'Alternativa B',
+    'Alternativa C', 'Alternativa D', 'Alternativa E', 'Gabarito', 'Explicação do Professor']];
+  for (const q of qs) linhas.push([nn(q.numero), q.titulo, q.instituicao || '', q.ano || '', q.disciplina, q.topico, q.dificuldade, q.enunciado,
+    ...'ABCDE'.split('').map(x => q.alternativas?.[x] || ''), q.gabarito, '']);
+  const ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [5, 50, 14, 6, 12, 18, 10, 70, 30, 30, 30, 30, 30, 9, 30].map(w => ({wch: w}));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Questões');
+  baixar(nomeArquivo(l) + '.xlsx', new Blob([XLSX.write(wb, {bookType: 'xlsx', type: 'array'})]));
+}
+function baixarJson(l, qs) {
+  const limpa = q => { const {parte_id, criado_em, textoPdf, ...resto} = q; return resto; };
+  baixar(nomeArquivo(l) + '.json', JSON.stringify({lista: {nome: l.nome, descricao: l.descricao, disciplina: l.disciplina, topico: l.topico, tags: l.tags},
+    questoes: qs.map(limpa)}, null, 2));
+}
+
+desenhar();
+iniciarCapacidades();
+</script>

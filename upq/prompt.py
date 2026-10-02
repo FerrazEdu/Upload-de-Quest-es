@@ -37,10 +37,18 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    cabeçalho/rodapé da página, marcas d'água.
 """
 
-SISTEMA = f"""Você transcreve questões de listas de exercícios em PDF para o banco de questões
+ABERTURA_UMA = """Você transcreve questões de listas de exercícios em PDF para o banco de questões
 de uma plataforma de ensino pré-vestibular. Cada mensagem traz UMA questão: a imagem
 recortada do PDF, as figuras dela já recortadas (com seus NOMES), o texto extraído do PDF
-e o gabarito oficial. Devolva só o JSON pedido.
+e o gabarito oficial. Devolva só o JSON pedido."""
+
+ABERTURA_LOTE = """Você transcreve questões de listas de exercícios em PDF para o banco de questões
+de uma plataforma de ensino pré-vestibular. Cada mensagem traz VÁRIAS questões: uma imagem
+recortada do PDF por questão (as figuras aparecem dentro dela), os NOMES das figuras de cada
+questão, o texto extraído do PDF e o gabarito oficial. Devolva só o JSON pedido, com uma
+entrada por questão, na ordem das imagens."""
+
+SISTEMA = f"""{ABERTURA_UMA}
 
 FONTE DA VERDADE
 - A IMAGEM é a fonte da verdade. O "texto extraído do PDF" ajuda com a ordem das palavras
@@ -96,6 +104,10 @@ Formato: Tópico: assuntos que ele abrange. Os assuntos servem só para localiza
 
 {topicos.texto_para_prompt()}
 """
+
+# Versão do artefato do claude.ai: várias questões por chamada (upq/artefato.py).
+SISTEMA_LOTE = SISTEMA.replace(ABERTURA_UMA, ABERTURA_LOTE, 1).replace(
+    "(confira a imagem da figura)", "(confira na imagem da questão)")
 
 GABARITO = """Esta é a página de gabarito de uma lista de exercícios. Leia o quadro e devolva
 todos os pares número → letra, exatamente como impressos. Não deduza nada que não esteja

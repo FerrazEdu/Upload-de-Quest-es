@@ -35,3 +35,9 @@ Não invente gabarito, banca ou ano. Não altere `dados/base_topicos.txt` sem pe
 - Python 3.10+, mensagens e nomes em português, sem dependências além de `requirements.txt`.
 - Banco: Supabase, migrações em `supabase/migrations/` (aplicadas na ordem do número).
   A função `importar_lista` nunca apaga questões; mudanças de esquema entram como nova migração.
+
+## Importador no claude.ai
+
+`upq/web/importador.html` + `upq/web/recorte.js` + `upq/artefato.py` formam o artefato
+(`python -m upq.artefato` → `dist/importador-questoes.html`). Ao mudar `upq/prompt.py`,
+`upq/validar.py` ou `upq/segmentar.py`, mantenha a versão JS equivalente e remonte o artefato.
