@@ -309,6 +309,55 @@ const UPQRecorte = (() => {
 
   // A imagem embutida às vezes é maior que a área visível e invade o texto vizinho:
   // corta nas linhas que cruzam a borda de cima ou de baixo (rótulos inteiros dentro ficam).
+  // Tabela colada como imagem (print): procura a grade — linhas horizontais longas com a mesma
+  // largura e linhas verticais fechando a caixa. Devolve a caixa da grade (pt) ou null.
+  function gradeDaTabela(canvas, f) {
+    const X = Math.max(0, Math.round(f.x0 * ESCALA)), Y = Math.max(0, Math.round(f.y0 * ESCALA));
+    const W = Math.min(canvas.width - X, Math.round((f.x1 - f.x0) * ESCALA)), H = Math.min(canvas.height - Y, Math.round((f.y1 - f.y0) * ESCALA));
+    if (W < 60 || H < 40) return null;
+    const px = canvas.getContext('2d').getImageData(X, Y, W, H).data;
+    const at = (x, y) => (y * W + x) * 4;
+    const fundo = [[2, 2], [W - 3, 2], [2, H - 3], [W - 3, H - 3]].map(([x, y]) => [px[at(x, y)], px[at(x, y) + 1], px[at(x, y) + 2]])
+      .sort((a, b) => (b[0] + b[1] + b[2]) - (a[0] + a[1] + a[2]))[1];
+    const tinta = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) tinta[i] = Math.abs(px[i * 4] - fundo[0]) + Math.abs(px[i * 4 + 1] - fundo[1]) + Math.abs(px[i * 4 + 2] - fundo[2]) > 120 ? 1 : 0;
+    const linhasDe = (n, m, get, minRun) => {   // n linhas de varredura de comprimento m
+      const cand = [];
+      for (let a = 0; a < n; a++) {
+        let run = 0, melhor = 0, ini = 0, mIni = 0;
+        for (let b = 0; b < m; b++) { if (get(a, b)) { if (!run) ini = b; run++; if (run > melhor) { melhor = run; mIni = ini; } } else run = 0; }
+        if (melhor >= minRun) cand.push({a, b0: mIni, b1: mIni + melhor});
+      }
+      const grupos = [];
+      for (const c of cand) {
+        const u = grupos[grupos.length - 1];
+        if (u && c.a - u.a1 <= 2) { u.a1 = c.a; u.b0 = Math.min(u.b0, c.b0); u.b1 = Math.max(u.b1, c.b1); } else grupos.push({a0: c.a, a1: c.a, b0: c.b0, b1: c.b1});
+      }
+      return grupos;
+    };
+    const fina = g => g.a1 - g.a0 + 1 <= 2 * ESCALA;   // fio de grade: até 2 pt (faixa grossa = cabeçalho pintado)
+    const hs = linhasDe(H, W, (y, x) => tinta[y * W + x], Math.round(0.4 * W));
+    if (hs.length < 3 || hs.filter(fina).length < 2) return null;   // fios finos + faixas pintadas (cabeçalho)
+    // horizontais da grade: mesma extensão que a mais larga
+    const larga = hs.filter(fina).reduce((a, b) => (b.b1 - b.b0 > a.b1 - a.b0 ? b : a));
+    const grade = hs.filter(h => Math.abs(h.b0 - larga.b0) < 0.04 * W && Math.abs(h.b1 - larga.b1) < 0.04 * W);
+    if (grade.length < 3 || grade.filter(fina).length < 2) return null;
+    const topo = grade[0].a0, base = grade[grade.length - 1].a1, esq = larga.b0, dir = larga.b1;
+    // miolo das células claro: entre dois fios seguidos, pouca tinta (foto escura não passa)
+    const finas = grade.filter(fina);
+    for (let i = 0; i + 1 < finas.length; i++) {
+      const ya = finas[i].a1 + 2, yb = finas[i + 1].a0 - 2;
+      if (yb - ya < 4) continue;
+      let n = 0, t = 0;
+      for (let y = ya; y < yb; y += 2) for (let x = esq; x < dir; x += 2) { t++; n += tinta[y * W + x]; }
+      if (t && n / t > 0.35 && !grade.some(g => !fina(g) && g.a0 <= ya + 2 && g.a1 >= yb - 2)) return null;
+    }
+    const vs = linhasDe(W, H, (x, y) => tinta[y * W + x], Math.round(0.8 * (base - topo))).filter(v => v.a0 >= esq - 4 && v.a1 <= dir + 4 && fina(v));
+    if (vs.length < 2 || vs[0].a0 - esq > 0.05 * W || dir - vs[vs.length - 1].a1 > 0.05 * W) return null;
+    const m = 2 * ESCALA;
+    return {x0: (X + esq - m) / ESCALA, y0: (Y + topo - m) / ESCALA, x1: (X + dir + m) / ESCALA, y1: (Y + base + m) / ESCALA};
+  }
+
   // Ordem de leitura das figuras: por faixas horizontais (figuras lado a lado, como alternativas
   // A e B numa mesma linha, ficam da esquerda para a direita), depois de cima para baixo.
   function ordemDeLeitura(figs) {
@@ -729,7 +778,9 @@ const UPQRecorte = (() => {
       const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
       ordemDeLeitura(dentro);
-      const aparadas = dentro.map(f => aparar(f, m.linhas));
+      // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
+      const tabelas = new Set();
+      const aparadas = dentro.map(f => aparar(f, m.linhas)).map((f, k) => { const g = gradeDaTabela(canvas, f); if (g) { tabelas.add(k); return g; } return f; });
       // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
       const noCentro = (a, b) => b - a >= 0.85 * largura || (
         Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
@@ -742,7 +793,7 @@ const UPQRecorte = (() => {
       const centradas = new Set(faixas.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++)
-        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), blob: await recortar(canvas, aparadas[k])});
+        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k), blob: await recortar(canvas, aparadas[k])});
       // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
       const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
@@ -856,7 +907,7 @@ const UPQRecorte = (() => {
     };
   }
 
-  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, ETAPAS};
+  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, gradeDaTabela, ETAPAS};
 })();
 
 </script>
@@ -1050,7 +1101,15 @@ function validarQuestao(q, lista) {
   const usadas = new Set(Object.values(campos).flatMap(t => [...String(t || '').matchAll(RE_FIG)].map(m => m[1])));
   const inexistentes = [...usadas].filter(n => !nomes.has(n));
   if (inexistentes.length) erros.push(`figura inexistente referenciada: ${inexistentes.join(', ')}`);
-  const sobras = [...nomes].filter(n => !usadas.has(n));
+  // Tabela colada como imagem (print) no PDF: tem de virar tabela de verdade, nunca imagem.
+  const tabelasImg = new Set((q.figuras || []).filter(f => f.tabela).map(f => f.nome));
+  const comoImagem = [...tabelasImg].filter(n => usadas.has(n));
+  const temTabela = Object.values(campos).some(t => /<table|^\s*\|/m.test(String(t || '')));
+  if (tabelasImg.size && q.lidaSemImagem)
+    erros.push(`tabela colada como imagem no PDF (${[...tabelasImg].join(', ')}): os dados só existem na imagem e esta leitura foi feita sem imagem. Reprocesse com leitura por imagem (claude.ai no navegador).`);
+  else if (comoImagem.length) erros.push(`tabela colada como imagem no PDF usada como figura (${comoImagem.join(', ')}): transcreva-a como tabela`);
+  else if (tabelasImg.size && !temTabela) erros.push(`tabela da imagem não foi transcrita (${[...tabelasImg].join(', ')})`);
+  const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
   erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
   erros.push(...conferirFormatacao(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
@@ -1078,7 +1137,9 @@ const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
 Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
 camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
 "m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem (use os NOMES
-informados no ponto em que o texto se refere a elas). Marque revisar = true sempre que uma fórmula,
+informados no ponto em que o texto se refere a elas). Figura marcada como TABELA: os dados dela só
+existem na imagem — não invente nada: não use a figura, não escreva a tabela e marque revisar = true.
+Marque revisar = true sempre que uma fórmula,
 expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
 function porChamada() { return comImagens() ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 5; }
 
@@ -1106,7 +1167,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''})`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.tabela ? ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura' : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
@@ -1260,7 +1321,7 @@ function normalizarIA(r, q, ctx) {
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], revisar: !!r.revisar || !oficial,
+    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -1268,7 +1329,8 @@ function normalizarIA(r, q, ctx) {
 // ============================================================ reprocessamento de questões com erro
 // Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
 // corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
-const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e));
+// "sem gabarito" e "recorte incompleto" não se resolvem reprocessando; tabela em imagem só com leitura por imagem
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e) && !(/os dados só existem na imagem/.test(e) && !comImagens()));
 function comCorrecao(q, erros, ctx) {
   const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
   return {...q, correcao: erros, assuntosValidos};
@@ -1299,9 +1361,9 @@ async function corrigirComErro(job) {
   for (const q of job.m.questoes) {
     const r = job.resultados.get(q.numero);
     if (!r) continue;
-    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
+    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
     const erros = errosReprocessaveis(v);
-    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome}))}});
+    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, centralizada: !!f.centralizada}))}});
   }
   job.reprocessadas = 0; job.corrigidas = 0;
   if (!itens.length) return;
@@ -1470,7 +1532,7 @@ async function salvarNoBanco(job) {
     const base = job.resultados.get(q.numero);
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
-    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const recGab = m.gabaritoRecortes?.[nn(q.numero)];
     const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
     const final = {...base, imagem: up.id, figuras, gabaritoRecorte};

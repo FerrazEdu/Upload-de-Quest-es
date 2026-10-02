@@ -97,6 +97,55 @@ const UPQRecorte = (() => {
 
   // A imagem embutida às vezes é maior que a área visível e invade o texto vizinho:
   // corta nas linhas que cruzam a borda de cima ou de baixo (rótulos inteiros dentro ficam).
+  // Tabela colada como imagem (print): procura a grade — linhas horizontais longas com a mesma
+  // largura e linhas verticais fechando a caixa. Devolve a caixa da grade (pt) ou null.
+  function gradeDaTabela(canvas, f) {
+    const X = Math.max(0, Math.round(f.x0 * ESCALA)), Y = Math.max(0, Math.round(f.y0 * ESCALA));
+    const W = Math.min(canvas.width - X, Math.round((f.x1 - f.x0) * ESCALA)), H = Math.min(canvas.height - Y, Math.round((f.y1 - f.y0) * ESCALA));
+    if (W < 60 || H < 40) return null;
+    const px = canvas.getContext('2d').getImageData(X, Y, W, H).data;
+    const at = (x, y) => (y * W + x) * 4;
+    const fundo = [[2, 2], [W - 3, 2], [2, H - 3], [W - 3, H - 3]].map(([x, y]) => [px[at(x, y)], px[at(x, y) + 1], px[at(x, y) + 2]])
+      .sort((a, b) => (b[0] + b[1] + b[2]) - (a[0] + a[1] + a[2]))[1];
+    const tinta = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) tinta[i] = Math.abs(px[i * 4] - fundo[0]) + Math.abs(px[i * 4 + 1] - fundo[1]) + Math.abs(px[i * 4 + 2] - fundo[2]) > 120 ? 1 : 0;
+    const linhasDe = (n, m, get, minRun) => {   // n linhas de varredura de comprimento m
+      const cand = [];
+      for (let a = 0; a < n; a++) {
+        let run = 0, melhor = 0, ini = 0, mIni = 0;
+        for (let b = 0; b < m; b++) { if (get(a, b)) { if (!run) ini = b; run++; if (run > melhor) { melhor = run; mIni = ini; } } else run = 0; }
+        if (melhor >= minRun) cand.push({a, b0: mIni, b1: mIni + melhor});
+      }
+      const grupos = [];
+      for (const c of cand) {
+        const u = grupos[grupos.length - 1];
+        if (u && c.a - u.a1 <= 2) { u.a1 = c.a; u.b0 = Math.min(u.b0, c.b0); u.b1 = Math.max(u.b1, c.b1); } else grupos.push({a0: c.a, a1: c.a, b0: c.b0, b1: c.b1});
+      }
+      return grupos;
+    };
+    const fina = g => g.a1 - g.a0 + 1 <= 2 * ESCALA;   // fio de grade: até 2 pt (faixa grossa = cabeçalho pintado)
+    const hs = linhasDe(H, W, (y, x) => tinta[y * W + x], Math.round(0.4 * W));
+    if (hs.length < 3 || hs.filter(fina).length < 2) return null;   // fios finos + faixas pintadas (cabeçalho)
+    // horizontais da grade: mesma extensão que a mais larga
+    const larga = hs.filter(fina).reduce((a, b) => (b.b1 - b.b0 > a.b1 - a.b0 ? b : a));
+    const grade = hs.filter(h => Math.abs(h.b0 - larga.b0) < 0.04 * W && Math.abs(h.b1 - larga.b1) < 0.04 * W);
+    if (grade.length < 3 || grade.filter(fina).length < 2) return null;
+    const topo = grade[0].a0, base = grade[grade.length - 1].a1, esq = larga.b0, dir = larga.b1;
+    // miolo das células claro: entre dois fios seguidos, pouca tinta (foto escura não passa)
+    const finas = grade.filter(fina);
+    for (let i = 0; i + 1 < finas.length; i++) {
+      const ya = finas[i].a1 + 2, yb = finas[i + 1].a0 - 2;
+      if (yb - ya < 4) continue;
+      let n = 0, t = 0;
+      for (let y = ya; y < yb; y += 2) for (let x = esq; x < dir; x += 2) { t++; n += tinta[y * W + x]; }
+      if (t && n / t > 0.35 && !grade.some(g => !fina(g) && g.a0 <= ya + 2 && g.a1 >= yb - 2)) return null;
+    }
+    const vs = linhasDe(W, H, (x, y) => tinta[y * W + x], Math.round(0.8 * (base - topo))).filter(v => v.a0 >= esq - 4 && v.a1 <= dir + 4 && fina(v));
+    if (vs.length < 2 || vs[0].a0 - esq > 0.05 * W || dir - vs[vs.length - 1].a1 > 0.05 * W) return null;
+    const m = 2 * ESCALA;
+    return {x0: (X + esq - m) / ESCALA, y0: (Y + topo - m) / ESCALA, x1: (X + dir + m) / ESCALA, y1: (Y + base + m) / ESCALA};
+  }
+
   // Ordem de leitura das figuras: por faixas horizontais (figuras lado a lado, como alternativas
   // A e B numa mesma linha, ficam da esquerda para a direita), depois de cima para baixo.
   function ordemDeLeitura(figs) {
@@ -517,7 +566,9 @@ const UPQRecorte = (() => {
       const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
       ordemDeLeitura(dentro);
-      const aparadas = dentro.map(f => aparar(f, m.linhas));
+      // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
+      const tabelas = new Set();
+      const aparadas = dentro.map(f => aparar(f, m.linhas)).map((f, k) => { const g = gradeDaTabela(canvas, f); if (g) { tabelas.add(k); return g; } return f; });
       // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
       const noCentro = (a, b) => b - a >= 0.85 * largura || (
         Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
@@ -530,7 +581,7 @@ const UPQRecorte = (() => {
       const centradas = new Set(faixas.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++)
-        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), blob: await recortar(canvas, aparadas[k])});
+        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k), blob: await recortar(canvas, aparadas[k])});
       // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
       const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
@@ -644,5 +695,5 @@ const UPQRecorte = (() => {
     };
   }
 
-  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, ETAPAS};
+  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, gradeDaTabela, ETAPAS};
 })();

@@ -137,6 +137,7 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
     manifesto = json.loads((pasta / "manifesto.json").read_text(encoding="utf-8"))
     texto_pdf = {q["numero"]: q["texto_pdf"] for q in manifesto["questoes"]}
     fora_do_recorte = {q["numero"]: q.get("fora_do_recorte") for q in manifesto["questoes"]}
+    figuras_manifesto = {q["numero"]: q.get("figuras", []) for q in manifesto["questoes"]}
     base = topicos.carregar()
     resultado = {}
 
@@ -180,8 +181,15 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
         usadas = {n for t in campos.values() for n in RE_FIGURA.findall(t)}
         if usadas - nomes:
             erros.append(f"figura inexistente referenciada: {', '.join(sorted(usadas - nomes))}")
-        if nomes - usadas:
-            erros.append(f"figura recortada mas não usada no texto: {', '.join(sorted(nomes - usadas))}")
+        # tabela colada como imagem (print) no PDF: tem de virar tabela de verdade, nunca imagem
+        tabelas_img = {f["nome"] for f in figuras_manifesto.get(q.numero, []) if f.get("tabela")}
+        if tabelas_img & usadas:
+            erros.append(f"tabela colada como imagem no PDF usada como figura ({', '.join(sorted(tabelas_img & usadas))}): "
+                         "transcreva-a como tabela")
+        elif tabelas_img and not any(re.search(r"<table|^\s*\|", t, re.M) for t in campos.values()):
+            erros.append(f"tabela da imagem não foi transcrita ({', '.join(sorted(tabelas_img))})")
+        if nomes - usadas - tabelas_img:
+            erros.append(f"figura recortada mas não usada no texto: {', '.join(sorted(nomes - usadas - tabelas_img))}")
 
         transcrito = "\n".join([q.enunciado, *q.alternativas.values()])
         erros += conferir_com_pdf(texto_pdf.get(q.numero, ""), transcrito)

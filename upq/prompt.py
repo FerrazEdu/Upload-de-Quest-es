@@ -154,7 +154,11 @@ Início de cada questão (texto extraído do PDF, pode ter símbolos trocados):
 
 
 def mensagem_questao(q: dict, contexto: dict) -> str:
-    figuras = ", ".join(f["nome"] for f in q["figuras"]) or "nenhuma"
+    figuras = ", ".join(
+        f["nome"] + (" (centralizada no PDF)" if f.get("centralizada") else "")
+        + (" (é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura)"
+           if f.get("tabela") else "")
+        for f in q["figuras"]) or "nenhuma"
     fixos = ""
     if contexto.get("disciplina"):
         fixos = (f"\n- Disciplina e tópico da lista (use exatamente): "

@@ -228,6 +228,72 @@ def texto_marcado(pagina, regiao, com_cabecalho: bool = True) -> str:
     return "\n".join(saida).strip()
 
 
+def grade_da_tabela(pagina, f):
+    """Tabela colada como imagem (print): procura a grade — fios horizontais com a mesma
+    largura (faixas pintadas de cabeçalho contam), fios verticais fechando a caixa e miolo das
+    células claro. Devolve a caixa da grade (pt) ou None. Igual a gradeDaTabela (recorte.js)."""
+    esc = 3
+    pix = pagina.get_pixmap(matrix=pymupdf.Matrix(esc, esc), clip=f, alpha=False)
+    W, H, n, sm = pix.width, pix.height, pix.n, pix.samples
+    if W < 60 or H < 40:
+        return None
+    cor = lambda x, y: sm[(y * W + x) * n:(y * W + x) * n + 3]
+    cantos = sorted((cor(x, y) for x, y in [(2, 2), (W - 3, 2), (2, H - 3), (W - 3, H - 3)]), key=sum, reverse=True)
+    fundo = cantos[1]
+    tinta = bytearray(W * H)
+    for i in range(W * H):
+        j = i * n
+        tinta[i] = abs(sm[j] - fundo[0]) + abs(sm[j + 1] - fundo[1]) + abs(sm[j + 2] - fundo[2]) > 120
+
+    def linhas_de(n_, m, get, min_run):
+        cand = []
+        for a in range(n_):
+            run = melhor = ini = m_ini = 0
+            for b in range(m):
+                if get(a, b):
+                    if not run:
+                        ini = b
+                    run += 1
+                    if run > melhor:
+                        melhor, m_ini = run, ini
+                else:
+                    run = 0
+            if melhor >= min_run:
+                cand.append((a, m_ini, m_ini + melhor))
+        grupos = []
+        for a, b0, b1 in cand:
+            if grupos and a - grupos[-1]["a1"] <= 2:
+                g = grupos[-1]; g["a1"] = a; g["b0"] = min(g["b0"], b0); g["b1"] = max(g["b1"], b1)
+            else:
+                grupos.append({"a0": a, "a1": a, "b0": b0, "b1": b1})
+        return grupos
+
+    fina = lambda g: g["a1"] - g["a0"] + 1 <= 2 * esc
+    hs = linhas_de(H, W, lambda y, x: tinta[y * W + x], round(0.4 * W))
+    if len(hs) < 3 or sum(map(fina, hs)) < 2:
+        return None
+    larga = max((h for h in hs if fina(h)), key=lambda h: h["b1"] - h["b0"])
+    grade = [h for h in hs if abs(h["b0"] - larga["b0"]) < 0.04 * W and abs(h["b1"] - larga["b1"]) < 0.04 * W]
+    if len(grade) < 3 or sum(map(fina, grade)) < 2:
+        return None
+    topo, base, esq, dir_ = grade[0]["a0"], grade[-1]["a1"], larga["b0"], larga["b1"]
+    finas = [g for g in grade if fina(g)]
+    for a, b in zip(finas, finas[1:]):
+        ya, yb = a["a1"] + 2, b["a0"] - 2
+        if yb - ya < 4:
+            continue
+        amostra = [tinta[y * W + x] for y in range(ya, yb, 2) for x in range(esq, dir_, 2)]
+        if amostra and sum(amostra) / len(amostra) > 0.35 and not any(
+                not fina(g) and g["a0"] <= ya + 2 and g["a1"] >= yb - 2 for g in grade):
+            return None
+    vs = [v for v in linhas_de(W, H, lambda x, y: tinta[y * W + x], round(0.8 * (base - topo)))
+          if v["a0"] >= esq - 4 and v["a1"] <= dir_ + 4 and fina(v)]
+    if len(vs) < 2 or vs[0]["a0"] - esq > 0.05 * W or dir_ - vs[-1]["a1"] > 0.05 * W:
+        return None
+    m = 2 * esc
+    return pymupdf.Rect(f.x0 + (esq - m) / esc, f.y0 + (topo - m) / esc, f.x0 + (dir_ + m) / esc, f.y0 + (base + m) / esc)
+
+
 def ordem_de_leitura(figuras: list) -> list:
     """Figuras por faixas horizontais (lado a lado → esquerda para a direita), de cima para baixo."""
     faixas = []
@@ -364,9 +430,13 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
             regiao = parte["regiao"]
             aparadas = [aparar_figura(f, linhas_texto) for f in ordem_de_leitura(
                 [f for f in figuras_pagina if regiao.contains(pymupdf.Point((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2))])]
+            # print de tabela: recorta só a grade (sem o texto que veio junto) e marca como tabela
+            grades = [grade_da_tabela(pagina, f) for f in aparadas]
+            aparadas = [g or f for f, g in zip(aparadas, grades)]
             centradas = figuras_centralizadas(aparadas, regiao, *mancha(pagina, regiao, com_cab))
             aberta["partes"].append({"pagina": pn, "regiao": regiao, "texto": texto_marcado(pagina, regiao, com_cab),
-                                     "figuras": [(f, k in centradas) for k, f in enumerate(aparadas)], "com_cab": com_cab})
+                                     "figuras": [(f, k in centradas, grades[k] is not None) for k, f in enumerate(aparadas)],
+                                     "com_cab": com_cab})
             parte["dono"] = aberta
         for r, t in fora_do_recorte(pagina, partes, fundo, figuras_pagina):
             donos = [pt for pt in partes if pt.get("dono") and (r.y0 + r.y1) / 2 >= pt["regiao"].y0 - 2]
@@ -380,13 +450,13 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
         figuras = []
         for pt in partes:
             pagina = doc[pt["pagina"] - 1]
-            for f, centralizada in pt["figuras"]:
+            for f, centralizada, tabela in pt["figuras"]:
                 nome = f"Q{q['numero']:02d}_fig{len(figuras) + 1}.png"
                 # Renderiza o recorte em vez de extrair o arquivo da imagem: assim
                 # entram também rótulos desenhados por cima (vetores, ângulos, letras).
                 pagina.get_pixmap(dpi=DPI_FIGURA, clip=f).save(saida / "figuras" / nome)
                 figuras.append({"nome": nome.removesuffix(".png"), "arquivo": f"figuras/{nome}",
-                                "regiao": [round(v, 1) for v in f], "centralizada": centralizada})
+                                "regiao": [round(v, 1) for v in f], "centralizada": centralizada, "tabela": tabela})
         nome_q = f"Q{q['numero']:02d}.png"
         juntar_recortes(doc, partes).save(saida / "questoes" / nome_q)
         q.update({

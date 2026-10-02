@@ -402,7 +402,15 @@ function validarQuestao(q, lista) {
   const usadas = new Set(Object.values(campos).flatMap(t => [...String(t || '').matchAll(RE_FIG)].map(m => m[1])));
   const inexistentes = [...usadas].filter(n => !nomes.has(n));
   if (inexistentes.length) erros.push(`figura inexistente referenciada: ${inexistentes.join(', ')}`);
-  const sobras = [...nomes].filter(n => !usadas.has(n));
+  // Tabela colada como imagem (print) no PDF: tem de virar tabela de verdade, nunca imagem.
+  const tabelasImg = new Set((q.figuras || []).filter(f => f.tabela).map(f => f.nome));
+  const comoImagem = [...tabelasImg].filter(n => usadas.has(n));
+  const temTabela = Object.values(campos).some(t => /<table|^\s*\|/m.test(String(t || '')));
+  if (tabelasImg.size && q.lidaSemImagem)
+    erros.push(`tabela colada como imagem no PDF (${[...tabelasImg].join(', ')}): os dados só existem na imagem e esta leitura foi feita sem imagem. Reprocesse com leitura por imagem (claude.ai no navegador).`);
+  else if (comoImagem.length) erros.push(`tabela colada como imagem no PDF usada como figura (${comoImagem.join(', ')}): transcreva-a como tabela`);
+  else if (tabelasImg.size && !temTabela) erros.push(`tabela da imagem não foi transcrita (${[...tabelasImg].join(', ')})`);
+  const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
   erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
   erros.push(...conferirFormatacao(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
@@ -430,7 +438,9 @@ const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
 Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
 camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
 "m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem (use os NOMES
-informados no ponto em que o texto se refere a elas). Marque revisar = true sempre que uma fórmula,
+informados no ponto em que o texto se refere a elas). Figura marcada como TABELA: os dados dela só
+existem na imagem — não invente nada: não use a figura, não escreva a tabela e marque revisar = true.
+Marque revisar = true sempre que uma fórmula,
 expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
 function porChamada() { return comImagens() ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 5; }
 
@@ -458,7 +468,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''})`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.tabela ? ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura' : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
@@ -612,7 +622,7 @@ function normalizarIA(r, q, ctx) {
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], revisar: !!r.revisar || !oficial,
+    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -620,7 +630,8 @@ function normalizarIA(r, q, ctx) {
 // ============================================================ reprocessamento de questões com erro
 // Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
 // corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
-const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e));
+// "sem gabarito" e "recorte incompleto" não se resolvem reprocessando; tabela em imagem só com leitura por imagem
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e) && !(/os dados só existem na imagem/.test(e) && !comImagens()));
 function comCorrecao(q, erros, ctx) {
   const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
   return {...q, correcao: erros, assuntosValidos};
@@ -651,9 +662,9 @@ async function corrigirComErro(job) {
   for (const q of job.m.questoes) {
     const r = job.resultados.get(q.numero);
     if (!r) continue;
-    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
+    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
     const erros = errosReprocessaveis(v);
-    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome}))}});
+    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, centralizada: !!f.centralizada}))}});
   }
   job.reprocessadas = 0; job.corrigidas = 0;
   if (!itens.length) return;
@@ -822,7 +833,7 @@ async function salvarNoBanco(job) {
     const base = job.resultados.get(q.numero);
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
-    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const recGab = m.gabaritoRecortes?.[nn(q.numero)];
     const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
     const final = {...base, imagem: up.id, figuras, gabaritoRecorte};
