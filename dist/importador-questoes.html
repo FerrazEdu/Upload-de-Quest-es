@@ -173,6 +173,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--acento);
 .edicao label, .rotulo-campo { font-size: 12.5px; font-weight: 600; display: grid; gap: 5px; }
 .edicao .campo, .rotulo-campo .campo, .rotulo-campo label { font-weight: 400; font-size: 14px; }
 .confirmar { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--erro); }
+.confirmar .botao:not(.perigo) { color: var(--texto); }
 .modal-fundo { position: fixed; inset: 0; background: rgb(0 0 0 / .55); display: grid; place-items: start center; padding: 32px 16px; overflow: auto; z-index: 10; }
 .modal { width: min(860px, 100%); }
 .modal .barra-modal { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -1230,10 +1231,11 @@ const tela = {nome: 'enviar', lista: null, questaoBanco: null};
 const FILTRO_VAZIO = {busca: '', disciplina: '', topico: '', assunto: '', instituicao: '', ano: '', dificuldade: '', situacao: ''};
 const filtroBanco = {...FILTRO_VAZIO}, filtroBusca = {...FILTRO_VAZIO};
 const selecionadas = new Set();
-let criandoLista = false, confirmandoExclusao = false;
+let criandoLista = false, confirmandoExclusao = false, confirmandoExclusaoQ = false, confirmandoExclusaoL = false, excluindo = false;
+const listasSelecionadas = new Set();
 const principal = document.getElementById('principal');
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => ir(b.dataset.tela)));
-function ir(nome, extra = {}) { Object.assign(tela, {nome, ...extra}); confirmandoExclusao = false; desenhar(); window.scrollTo(0, 0); }
+function ir(nome, extra = {}) { Object.assign(tela, {nome, ...extra}); confirmandoExclusao = confirmandoExclusaoQ = confirmandoExclusaoL = false; desenhar(); window.scrollTo(0, 0); }
 
 function situacaoQuestao(q) { return q.erros?.length ? 'erro' : q.avisos?.length ? 'revisar' : 'ok'; }
 function seloQuestao(q) {
@@ -1405,8 +1407,20 @@ function telaBanco(qs) {
         : `<button class="botao primario" id="nova-lista">Criar lista com as selecionadas</button>
           ${listas.length ? `<select class="campo" id="destino" aria-label="Lista de destino">${listas.map(([id, l]) => `<option value="${esc(id)}">${esc(l.nome)}</option>`).join('')}</select>
           <button class="botao" id="adicionar">Adicionar à lista</button>` : ''}
-          <button class="botao" id="desmarcar">Limpar seleção</button>`}</div>` : ''}`;
+          <button class="botao" id="desmarcar">Limpar seleção</button>
+          ${confirmandoExclusaoQ ? `<span class="confirmar">Excluir ${selecionadas.size} questão(ões) do banco? Elas saem também das listas. Não dá para desfazer.
+            <button class="botao perigo" id="sim-excluir-q" ${excluindo ? 'disabled' : ''}>${excluindo ? 'Excluindo…' : 'Excluir'}</button><button class="botao" id="nao-excluir-q">Cancelar</button></span>`
+            : '<button class="botao perigo" id="excluir-q">Excluir</button>'}`}</div>` : ''}`;
   const redesenhar = () => telaBanco(banco());
+  document.getElementById('excluir-q')?.addEventListener('click', () => { confirmandoExclusaoQ = true; redesenhar(); });
+  document.getElementById('nao-excluir-q')?.addEventListener('click', () => { confirmandoExclusaoQ = false; redesenhar(); });
+  document.getElementById('sim-excluir-q')?.addEventListener('click', async () => {
+    const ids = [...selecionadas];
+    await excluirQuestoes(ids);
+    confirmandoExclusaoQ = false; ids.forEach(id => selecionadas.delete(id));
+    if (ids.includes(tela.questaoBanco)) tela.questaoBanco = null;
+    desenhar();
+  });
   ligarFiltros(filtroBanco, redesenhar);
   document.getElementById('limpar').onclick = () => { Object.assign(filtroBanco, FILTRO_VAZIO); redesenhar(); };
   const botaoRep = document.getElementById('reprocessar-erros');
@@ -1464,14 +1478,36 @@ function telaListas(qs) {
   principal.innerHTML = `
     <div class="cab"><h1>Listas de questões</h1>${cap.db ? '<button class="botao primario" id="nova">+ Nova lista</button>' : ''}</div>
     <div class="painel tabela-wrap"><table>
-      <thead><tr><th>Nome</th><th>Qtd. questões</th><th>Descrição</th><th>Disciplina</th><th>Tópico</th><th>Tags</th><th>Situação</th></tr></thead>
+      <thead><tr>${cap.db ? `<th class="marcar"><input type="checkbox" id="marcar-listas" ${listas.length && listas.every(([id]) => listasSelecionadas.has(id)) ? 'checked' : ''} aria-label="Selecionar todas as listas"></th>` : ''}<th>Nome</th><th>Qtd. questões</th><th>Descrição</th><th>Disciplina</th><th>Tópico</th><th>Tags</th><th>Situação</th></tr></thead>
       <tbody>${listas.map(([id, l]) => { const r = resumoLista(l, indice); return `
-        <tr class="clicavel" data-lista="${esc(id)}" tabindex="0">
+        <tr class="clicavel ${listasSelecionadas.has(id) ? 'sel' : ''}" data-lista="${esc(id)}" tabindex="0">
+          ${cap.db ? `<td class="marcar"><input type="checkbox" data-marcar-lista="${esc(id)}" ${listasSelecionadas.has(id) ? 'checked' : ''} aria-label="Selecionar ${esc(l.nome)}"></td>` : ''}
           <td><strong>${esc(l.nome)}</strong>${l.origem ? '<div class="sub">do PDF importado</div>' : ''}</td>
           <td class="num">${r.total}</td><td>${esc(l.descricao || '—')}</td><td>${esc(l.disciplina || '—')}</td><td>${esc(l.topico || '—')}</td>
           <td>${(l.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</td><td>${situacaoLista(r)}</td></tr>`; }).join('')
-        || '<tr><td colspan="7" class="vazio">Nenhuma lista ainda. Envie um PDF ou crie uma lista a partir do banco.</td></tr>'}</tbody>
-    </table></div>`;
+        || '<tr><td colspan="8" class="vazio">Nenhuma lista ainda. Envie um PDF ou crie uma lista a partir do banco.</td></tr>'}</tbody>
+    </table></div>
+    ${listasSelecionadas.size ? `<div class="barra-sel"><span class="cont">${listasSelecionadas.size} lista(s) selecionada(s)</span>
+      <button class="botao" id="desmarcar-listas">Limpar seleção</button>
+      ${confirmandoExclusaoL ? `<span class="confirmar">Excluir ${listasSelecionadas.size} lista(s)?
+          <label style="display:inline-flex;gap:6px;align-items:center;color:var(--texto)"><input type="checkbox" id="com-questoes"> excluir também as questões delas do banco</label>
+          <button class="botao perigo" id="sim-excluir-l" ${excluindo ? 'disabled' : ''}>${excluindo ? 'Excluindo…' : 'Excluir'}</button><button class="botao" id="nao-excluir-l">Cancelar</button></span>`
+        : '<button class="botao perigo" id="excluir-l">Excluir listas selecionadas</button>'}</div>` : ''}`;
+  for (const id of [...listasSelecionadas]) if (!estado.listas.has(id)) listasSelecionadas.delete(id);
+  document.getElementById('marcar-listas')?.addEventListener('change', e => { listas.forEach(([id]) => e.target.checked ? listasSelecionadas.add(id) : listasSelecionadas.delete(id)); desenhar(); });
+  principal.querySelectorAll('[data-marcar-lista]').forEach(c => {
+    c.addEventListener('click', e => e.stopPropagation());
+    c.addEventListener('change', () => { c.checked ? listasSelecionadas.add(c.dataset.marcarLista) : listasSelecionadas.delete(c.dataset.marcarLista); desenhar(); });
+  });
+  principal.querySelectorAll('td.marcar').forEach(td => td.addEventListener('click', e => e.stopPropagation()));
+  document.getElementById('desmarcar-listas')?.addEventListener('click', () => { listasSelecionadas.clear(); confirmandoExclusaoL = false; desenhar(); });
+  document.getElementById('excluir-l')?.addEventListener('click', () => { confirmandoExclusaoL = true; desenhar(); });
+  document.getElementById('nao-excluir-l')?.addEventListener('click', () => { confirmandoExclusaoL = false; desenhar(); });
+  document.getElementById('sim-excluir-l')?.addEventListener('click', async () => {
+    const ids = [...listasSelecionadas], comQuestoes = document.getElementById('com-questoes')?.checked;
+    await excluirListas(ids, comQuestoes);
+    confirmandoExclusaoL = false; listasSelecionadas.clear(); desenhar();
+  });
   document.getElementById('nova')?.addEventListener('click', async () => {
     const id = 'l' + Date.now().toString(36);
     await cap.db.doc(`listas/${id}`).set({nome: 'Nova lista', descricao: '', disciplina: null, topico: null, tags: [], origem: null,
@@ -1483,6 +1519,56 @@ function telaListas(qs) {
     tr.addEventListener('click', abrir); tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
   });
 }
+// ============================================================ exclusão em massa
+// Questões: saem das partes (parte vazia é apagada), das listas que as usam e, quando a
+// importação fica sem questões, a importação some (o PDF pode ser reenviado). As imagens
+// das questões excluídas são apagadas do armazenamento do artefato.
+async function excluirQuestoes(ids) {
+  if (!cap.db || !ids.length) return;
+  excluindo = true; desenhar();
+  const alvo = new Set(ids), imagens = [];
+  try {
+    const porParte = new Map();
+    for (const [pid, parte] of estado.partes) {
+      const sai = (parte.questoes || []).filter(q => alvo.has(`${parte.importacao}:${nn(q.numero)}`));
+      if (sai.length) porParte.set(pid, {parte, sai});
+    }
+    for (const [pid, {parte, sai}] of porParte) {
+      const resto = parte.questoes.filter(q => !sai.includes(q));
+      if (resto.length) await cap.db.doc(`partes/${pid}`).set({...parte, questoes: resto});
+      else await cap.db.doc(`partes/${pid}`).delete();
+      for (const q of sai) imagens.push(q.imagem, q.gabaritoRecorte, ...(q.figuras || []).map(f => f.asset));
+    }
+    const tocadas = new Set([...porParte.values()].map(x => x.parte.importacao));
+    for (const idImp of tocadas) {
+      const restam = [...estado.partes.entries()].filter(([pid, p]) => p.importacao === idImp)
+        .reduce((n, [pid, p]) => n + (porParte.has(pid) ? p.questoes.length - porParte.get(pid).sai.length : p.questoes.length), 0);
+      const imp = estado.importacoes.get(idImp);
+      if (!imp) continue;
+      if (restam) await cap.db.doc(`importacoes/${idImp}`).set({...imp, total: restam, atualizado_em: agora()});
+      else { await cap.db.doc(`importacoes/${idImp}`).delete(); if (imp.gabaritoImagem) imagens.push(imp.gabaritoImagem); }
+    }
+    for (const [lid, l] of estado.listas) {
+      const resto = (l.questoes || []).filter(id => !alvo.has(id));
+      if (resto.length !== (l.questoes || []).length) await cap.db.doc(`listas/${lid}`).set({...l, questoes: resto, atualizado_em: agora()});
+    }
+    toast(`${ids.length} questão(ões) excluída(s).`);
+  } catch (e) { toast(`A exclusão parou: ${e.message || e.code}. Recarregue a página e confira.`); }
+  finally { excluindo = false; }
+  if (cap.assets) for (const id of imagens.filter(Boolean)) await cap.assets.delete(id).catch(() => {});
+}
+async function excluirListas(ids, comQuestoes) {
+  if (!cap.db || !ids.length) return;
+  const questoes = comQuestoes ? [...new Set(ids.flatMap(id => estado.listas.get(id)?.questoes || []))] : [];
+  excluindo = true; desenhar();
+  try { for (const id of ids) await cap.db.doc(`listas/${id}`).delete(); }
+  catch (e) { excluindo = false; return toast(`A exclusão parou: ${e.message || e.code}`); }
+  for (const id of ids) estado.listas.delete(id);   // as questões não ficam "presas" nas listas recém-excluídas
+  excluindo = false;
+  if (questoes.length) await excluirQuestoes(questoes);
+  toast(`${ids.length} lista(s) excluída(s)` + (questoes.length ? ` e ${questoes.length} questão(ões) do banco.` : '. As questões continuam no banco.'));
+}
+
 async function salvarLista(id, campos) {
   const l = estado.listas.get(id);
   try { await cap.db.doc(`listas/${id}`).set({...l, ...campos, atualizado_em: agora()}); }
