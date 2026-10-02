@@ -1,5 +1,6 @@
-"""Envia transcricao.json ao Supabase: figuras no Storage (bucket "figuras") e a
-lista inteira pela função importar_lista (uma transação; reenviar atualiza).
+"""Envia transcricao.json ao Supabase: figuras no Storage (bucket "figuras") e as
+questões ao banco geral pela função importar_lista, que também cria a lista padrão
+da importação (uma transação; reenviar atualiza). Listas virtuais vão por salvar_lista.
 
 Variáveis de ambiente (Dashboard → Project Settings → API Keys):
     SUPABASE_URL           https://<ref>.supabase.co
@@ -66,6 +67,16 @@ def enviar(pasta: Path, url: str, chave: str) -> str:
                       headers={**h, "Content-Type": "application/json"}, timeout=120)
     if not r.ok:
         raise RuntimeError(f"importar_lista falhou ({r.status_code}): {r.text}")
+    return r.json()
+
+
+def salvar_lista(url: str, chave: str, lista: dict) -> str:
+    """Cria ou atualiza uma lista virtual no banco (função salvar_lista). As questões vão
+    como {hash_pdf, numero}; as importações delas precisam ter sido enviadas antes."""
+    r = requests.post(f"{url}/rest/v1/rpc/salvar_lista", json={"p": lista},
+                      headers={**cabecalhos(chave), "Content-Type": "application/json"}, timeout=60)
+    if not r.ok:
+        raise RuntimeError(f"salvar_lista falhou ({r.status_code}): {r.text}")
     return r.json()
 
 

@@ -158,14 +158,58 @@ mjx-container[display="true"] { margin: .6em 0 !important; }
   main { padding-inline: 16px; }
   .etapas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Banco, seleção e gerenciamento de listas */
+.filtros.grade-filtros { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.filtros .campo.busca { grid-column: span 2; }
+@media (max-width: 640px) { .filtros .campo.busca { grid-column: auto; } }
+.barra-sel { position: sticky; bottom: env(safe-area-inset-bottom, 0px); margin-top: 12px; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 10px; padding: 10px 14px; background: var(--painel); border: 1px solid var(--acento);
+  border-radius: var(--raio); box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+.barra-sel .cont { font-weight: 600; margin-right: auto; }
+.form-linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.form-linha .campo { flex: 1 1 200px; }
+td.marcar, th.marcar { width: 36px; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--acento); }
+.dois-paineis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .dois-paineis { grid-template-columns: 1fr; } }
+.painel > .titulo-painel { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--borda); }
+.painel > .titulo-painel h2 { font-size: 15px; margin: 0; }
+.painel .corpo-painel { padding: 12px 14px; }
+.rolagem { max-height: calc(100vh - 260px); overflow: auto; }
+.icone { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 0;
+  cursor: pointer; background: var(--campo); color: var(--texto); }
+.icone:hover { background: var(--acento-fundo); }
+.icone.ver { background: var(--acento); color: var(--acento-texto); }
+.icone.tirar { background: var(--erro-fundo); color: var(--erro); }
+.icone.por { background: var(--ok-fundo); color: var(--ok); }
+.icone:disabled { opacity: .35; cursor: default; }
+.icone svg { width: 15px; height: 15px; }
+.acoes { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
+.edicao { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 8px; align-items: end; margin-bottom: 14px; }
+@media (max-width: 760px) { .edicao { grid-template-columns: 1fr; } }
+.edicao label { font-size: 12.5px; font-weight: 600; display: grid; gap: 5px; }
+.confirmar { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--erro); }
+.botao.perigo { color: var(--erro); }
+.modal-fundo { position: fixed; inset: 0; background: rgb(0 0 0 / .55); display: grid; place-items: start center;
+  padding: 32px 16px; overflow: auto; z-index: 10; }
+.modal { width: min(820px, 100%); }
+.modal .fechar { justify-self: end; }
+.aviso-toast { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--painel);
+  border: 1px solid var(--borda-forte); border-radius: 6px; padding: 10px 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .3); z-index: 20; }
+.mais { padding: 10px 12px; color: var(--fraco); font-size: 13px; }
 </style>
 
 <div class="app">
   <nav class="lateral" aria-label="Telas">
     <div class="marca">Importador de Questões<small>PDF → banco de questões</small></div>
-    <button class="nav" data-tela="enviar" aria-current="page">
+    <button class="nav" data-tela="enviar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0-4 4m4-4 4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
       Enviar lista</button>
+    <button class="nav" data-tela="banco">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+      Banco de questões <span class="contagem" id="contagem-banco"></span></button>
     <button class="nav" data-tela="listas">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
       Listas <span class="contagem" id="contagem-listas"></span></button>
@@ -173,63 +217,32 @@ mjx-container[display="true"] { margin: .6em 0 !important; }
   </nav>
   <main id="principal"></main>
 </div>
+<div id="camada"></div>
 
 <script>
 const DEMO = window.UPQ_DEMO || null;
-const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'Pronta para envio'];
+const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'No banco'];
 const DIFICULDADE = {1: 'Muito Fácil', 2: 'Fácil', 3: 'Média', 4: 'Difícil', 5: 'Muito Difícil'};
-const STATUS = {
-  processando: ['info', 'Processando'], aguardando_transcricao: ['alerta', 'Aguardando transcrição'],
-  com_erros: ['erro', 'Com erros'], revisar: ['alerta', 'Revisar avisos'], pronta: ['ok', 'Pronta para envio'],
-  enviada: ['ok', 'Enviada ao banco'], falhou: ['erro', 'Falhou'],
-};
-
-// ---------- acesso aos dados: servidor local ou dados embutidos (demonstração) ----------
-const api = DEMO ? {
-  async listas() { return DEMO.listas.map(l => l.resumo); },
-  async lista(id) { return DEMO.listas.find(l => l.resumo.id === id); },
-  arquivo(id, caminho) { return DEMO.arquivos[id]?.[caminho] || ''; },
-  async envios() { return demoEnvios; },
-  async enviarPdf(arquivo) {
-    const job = {id: 'demo-' + Date.now(), arquivo: arquivo.name, etapa: 0, estado: 'rodando',
-                 mensagem: 'Recortando questões e figuras…', lista: null};
-    demoEnvios.unshift(job);
-    const passos = [
-      [1, 'Transcrevendo questões com a IA…'], [2, 'Validando LaTeX, figuras e base de tópicos…'],
-      [3, 'Demonstração: o envio é simulado e mostra a lista de exemplo.']];
-    passos.forEach(([etapa, msg], i) => setTimeout(() => {
-      Object.assign(job, {etapa, mensagem: msg});
-      if (etapa === 3) Object.assign(job, {estado: 'concluido', lista: DEMO.listas[0].resumo.id});
-      if (tela.nome === 'enviar') desenhar();
-    }, 1400 * (i + 1)));
-    return job;
-  },
-  async enviarBanco() { throw new Error('Na demonstração o envio ao banco está desligado.'); },
-} : {
-  async listas() { return (await req('/api/listas')).listas; },
-  async lista(id) { return req(`/api/listas/${encodeURIComponent(id)}`); },
-  arquivo(id, caminho) { return `/api/listas/${encodeURIComponent(id)}/arquivos/${caminho}`; },
-  async envios() { return (await req('/api/envios')).envios; },
-  async enviarPdf(arquivo) {
-    return req('/api/envios', {method: 'POST', body: arquivo,
-      headers: {'Content-Type': 'application/pdf', 'X-Nome-Arquivo': encodeURIComponent(arquivo.name)}});
-  },
-  async enviarBanco(id) { return req(`/api/listas/${encodeURIComponent(id)}/enviar`, {method: 'POST'}); },
-};
-const demoEnvios = [];
-async function req(url, opcoes) {
-  const r = await fetch(url, opcoes);
-  const dados = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
-  return dados;
-}
+const LIMITE_LINHAS = 300;
 
 // ---------- utilidades ----------
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-const pad = n => String(n).padStart(2, '0');
-// Na tabela só "Questão NN": banca e ano têm colunas próprias e o título completo fica no detalhe.
 const tituloCurto = t => (String(t || '').match(/Questão \d+/) || [t])[0];
-function selo(status) { const [cls, txt] = STATUS[status] || ['info', status]; return `<span class="selo ${cls}">${txt}</span>`; }
+const ICONE = {
+  ver: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  tirar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+  por: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>',
+  subir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>',
+  descer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+};
+function textoBusca(q) {
+  return (q.busca ?? String(q.enunciado || '').replace(/!\[[^\]]*\]\([^)]*\)|[$*_#>|\\]/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
+}
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'aviso-toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
+}
 
 // Markdown + LaTeX: guarda as fórmulas antes do Markdown para não perder _ e * dentro delas.
 function md(texto, figuras) {
@@ -245,48 +258,174 @@ function tipografar(el) {
   else setTimeout(() => tipografar(el), 300);
 }
 
+// ---------- acesso aos dados: servidor local ou dados embutidos (demonstração) ----------
+async function req(url, opcoes = {}) {
+  const r = await fetch(url, opcoes);
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
+  return dados;
+}
+const json = (metodo, corpo) => ({method: metodo, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)});
+
+const apiServidor = {
+  async banco() { return (await req('/api/banco')).questoes; },
+  async questao(id) { return req(`/api/questoes/${id}`); },
+  async listas() { return (await req('/api/listas')).listas; },
+  async lista(id) { return req(`/api/listas/${encodeURIComponent(id)}`); },
+  async criarLista(d) { return req('/api/listas', json('POST', d)); },
+  async atualizarLista(id, d) { return req(`/api/listas/${encodeURIComponent(id)}`, json('PUT', d)); },
+  async excluirLista(id) { return req(`/api/listas/${encodeURIComponent(id)}`, {method: 'DELETE'}); },
+  async enviarBanco(id) { return req(`/api/listas/${encodeURIComponent(id)}/enviar`, {method: 'POST'}); },
+  arquivo(origem, caminho) { return `/api/arquivos/${encodeURIComponent(origem)}/${caminho}`; },
+  async envios() { return (await req('/api/envios')).envios; },
+  async enviarPdf(a) {
+    return req('/api/envios', {method: 'POST', body: a,
+      headers: {'Content-Type': 'application/pdf', 'X-Nome-Arquivo': encodeURIComponent(a.name)}});
+  },
+};
+
+// Na demonstração tudo fica na memória da página: some ao recarregar.
+function criarApiDemo() {
+  const porId = Object.fromEntries(DEMO.questoes.map(q => [q.id, q]));
+  const leve = q => ({...q, erros: q.erros.length, avisos: q.avisos.length, busca: textoBusca(q)});
+  const listas = DEMO.listas.map(l => ({...l, questoes: [...l.questoes]}));
+  const envios = [];
+  const resumo = l => {
+    const qs = l.questoes.map(i => porId[i]).filter(Boolean);
+    return {...l, total_questoes: qs.length, erros: qs.filter(q => q.erros.length).length,
+            avisos: qs.filter(q => q.avisos.length).length, enviada: false};
+  };
+  return {
+    async banco() { return DEMO.questoes.map(leve); },
+    async questao(id) { return porId[id]; },
+    async listas() { return listas.map(resumo); },
+    async lista(id) {
+      const l = listas.find(x => x.id === id);
+      if (!l) throw new Error('Lista não encontrada.');
+      return {lista: l, resumo: resumo(l), questoes: l.questoes.map(i => porId[i]).filter(Boolean).map(leve)};
+    },
+    async criarLista(d) {
+      if (d.nome !== undefined && !String(d.nome).trim()) throw new Error('Dê um nome para a lista.');
+      const l = {id: 'demo-' + Date.now(), nome: 'Nova lista', descricao: '', disciplina: null, topico: null,
+                 tags: [], status: 'rascunho', origem: null, questoes: [], ...d};
+      listas.unshift(l); return l;
+    },
+    async atualizarLista(id, d) {
+      if (d.nome !== undefined && !String(d.nome).trim()) throw new Error('Dê um nome para a lista.');
+      const l = listas.find(x => x.id === id); Object.assign(l, d);
+      if (d.questoes) l.questoes = [...new Set(d.questoes)];
+      return l;
+    },
+    async excluirLista(id) { listas.splice(listas.findIndex(x => x.id === id), 1); },
+    async enviarBanco() { throw new Error('Na demonstração o envio ao banco está desligado.'); },
+    arquivo(origem, caminho) { return DEMO.arquivos[origem]?.[caminho] || ''; },
+    async envios() { return envios; },
+    async enviarPdf(a) {
+      const job = {id: 'demo-' + Date.now(), arquivo: a.name, etapa: 0, estado: 'rodando',
+                   mensagem: 'Recortando questões e figuras…', lista: null};
+      envios.unshift(job);
+      [[1, 'Transcrevendo questões com a IA…'], [2, 'Validando LaTeX, figuras e base de tópicos…'],
+       [3, 'Demonstração: o processamento é simulado; abra a lista de exemplo.']].forEach(([etapa, mensagem], i) =>
+        setTimeout(() => {
+          Object.assign(job, {etapa, mensagem});
+          if (etapa === 3) Object.assign(job, {estado: 'concluido', lista: listas.find(l => l.origem)?.id});
+          if (tela.nome === 'enviar') desenhar();
+        }, 1300 * (i + 1)));
+      return job;
+    },
+  };
+}
+const api = DEMO ? criarApiDemo() : apiServidor;
+
+// ---------- filtros (banco e "Buscar questões") ----------
+const FILTRO_VAZIO = {busca: '', disciplina: '', topico: '', assunto: '', instituicao: '', ano: '', dificuldade: ''};
+function opcoes(questoes, campo) {
+  const vals = questoes.flatMap(q => campo === 'assunto' ? (q.assuntos || []) : [q[campo]]).filter(v => v !== null && v !== undefined && v !== '');
+  return [...new Set(vals)].sort((a, b) => campo === 'ano' ? b - a : String(a).localeCompare(String(b), 'pt-BR'));
+}
+function htmlFiltros(questoes, f, prefixo) {
+  const sel = (campo, rotulo, rotuloOpcao = v => v) => `<select class="campo" data-filtro="${campo}" id="${prefixo}-${campo}" aria-label="${rotulo}">
+      <option value="">${rotulo}</option>${opcoes(questoes, campo).map(v =>
+        `<option value="${esc(v)}" ${String(v) === String(f[campo]) ? 'selected' : ''}>${esc(rotuloOpcao(v))}</option>`).join('')}</select>`;
+  return `<div class="filtros grade-filtros">
+    <input class="campo busca" data-filtro="busca" id="${prefixo}-busca" placeholder="Buscar no título ou no enunciado…" value="${esc(f.busca)}" aria-label="Buscar">
+    ${sel('disciplina', 'Disciplina')}${sel('topico', 'Tópico')}${sel('assunto', 'Assunto')}
+    ${sel('instituicao', 'Instituição')}${sel('ano', 'Ano')}${sel('dificuldade', 'Dificuldade', v => DIFICULDADE[v])}
+  </div>`;
+}
+function filtrar(questoes, f) {
+  const termo = f.busca.trim().toLowerCase();
+  return questoes.filter(q =>
+    (!termo || (q.titulo + ' ' + textoBusca(q)).toLowerCase().includes(termo)) &&
+    (!f.disciplina || q.disciplina === f.disciplina) && (!f.topico || q.topico === f.topico) &&
+    (!f.assunto || (q.assuntos || []).includes(f.assunto)) && (!f.instituicao || q.instituicao === f.instituicao) &&
+    (!f.ano || String(q.ano) === f.ano) && (!f.dificuldade || String(q.dificuldade) === f.dificuldade));
+}
+function ligarFiltros(raiz, f, aoMudar) {
+  raiz.querySelectorAll('[data-filtro]').forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
+    f[el.dataset.filtro] = el.value; aoMudar(el.id);
+  }));
+}
+function refocar(id) {
+  const el = id && document.getElementById(id);
+  if (el) { el.focus(); if (el.setSelectionRange && el.type !== 'select-one') el.setSelectionRange(el.value.length, el.value.length); }
+}
+
 // ---------- telas ----------
-const tela = {nome: 'enviar', lista: null, questao: 0, filtro: '', disciplina: ''};
+const tela = {nome: 'enviar', lista: null, questaoBanco: null};
+const filtroBanco = {...FILTRO_VAZIO}, filtroBusca = {...FILTRO_VAZIO};
+const selecionadas = new Set();
+let criandoLista = false;
 const principal = document.getElementById('principal');
-let cacheListas = [];
 
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => ir(b.dataset.tela)));
 function ir(nome, extra = {}) { Object.assign(tela, {nome, ...extra}); desenhar(); window.scrollTo(0, 0); }
 
-async function desenhar() {
-  document.querySelectorAll('.nav').forEach(b =>
-    b.setAttribute('aria-current', b.dataset.tela === (tela.nome === 'lista' ? 'listas' : tela.nome) ? 'page' : 'false'));
+async function atualizarContagens() {
+  try {
+    const [qs, ls] = await Promise.all([api.banco(), api.listas()]);
+    document.getElementById('contagem-banco').textContent = qs.length || '';
+    document.getElementById('contagem-listas').textContent = ls.length || '';
+  } catch {}
+}
+
+async function desenhar(foco) {
+  const ativa = tela.nome === 'lista' ? 'listas' : tela.nome;
+  document.querySelectorAll('.nav').forEach(b => b.setAttribute('aria-current', b.dataset.tela === ativa ? 'page' : 'false'));
   try {
     if (tela.nome === 'enviar') await telaEnviar();
+    else if (tela.nome === 'banco') await telaBanco();
     else if (tela.nome === 'listas') await telaListas();
-    else await telaLista();
+    else await telaGerenciar();
+    refocar(foco);
   } catch (e) {
     principal.innerHTML = `<div class="painel vazio">Não foi possível carregar: ${esc(e.message)}</div>`;
   }
+  atualizarContagens();
 }
 
+// ---- Enviar lista
 async function telaEnviar() {
   const envios = await api.envios();
   principal.innerHTML = `
     <div class="cab"><h1>Enviar lista</h1></div>
-    ${DEMO ? '<div class="aviso-demo">Demonstração: escolha qualquer PDF para ver as etapas. O processamento é simulado e termina na lista de exemplo.</div>' : ''}
+    ${DEMO ? '<div class="aviso-demo">Demonstração: escolha qualquer PDF para ver as etapas. O processamento é simulado.</div>' : ''}
     <label class="soltar" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
       <strong>Arraste os PDFs das listas para cá</strong>
       <p>ou clique para escolher · vários arquivos de uma vez</p>
       <input type="file" id="arquivo" accept="application/pdf,.pdf" multiple hidden>
     </label>
-    <p class="dica">Cada lista passa por: recorte das questões e figuras, transcrição com IA (LaTeX e formatação), validação automática e, por fim, fica pronta para você revisar e enviar ao banco.</p>
-    <div class="envios">${envios.length ? envios.map(cartaoEnvio).join('') : ''}</div>`;
+    <p class="dica">As questões de cada PDF entram no banco geral, já com disciplina, tópico, assuntos e dificuldade. Cada PDF também gera a sua lista em Listas, que você pode editar ou usar de base para outras.</p>
+    <div class="envios">${envios.map(cartaoEnvio).join('')}</div>`;
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
   input.addEventListener('change', () => receber(input.files));
   ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.add('ativo'); }));
   ['dragleave', 'drop'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.remove('ativo'); }));
   zona.addEventListener('drop', e => receber(e.dataTransfer.files));
-  principal.querySelectorAll('[data-abrir]').forEach(b => b.addEventListener('click', () => ir('lista', {lista: b.dataset.abrir, questao: 0})));
+  principal.querySelectorAll('[data-abrir]').forEach(b => b.addEventListener('click', () => ir('lista', {lista: b.dataset.abrir})));
   if (!DEMO && envios.some(e => e.estado === 'rodando')) setTimeout(() => tela.nome === 'enviar' && desenhar(), 2000);
 }
-
 function cartaoEnvio(e) {
   const etapas = ETAPAS.map((nome, i) => {
     let cls = i < e.etapa ? 'feita' : i === e.etapa ? 'atual' : '';
@@ -298,101 +437,233 @@ function cartaoEnvio(e) {
   const acao = e.lista && e.estado === 'concluido' ? `<button class="botao" data-abrir="${esc(e.lista)}">Ver lista</button>` : '';
   return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>${acao}<div class="etapas">${etapas}</div></div>`;
 }
-
 async function receber(arquivos) {
   for (const a of arquivos) {
-    if (!/\.pdf$/i.test(a.name)) continue;
-    try { await api.enviarPdf(a); } catch (e) { demoEnvios.unshift({arquivo: a.name, etapa: 0, estado: 'falhou', mensagem: e.message}); }
+    if (!/\.pdf$/i.test(a.name)) { toast(`${a.name} não é PDF.`); continue; }
+    try { await api.enviarPdf(a); } catch (e) { toast(e.message); }
   }
   desenhar();
 }
 
-async function telaListas() {
-  cacheListas = await api.listas();
-  document.getElementById('contagem-listas').textContent = cacheListas.length || '';
-  const disciplinas = [...new Set(cacheListas.map(l => l.disciplina).filter(Boolean))].sort();
-  const filtradas = cacheListas.filter(l =>
-    (!tela.filtro || (l.nome + ' ' + l.descricao).toLowerCase().includes(tela.filtro.toLowerCase())) &&
-    (!tela.disciplina || l.disciplina === tela.disciplina));
+// ---- Banco de questões
+async function telaBanco(foco) {
+  const todas = await api.banco();
+  const achadas = filtrar(todas, filtroBanco);
+  const visiveis = achadas.slice(0, LIMITE_LINHAS);
+  const todasMarcadas = visiveis.length > 0 && visiveis.every(q => selecionadas.has(q.id));
+  const listas = selecionadas.size ? await api.listas() : [];
   principal.innerHTML = `
-    <div class="cab"><h1>Listas de questões</h1><button class="botao primario" data-tela-ir="enviar">+ Enviar lista</button></div>
-    <div class="filtros">
-      <input class="campo" id="filtro" placeholder="Filtrar pelo nome…" value="${esc(tela.filtro)}" aria-label="Filtrar pelo nome">
-      <select class="campo" id="disciplina" aria-label="Disciplina"><option value="">Todas as disciplinas</option>
-        ${disciplinas.map(d => `<option ${d === tela.disciplina ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select>
+    <div class="cab"><div><h1>Banco de questões</h1>
+      <div class="resumo-lista"><span>${todas.length} questões no banco</span><span>${achadas.length} com estes filtros</span></div></div>
+      <button class="botao" id="limpar" ${Object.values(filtroBanco).some(Boolean) ? '' : 'disabled'}>Limpar filtros</button></div>
+    ${htmlFiltros(todas, filtroBanco, 'fb')}
+    <div class="gerenciar">
+      <div class="painel lista-q tabela-wrap"><table>
+        <thead><tr><th class="marcar"><input type="checkbox" id="marcar-todas" ${todasMarcadas ? 'checked' : ''} aria-label="Selecionar todas as questões filtradas"></th>
+          <th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th>Assuntos</th></tr></thead>
+        <tbody>${visiveis.map(q => `
+          <tr class="clicavel ${q.id === tela.questaoBanco ? 'sel' : ''}" data-q="${esc(q.id)}" tabindex="0">
+            <td class="marcar"><input type="checkbox" data-marcar="${esc(q.id)}" ${selecionadas.has(q.id) ? 'checked' : ''} aria-label="Selecionar ${esc(q.titulo)}"></td>
+            <td title="${esc(q.titulo)}"><div style="white-space:nowrap">${esc(tituloCurto(q.titulo))}</div><div style="color:var(--fraco);font-size:12px">${esc(q.lista_origem || '')}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td class="num">${q.ano || '—'}</td><td>${DIFICULDADE[q.dificuldade]}</td>
+            <td>${(q.assuntos || []).map(a => `<span class="tag">${esc(a)}</span>`).join('')}${q.erros ? ' <span class="selo erro">erro</span>' : q.avisos ? ' <span class="selo alerta">revisar</span>' : ''}</td></tr>`).join('')
+          || `<tr><td colspan="6" class="vazio">${todas.length ? 'Nenhuma questão com esses filtros.' : 'O banco está vazio. Envie um PDF em Enviar lista.'}</td></tr>`}</tbody></table>
+        ${achadas.length > LIMITE_LINHAS ? `<div class="mais">Mostrando ${LIMITE_LINHAS} de ${achadas.length}. Refine os filtros para ver as demais.</div>` : ''}</div>
+      <section class="painel detalhe" id="detalhe" aria-label="Detalhes da questão">
+        ${tela.questaoBanco ? '<p class="vazio">Carregando…</p>' : '<p class="vazio">Clique numa questão para ver os detalhes.</p>'}</section>
     </div>
+    ${selecionadas.size ? `<div class="barra-sel" id="barra-sel">
+      <span class="cont">${selecionadas.size} questão(ões) selecionada(s)</span>
+      ${criandoLista ? `<form class="form-linha" id="form-nova">
+          <input class="campo" id="nova-nome" placeholder="Nome da lista, ex.: Lista de Revisão MCU" required>
+          <input class="campo" id="nova-descricao" placeholder="Descrição (opcional)">
+          <button class="botao primario" type="submit">Criar lista</button><button class="botao" type="button" id="cancelar-nova">Cancelar</button></form>`
+        : `<button class="botao primario" id="nova-lista">Criar lista com as selecionadas</button>
+          ${listas.length ? `<select class="campo" id="destino" aria-label="Lista de destino">${listas.map(l => `<option value="${esc(l.id)}">${esc(l.nome)}</option>`).join('')}</select>
+          <button class="botao" id="adicionar">Adicionar à lista</button>` : ''}
+          <button class="botao" id="desmarcar">Limpar seleção</button>`}
+    </div>` : ''}`;
+
+  ligarFiltros(principal, filtroBanco, id => telaBanco().then(() => refocar(id)));
+  document.getElementById('limpar').addEventListener('click', () => { Object.assign(filtroBanco, FILTRO_VAZIO); telaBanco(); });
+  document.getElementById('marcar-todas')?.addEventListener('change', e => {
+    visiveis.forEach(q => e.target.checked ? selecionadas.add(q.id) : selecionadas.delete(q.id)); telaBanco();
+  });
+  principal.querySelectorAll('[data-marcar]').forEach(c => {
+    c.addEventListener('click', e => e.stopPropagation());
+    c.addEventListener('change', () => { c.checked ? selecionadas.add(c.dataset.marcar) : selecionadas.delete(c.dataset.marcar); telaBanco(); });
+  });
+  principal.querySelectorAll('tr[data-q]').forEach(tr => {
+    const abrir = () => { tela.questaoBanco = tr.dataset.q; telaBanco(); };
+    tr.addEventListener('click', abrir);
+    tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+  });
+  document.getElementById('nova-lista')?.addEventListener('click', () => { criandoLista = true; telaBanco().then(() => refocar('nova-nome')); });
+  document.getElementById('cancelar-nova')?.addEventListener('click', () => { criandoLista = false; telaBanco(); });
+  document.getElementById('desmarcar')?.addEventListener('click', () => { selecionadas.clear(); telaBanco(); });
+  document.getElementById('form-nova')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const ordem = todas.filter(q => selecionadas.has(q.id)).map(q => q.id);
+    const comuns = campo => { const v = [...new Set(todas.filter(q => selecionadas.has(q.id)).map(q => q[campo]))]; return v.length === 1 ? v[0] : null; };
+    try {
+      const l = await api.criarLista({nome: document.getElementById('nova-nome').value.trim(),
+        descricao: document.getElementById('nova-descricao').value.trim(), questoes: ordem,
+        disciplina: comuns('disciplina'), topico: comuns('topico'),
+        tags: [...new Set(todas.filter(q => selecionadas.has(q.id)).flatMap(q => q.assuntos || []))]});
+      selecionadas.clear(); criandoLista = false; toast('Lista criada.'); ir('lista', {lista: l.id});
+    } catch (err) { toast(err.message); }
+  });
+  document.getElementById('adicionar')?.addEventListener('click', async () => {
+    const id = document.getElementById('destino').value;
+    const {lista} = await api.lista(id);
+    const novas = todas.filter(q => selecionadas.has(q.id) && !lista.questoes.includes(q.id)).map(q => q.id);
+    await api.atualizarLista(id, {questoes: [...lista.questoes, ...novas]});
+    toast(`${novas.length} questão(ões) adicionada(s) a ${lista.nome}.`); selecionadas.clear(); telaBanco();
+  });
+  if (tela.questaoBanco) {
+    const d = document.getElementById('detalhe');
+    d.innerHTML = detalheQuestao(await api.questao(tela.questaoBanco));
+    tipografar(d);
+    principal.querySelector('tr.sel')?.scrollIntoView({block: 'nearest'});
+  }
+}
+
+// ---- Listas
+async function telaListas() {
+  const listas = await api.listas();
+  principal.innerHTML = `
+    <div class="cab"><h1>Listas de questões</h1><button class="botao primario" id="nova">+ Nova lista</button></div>
     <div class="painel tabela-wrap"><table>
       <thead><tr><th>Nome</th><th>Qtd. questões</th><th>Descrição</th><th>Disciplina</th><th>Tópico</th><th>Tags</th><th>Situação</th></tr></thead>
-      <tbody>${filtradas.length ? filtradas.map(l => `
-        <tr ${l.status === 'aguardando_transcricao' ? 'class="pendente" title="Ainda sem transcrição"' : `class="clicavel" data-lista="${esc(l.id)}" tabindex="0"`}>
-          <td><strong>${esc(l.nome)}</strong></td><td class="num">${l.total_questoes}</td><td>${esc(l.descricao)}</td>
+      <tbody>${listas.map(l => `
+        <tr class="clicavel" data-lista="${esc(l.id)}" tabindex="0">
+          <td><strong>${esc(l.nome)}</strong>${l.origem ? '<div style="color:var(--fraco);font-size:12px">do PDF importado</div>' : ''}</td>
+          <td class="num">${l.total_questoes}</td><td>${esc(l.descricao || '—')}</td>
           <td>${esc(l.disciplina || '—')}</td><td>${esc(l.topico || '—')}</td>
           <td>${(l.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</td>
-          <td>${selo(l.status)}</td></tr>`).join('')
-        : `<tr><td colspan="7" class="vazio">${cacheListas.length ? 'Nenhuma lista com esse filtro.' : 'Nenhuma lista ainda. Envie o primeiro PDF na tela Enviar lista.'}</td></tr>`}</tbody>
+          <td>${situacao(l)}</td></tr>`).join('')
+        || '<tr><td colspan="7" class="vazio">Nenhuma lista ainda. Envie um PDF ou crie uma lista a partir do banco.</td></tr>'}</tbody>
     </table></div>`;
-  const f = document.getElementById('filtro');
-  f.addEventListener('input', () => { tela.filtro = f.value; telaListas().then(() => { const n = document.getElementById('filtro'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); });
-  document.getElementById('disciplina').addEventListener('change', e => { tela.disciplina = e.target.value; telaListas(); });
-  principal.querySelector('[data-tela-ir]').addEventListener('click', () => ir('enviar'));
+  document.getElementById('nova').addEventListener('click', async () => {
+    const l = await api.criarLista({nome: 'Nova lista'}); ir('lista', {lista: l.id});
+  });
   principal.querySelectorAll('[data-lista]').forEach(tr => {
-    const abrir = () => ir('lista', {lista: tr.dataset.lista, questao: 0});
+    const abrir = () => ir('lista', {lista: tr.dataset.lista});
     tr.addEventListener('click', abrir);
     tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
   });
 }
+function situacao(l) {
+  if (!l.total_questoes) return '<span class="selo info">Vazia</span>';
+  if (l.erros) return `<span class="selo erro">${l.erros} com erro</span>`;
+  if (l.enviada) return '<span class="selo ok">Enviada ao banco</span>';
+  if (l.avisos) return `<span class="selo alerta">${l.avisos} para revisar</span>`;
+  return '<span class="selo ok">Pronta para envio</span>';
+}
 
-async function telaLista() {
-  const dados = await api.lista(tela.lista);
-  const l = dados.lista, val = dados.validacao || {}, r = dados.resumo;
-  const q = l.questoes[tela.questao] || l.questoes[0];
+// ---- Gerenciamento de questões (selecionadas × buscar)
+let confirmandoExclusao = false;
+async function telaGerenciar() {
+  const [{lista, resumo, questoes}, todas] = await Promise.all([api.lista(tela.lista), api.banco()]);
+  const naLista = new Set(lista.questoes);
+  const achadas = filtrar(todas, filtroBusca);
+  const visiveis = achadas.slice(0, LIMITE_LINHAS);
   principal.innerHTML = `
     <div class="migalha"><button data-voltar>Listas</button><span>›</span><span>Gerenciamento de questões</span></div>
-    <div class="cab"><div><h1>${esc(l.nome)}</h1>
-      <div class="resumo-lista"><span>${l.questoes.length} questões</span><span>${esc(l.disciplina || '')} · ${esc(l.topico || '')}</span>
-      <span>${selo(r.status)}</span><span>${r.erros} erro(s) · ${r.avisos} aviso(s)</span></div></div>
-      <button class="botao primario" id="enviar-banco" ${r.status === 'com_erros' ? 'disabled' : ''}>Enviar ao banco</button></div>
-    <div class="gerenciar">
-      <div class="painel lista-q tabela-wrap"><table>
-        <thead><tr><th>#</th><th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th></th></tr></thead>
-        <tbody>${l.questoes.map((x, i) => {
-          const v = val[x.numero] || {erros: [], avisos: []};
-          const marca = v.erros.length ? '<span class="selo erro">erro</span>' : (v.avisos.length ? '<span class="selo alerta">revisar</span>' : '');
-          return `<tr class="clicavel ${i === tela.questao ? 'sel' : ''}" data-q="${i}" tabindex="0">
-            <td class="num">${x.numero}</td><td title="${esc(x.titulo)}" style="white-space:nowrap">${esc(tituloCurto(x.titulo))}</td><td>${esc(x.instituicao || '—')}</td>
-            <td class="num">${x.ano || '—'}</td><td>${DIFICULDADE[x.dificuldade]}</td><td>${marca}</td></tr>`;
-        }).join('')}</tbody></table></div>
-      <section class="painel detalhe" id="detalhe" aria-label="Detalhes da questão">${detalheQuestao(q, val[q.numero], l)}</section>
+    <div class="cab"><div><h1>${esc(lista.nome)}</h1>
+      <div class="resumo-lista"><span>${questoes.length} questões</span>${situacao(resumo)}${lista.origem ? '<span>lista do PDF importado</span>' : ''}</div></div>
+      <div class="form-linha" style="width:auto">
+        ${confirmandoExclusao ? `<span class="confirmar">Excluir esta lista? As questões continuam no banco.
+            <button class="botao perigo" id="sim-excluir">Excluir</button><button class="botao" id="nao-excluir">Cancelar</button></span>`
+          : '<button class="botao perigo" id="excluir">Excluir lista</button>'}
+        <button class="botao primario" id="enviar-banco" ${resumo.erros || !questoes.length ? 'disabled' : ''}>Enviar ao banco</button></div></div>
+    <form class="edicao" id="form-lista">
+      <label>Nome<input class="campo" id="lista-nome" value="${esc(lista.nome)}" required></label>
+      <label>Descrição<input class="campo" id="lista-descricao" value="${esc(lista.descricao || '')}"></label>
+      <button class="botao" type="submit">Salvar nome e descrição</button>
+    </form>
+    <div class="dois-paineis">
+      <section class="painel"><div class="titulo-painel"><h2>Questões selecionadas</h2><span class="resumo-lista" style="margin:0">${questoes.length}</span></div>
+        <div class="rolagem tabela-wrap"><table>
+          <thead><tr><th>#</th><th>Título</th><th>Instituição</th><th>Disciplina</th><th>Ano</th><th></th></tr></thead>
+          <tbody>${questoes.map((q, i) => `<tr>
+            <td class="num">${i + 1}</td><td title="${esc(q.titulo)}">${esc(tituloCurto(q.titulo))}<div style="color:var(--fraco);font-size:12px">${esc(q.lista_origem || '')}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td>${esc(q.disciplina)}</td><td class="num">${q.ano || '—'}</td>
+            <td><div class="acoes">
+              <button class="icone" data-mover="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${ICONE.subir}</button>
+              <button class="icone" data-mover="${i}" data-dir="1" ${i === questoes.length - 1 ? 'disabled' : ''} aria-label="Descer">${ICONE.descer}</button>
+              <button class="icone ver" data-ver="${esc(q.id)}" aria-label="Ver questão">${ICONE.ver}</button>
+              <button class="icone tirar" data-tirar="${esc(q.id)}" aria-label="Tirar da lista">${ICONE.tirar}</button></div></td></tr>`).join('')
+            || '<tr><td colspan="6" class="vazio">Lista vazia. Adicione questões pela busca ao lado.</td></tr>'}</tbody></table></div></section>
+      <section class="painel"><div class="titulo-painel"><h2>Buscar questões</h2><span class="resumo-lista" style="margin:0">${achadas.length} no banco</span></div>
+        <div class="corpo-painel">${htmlFiltros(todas, filtroBusca, 'fg')}</div>
+        <div class="rolagem tabela-wrap"><table>
+          <thead><tr><th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th></th></tr></thead>
+          <tbody>${visiveis.map(q => `<tr>
+            <td title="${esc(q.titulo)}">${esc(tituloCurto(q.titulo))}<div style="color:var(--fraco);font-size:12px">${esc(q.lista_origem || '')}</div></td>
+            <td>${esc(q.instituicao || '—')}</td><td class="num">${q.ano || '—'}</td><td>${DIFICULDADE[q.dificuldade]}</td>
+            <td><div class="acoes"><button class="icone ver" data-ver="${esc(q.id)}" aria-label="Ver questão">${ICONE.ver}</button>
+              <button class="icone por" data-por="${esc(q.id)}" ${naLista.has(q.id) ? 'disabled title="Já está na lista"' : ''} aria-label="Adicionar à lista">${ICONE.por}</button></div></td></tr>`).join('')
+            || '<tr><td colspan="5" class="vazio">Nenhuma questão com esses filtros.</td></tr>'}</tbody></table>
+          ${achadas.length > LIMITE_LINHAS ? `<div class="mais">Mostrando ${LIMITE_LINHAS} de ${achadas.length}. Refine os filtros.</div>` : ''}</div></section>
     </div>`;
-  principal.querySelector('[data-voltar]').addEventListener('click', () => ir('listas'));
-  principal.querySelectorAll('[data-q]').forEach(tr => {
-    const abrir = () => { tela.questao = +tr.dataset.q; telaLista(); };
-    tr.addEventListener('click', abrir);
-    tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+
+  const salvar = async d => { try { await api.atualizarLista(lista.id, d); } catch (e) { toast(e.message); } };
+  principal.querySelector('[data-voltar]').addEventListener('click', () => { confirmandoExclusao = false; ir('listas'); });
+  document.getElementById('form-lista').addEventListener('submit', async e => {
+    e.preventDefault();
+    await salvar({nome: document.getElementById('lista-nome').value.trim(), descricao: document.getElementById('lista-descricao').value.trim()});
+    toast('Lista salva.'); telaGerenciar();
+  });
+  principal.querySelectorAll('[data-mover]').forEach(b => b.addEventListener('click', async () => {
+    const i = +b.dataset.mover, j = i + +b.dataset.dir, ordem = [...lista.questoes];
+    [ordem[i], ordem[j]] = [ordem[j], ordem[i]];
+    await salvar({questoes: ordem}); telaGerenciar();
+  }));
+  principal.querySelectorAll('[data-tirar]').forEach(b => b.addEventListener('click', async () => {
+    await salvar({questoes: lista.questoes.filter(i => i !== b.dataset.tirar)}); telaGerenciar();
+  }));
+  principal.querySelectorAll('[data-por]').forEach(b => b.addEventListener('click', async () => {
+    await salvar({questoes: [...lista.questoes, b.dataset.por]}); telaGerenciar();
+  }));
+  principal.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => abrirModal(b.dataset.ver)));
+  ligarFiltros(principal, filtroBusca, id => telaGerenciar().then(() => refocar(id)));
+  document.getElementById('excluir')?.addEventListener('click', () => { confirmandoExclusao = true; telaGerenciar(); });
+  document.getElementById('nao-excluir')?.addEventListener('click', () => { confirmandoExclusao = false; telaGerenciar(); });
+  document.getElementById('sim-excluir')?.addEventListener('click', async () => {
+    confirmandoExclusao = false; await api.excluirLista(lista.id); toast('Lista excluída.'); ir('listas');
   });
   document.getElementById('enviar-banco').addEventListener('click', async ev => {
     const b = ev.currentTarget; b.disabled = true; b.textContent = 'Enviando…';
-    try { await api.enviarBanco(tela.lista); b.textContent = 'Enviada'; }
-    catch (e) { b.textContent = 'Enviar ao banco'; b.disabled = false; mostrarErro(e.message); }
+    try { await api.enviarBanco(lista.id); toast('Lista enviada ao banco.'); telaGerenciar(); }
+    catch (e) { b.textContent = 'Enviar ao banco'; b.disabled = false; toast(e.message); }
   });
-  principal.querySelector('tr.sel')?.scrollIntoView({block: 'nearest'});
-  tipografar(document.getElementById('detalhe'));
 }
 
-function mostrarErro(msg) {
-  const d = document.getElementById('detalhe');
-  d.insertAdjacentHTML('afterbegin', `<ul class="avisos erro sem-tex"><li>${esc(msg)}</li></ul>`);
+async function abrirModal(id) {
+  const q = await api.questao(id);
+  const camada = document.getElementById('camada');
+  camada.innerHTML = `<div class="modal-fundo" id="modal-fundo"><section class="painel detalhe modal" role="dialog" aria-modal="true" aria-label="Detalhes da questão">
+    <button class="botao fechar" id="fechar">Fechar</button>${detalheQuestao(q)}</section></div>`;
+  const fechar = () => { camada.innerHTML = ''; document.removeEventListener('keydown', esc_); };
+  const esc_ = e => e.key === 'Escape' && fechar();
+  document.addEventListener('keydown', esc_);
+  document.getElementById('fechar').addEventListener('click', fechar);
+  document.getElementById('fechar').focus();
+  document.getElementById('modal-fundo').addEventListener('click', e => e.target.id === 'modal-fundo' && fechar());
+  tipografar(camada);
 }
 
-function detalheQuestao(q, v = {erros: [], avisos: []}, lista) {
-  const figs = Object.fromEntries((q.figuras || []).map(f => [f.nome, f.url || api.arquivo(lista.id, f.arquivo)]));
+function detalheQuestao(q) {
+  const figs = Object.fromEntries((q.figuras || []).map(f => [f.nome, f.url || api.arquivo(q.origem, f.arquivo)]));
   const alts = Object.entries(q.alternativas).map(([letra, texto]) => `
     <div class="alt"><span class="letra">${letra}</span><div class="conteudo">${md(texto, figs)}</div>
       <span class="chave ${letra === q.gabarito ? 'on' : ''}" role="img" aria-label="${letra === q.gabarito ? 'Correta' : 'Incorreta'}"></span></div>`).join('');
+  const erros = q.erros || [], avisos = q.avisos || [];
   return `
     <h2>Detalhes da questão</h2>
-    ${v.erros.length ? `<ul class="avisos erro sem-tex">${v.erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
-    ${v.avisos.length ? `<ul class="avisos alerta sem-tex">${v.avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    ${erros.length ? `<ul class="avisos erro sem-tex">${erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    ${avisos.length ? `<ul class="avisos alerta sem-tex">${avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
     <div><div class="rotulo">Título da pergunta (uso interno)</div><div class="valor">${esc(q.titulo)}</div></div>
     <div class="grade">
       <div><div class="rotulo">Instituição</div><div class="valor">${esc(q.instituicao || '—')}</div></div>
@@ -407,15 +678,12 @@ function detalheQuestao(q, v = {erros: [], avisos: []}, lista) {
     </div>
     <div><div class="rotulo">Alternativas</div><div class="alternativas">
       <div class="alt cab-alt"><span>#</span><span>Conteúdo da alternativa</span><span style="justify-self:center">Correta?</span></div>${alts}</div></div>
-    <details class="original"><summary>Ver original no PDF (página ${q.pagina})</summary><img src="${api.arquivo(lista.id, q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
+    <details class="original"><summary>Ver original no PDF (${esc(q.lista_origem || '')}, página ${q.pagina})</summary><img src="${api.arquivo(q.origem, q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
 }
 
 document.getElementById('modo').textContent = DEMO
-  ? 'Demonstração com a lista de exemplo. No app local, os PDFs são processados de verdade.'
-  : 'App local · os dados ficam na pasta saida/';
-(async () => {
-  try { const ls = await api.listas(); document.getElementById('contagem-listas').textContent = ls.length || ''; } catch {}
-  if (DEMO) { tela.nome = 'listas'; }
-  desenhar();
-})();
+  ? 'Demonstração: as listas que você criar aqui ficam só nesta página e somem ao recarregar.'
+  : 'App local · dados em saida/ (banco) e saida/_listas.json (listas)';
+if (DEMO) tela.nome = 'banco';
+desenhar();
 </script>

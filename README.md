@@ -31,21 +31,24 @@ PDF ──segmentar──▶ recortes + figuras + manifesto ──transcrever (I
 pip install -r requirements.txt
 ```
 
-## App web (envio + listas cadastradas)
+## App web
 
 ```
 python -m upq.web            # http://localhost:8000
 ```
 
 - **Enviar lista**: arraste um ou vários PDFs; cada um mostra as etapas
-  (recorte → transcrição → validação → pronta para envio).
-- **Listas**: a tabela das listas (nome, quantidade, descrição, disciplina, tópico, tags,
-  situação). Clique numa lista para ver as questões; clique numa questão para ver os detalhes
-  como na plataforma (título interno, instituição, disciplina, tópico, enunciado renderizado,
-  assuntos, dificuldade, ano, alternativas com "Correta?") e o recorte original do PDF.
-- **Enviar ao banco** manda a lista ao Supabase (precisa de `SUPABASE_URL` e `SUPABASE_SECRET_KEY`).
+  (recorte → transcrição → validação → no banco). As questões vão para o **banco geral** e o
+  PDF gera a sua lista ("Lista de <título>").
+- **Banco de questões**: todas as questões, com filtros por texto, disciplina, tópico, assunto,
+  instituição, ano e dificuldade. Marque questões e crie uma lista nova ou adicione a uma existente.
+- **Listas**: listas virtuais (apontam para questões do banco). Ao abrir uma, o gerenciamento
+  mostra "Questões selecionadas" (reordenar, ver, tirar) e "Buscar questões" (filtros e adicionar).
+  **Enviar ao banco** manda ao Supabase as importações usadas e a lista
+  (precisa de `SUPABASE_URL` e `SUPABASE_SECRET_KEY`).
 
-`python -m upq.web --demo demo.html` gera um HTML único, sem servidor, com as listas de `saida/`.
+As listas ficam em `saida/_listas.json`. `python -m upq.web --demo demo.html` gera um HTML
+único, sem servidor, com o banco e as listas de `saida/`.
 
 ## Uso pela linha de comando
 
@@ -89,11 +92,15 @@ Migrações em `supabase/migrations/`, já aplicadas no projeto `wrexjikxwjqwxcs
 | Tabela | Conteúdo |
 |---|---|
 | `topicos` | base oficial de tópicos (166 pares disciplina/tópico, de `dados/base_topicos.txt`) |
-| `listas` | uma linha por PDF: nome, descrição, tags (`hash_pdf` único: reenviar atualiza) |
-| `questoes` | enunciado, `alternativas` (JSON A–E), gabarito, assuntos, figuras, dificuldade, etapa |
+| `importacoes` | um PDF importado (`hash_pdf` único: reenviar atualiza as mesmas questões) |
+| `questoes` | banco geral: enunciado, `alternativas` (JSON A–E), gabarito, assuntos, figuras, dificuldade, etapa, `publicada` |
+| `listas` | listas virtuais: nome, descrição, disciplina, tópico, tags, status |
+| `lista_questoes` | quais questões estão em cada lista, e em que ordem |
 
 - Texto rico é **Markdown + LaTeX** (`$...$`, `$$...$$`); figuras são `![descrição](URL pública)`.
-- `importar_lista(p jsonb)` grava a lista inteira numa transação e nunca apaga questões.
+- `importar_lista(p jsonb)` grava as questões de um PDF no banco geral e a lista padrão dele,
+  numa transação, sem nunca apagar questões. `salvar_lista(p jsonb)` cria ou atualiza uma lista
+  virtual a partir de `{hash_pdf, numero}` das questões.
 - RLS: leitura pública só de listas `publicada`; escrita só com a chave secreta.
 - Figuras no bucket público `figuras`.
 
