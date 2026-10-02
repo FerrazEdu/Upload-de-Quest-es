@@ -110,7 +110,7 @@ def partes_da_pagina(pagina, colunas, fundo, figuras_pagina):
 def fora_do_recorte(pagina, partes, fundo, figuras_pagina) -> list[tuple[pymupdf.Rect, str]]:
     """Texto ou imagem da página fora de todas as partes (a barra Questão NN e faixas de etapa
     não contam)."""
-    dentro = lambda r: any(r.x0 >= pt["regiao"].x0 - 6 and r.x1 <= pt["regiao"].x1 + 6
+    dentro = lambda r: any(r.x0 >= pt["regiao"].x0 - 6 and r.x1 <= pt["regiao"].x1 + max(8, 0.08 * pt["regiao"].width)
                            and pt["regiao"].y0 <= (r.y0 + r.y1) / 2 <= pt["regiao"].y1 + 2 for pt in partes)
     saida = []
     for texto, r in linhas(pagina):

@@ -341,18 +341,18 @@ function trechosCentralizados(t) {
 // Trava contra vazamento: nenhum trecho do PDF pode aparecer na transcrição mais vezes do que
 // aparece no PDF (ex.: cabeçalho de tabela repetido como título). Igual a upq/validar.py.
 function conferirRepeticoes(textoPdf, transcrito) {
-  const linhas = String(textoPdf || '').split('\n').slice(1).map(l => soAlnum(l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '')));
+  const linhas = String(textoPdf || '').split('\n').slice(1).filter(l => !l.startsWith(MARCA_OCR)).map(l => soAlnum(l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '')));
   const pdf = linhas.join(''), tr = soAlnum(transcrito);
   const conta = (t, n) => t.split(n).length - 1;
   const repetidos = [...new Set(linhas.filter(n => n.length >= 12))].filter(n => conta(tr, n) > conta(pdf, n));
   if (!repetidos.length) return [];
-  const original = String(textoPdf).split('\n').slice(1).map(l => l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '').trim());
+  const original = String(textoPdf).split('\n').slice(1).filter(l => !l.startsWith(MARCA_OCR)).map(l => l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '').trim());
   return ['trecho repetido na transcrição (aparece mais vezes do que no PDF): ' + repetidos.slice(0, 3).map(n => `«${(original.find(l => soAlnum(l) === n) || n).slice(0, 60)}»`).join('; ')];
 }
 function conferirFormatacao(textoPdf, transcrito) {
   const erros = [], faltamN = [], faltamC = [];
   const negrito = trechosNegrito(transcrito), centro = trechosCentralizados(transcrito);
-  for (let l of String(textoPdf || '').split('\n').slice(1)) {
+  for (let l of String(textoPdf || '').split('\n').slice(1).filter(l => !l.startsWith(MARCA_OCR))) {
     const cent = l.startsWith('[centralizado] ');
     l = l.replace(/^\[centralizado\] /, '');
     for (const m of l.matchAll(/\*\*(.+?)\*\*/g)) { const n = soAlnum(m[1]); if (n.replace(/[0-9]/g, '').length >= 4 && !negrito.includes(n)) faltamN.push(m[1].trim()); }
@@ -364,7 +364,7 @@ function conferirFormatacao(textoPdf, transcrito) {
   return erros;
 }
 function conferirComPdf(textoPdf, transcrito) {
-  textoPdf = String(textoPdf || '').replace(/\[centralizado\] /g, '').replace(/\*\*/g, '');
+  textoPdf = String(textoPdf || '').split('\n').filter(l => !l.startsWith(MARCA_OCR)).join('\n').replace(/\[centralizado\] /g, '').replace(/\*\*/g, '');
   const avisos = [];
   const corpo = String(textoPdf || '').split('\n').slice(1).filter(l => !/^\s*\(?(Fonte|Disponível em)/.test(l)).join('\n');
   const digitos = transcrito.replace(/\D/g, '');
@@ -407,10 +407,12 @@ function validarQuestao(q, lista) {
   const tabelasImg = new Set((q.figuras || []).filter(f => f.tabela).map(f => f.nome));
   const comoImagem = [...tabelasImg].filter(n => usadas.has(n));
   const temTabela = Object.values(campos).some(t => /<table|^\s*\|/m.test(String(t || '')));
-  if (tabelasImg.size && q.lidaSemImagem)
-    erros.push(`tabela colada como imagem no PDF (${[...tabelasImg].join(', ')}): os dados só existem na imagem e esta leitura foi feita sem imagem. Reprocesse com leitura por imagem (claude.ai no navegador).`);
+  const porOcr = new Set(q.tabelasOcr || []), semDados = [...tabelasImg].filter(n => !porOcr.has(n));
+  if (tabelasImg.size && q.lidaSemImagem && semDados.length)
+    erros.push(`tabela colada como imagem no PDF (${semDados.join(', ')}): os dados só existem na imagem e esta leitura foi feita sem imagem nem OCR. Clique em Reprocessar.`);
   else if (comoImagem.length) erros.push(`tabela colada como imagem no PDF usada como figura (${comoImagem.join(', ')}): transcreva-a como tabela`);
   else if (tabelasImg.size && !temTabela) erros.push(`tabela da imagem não foi transcrita (${[...tabelasImg].join(', ')})`);
+  if (q.lidaSemImagem && porOcr.size && !comoImagem.length && temTabela) avisos.push(`tabela lida por OCR do print (${[...porOcr].join(', ')}): confira os valores com o original`);
   const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
   erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
@@ -461,8 +463,10 @@ const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
 Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
 camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
 "m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem (use os NOMES
-informados no ponto em que o texto se refere a elas). Figura marcada como TABELA: os dados dela só
-existem na imagem — não invente nada: não use a figura, não escreva a tabela e marque revisar = true.
+informados no ponto em que o texto se refere a elas). Figura marcada como TABELA: se o texto traz a
+marca [TABELA DA FIGURA NOME — lida por OCR], transcreva essas linhas como tabela nesse ponto (só
+corrija erros óbvios de OCR) e não use a figura; sem essa marca, não invente nada: não use a figura,
+não escreva a tabela e marque revisar = true.
 Marque revisar = true sempre que uma fórmula,
 expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
 function porChamada() { return comImagens() ? (cap.limites?.images ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 2) : 5; }
@@ -491,7 +495,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.tabela ? ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura' : ''})`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.tabela ? (q.ocr?.[f.nome] && !comImagens() ? ', é uma TABELA colada como imagem: o conteúdo dela está no texto abaixo, na marca [TABELA DA FIGURA ' + f.nome + '] (lido por OCR); transcreva-a como tabela e NÃO use esta figura' : ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura') : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
@@ -503,7 +507,11 @@ ${q.textoPdf}
 - ATENÇÃO, NOVA TENTATIVA: a transcrição anterior desta questão foi rejeitada pela validação por:
 ${q.correcao.map(e => `  * ${e}`).join('\n')}
   Refaça a questão inteira a partir ${comImagens() ? 'da imagem' : 'do texto'}, corrigindo esses pontos.${q.assuntosValidos ? `
-  Assuntos válidos deste tópico (escolha 1 ou 2, grafia exata): ${q.assuntosValidos.join('; ')}` : ''}` : ''}`;
+  Assuntos válidos deste tópico (escolha 1 ou 2, grafia exata): ${q.assuntosValidos.join('; ')}` : ''}${q.anterior ? `
+  Enunciado da transcrição anterior (referência de posição das figuras e tabelas; refaça a questão inteira):
+<<<
+${q.anterior}
+>>>` : ''}` : ''}`;
   }).join('\n\n');
   const fixos = ctx.disciplina ? `\nDisciplina e tópico da lista (use exatamente): ${ctx.disciplina} / ${ctx.topico}` : '';
   const img = comImagens();
@@ -645,19 +653,263 @@ function normalizarIA(r, q, ctx) {
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), revisar: !!r.revisar || !oficial,
+    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), tabelasOcr: Object.keys(q.ocr || {}), revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
+}
+
+// ============================================================ OCR de tabela colada como imagem
+// Quando o Claude desta visualização não recebe imagens, o próprio app lê a tabela do print:
+// a grade dá as células, e cada célula é lida pelo Tesseract (arquivos publicados com a página,
+// em ocr/). O texto lido entra no texto da questão, no ponto da figura, para o Claude montar a tabela.
+const ocr = {estado: 'não usado', erro: null, worker: null, carregando: null};
+const urlLocal = caminho => new URL(caminho, location.href).href;
+function carregarScript(src) {
+  return new Promise((ok, falha) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => falha(new Error(`não carregou ${src}`)); document.head.appendChild(el); });
+}
+async function workerOcr() {
+  if (ocr.worker) return ocr.worker;
+  if (ocr.carregando) return ocr.carregando;
+  ocr.estado = 'carregando';
+  ocr.carregando = (async () => {
+    try {
+      if (!window.Tesseract) await carregarScript(urlLocal('ocr/tesseract.min.js'));
+      // os dados do idioma vão como script (.js): o artefato não serve .gz; o worker os recebe por um
+      // fetch interceptado antes de carregar o worker do Tesseract
+      const embrulho = `importScripts(${JSON.stringify(urlLocal('ocr/por-dados.js'))});
+const _bytes = Uint8Array.from(atob(self.UPQ_POR_TRAINEDDATA_GZ_B64), c => c.charCodeAt(0));
+const _fetch = self.fetch.bind(self);
+self.fetch = (u, o) => /\\.traineddata(\\.gz)?$/.test(String(u)) ? Promise.resolve(new Response(_bytes)) : _fetch(u, o);
+importScripts(${JSON.stringify(urlLocal('ocr/worker.min.js'))});`;
+      const workerPath = URL.createObjectURL(new Blob([embrulho], {type: 'application/javascript'}));
+      const w = await Tesseract.createWorker('por', 1, {workerPath, workerBlobURL: false, corePath: urlLocal('ocr/'), langPath: urlLocal('ocr'), gzip: true, cacheMethod: 'none'});
+      await w.setParameters({tessedit_pageseg_mode: '7'});
+      ocr.worker = w; ocr.estado = 'pronto'; ocr.erro = null;
+      return w;
+    } catch (e) {
+      ocr.estado = 'falhou'; ocr.erro = e?.message || String(e); ocr.carregando = null;
+      throw e;
+    }
+  })();
+  return ocr.carregando;
+}
+// Uma célula: cinza → limiar automático (Otsu) → texto escuro sobre claro (polaridade pela maioria),
+// 2× maior, com margem. Palavras: Tesseract. Células curtas (letra, número, X²⁻): glifo a glifo por
+// modelos desenhados no navegador, com expoente pela altura/posição do glifo.
+async function lerCelula(w, origem, x, y, cw, ch) {
+  const ins = 3, W = Math.max(1, cw - 2 * ins), H = Math.max(1, ch - 2 * ins), esc = 2, pad = 20;
+  const c = document.createElement('canvas'); c.width = W * esc + 2 * pad; c.height = H * esc + 2 * pad;
+  const ctx = c.getContext('2d', {willReadFrequently: true});
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(origem, x + ins, y + ins, W, H, pad, pad, W * esc, H * esc);
+  const BW = W * esc, BH = H * esc;
+  const d = ctx.getImageData(pad, pad, BW, BH), px = d.data, n = BW * BH;
+  const lum = new Uint8Array(n), hist = new Uint32Array(256);
+  for (let i = 0, k = 0; k < n; i += 4, k++) { lum[k] = Math.round(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]); hist[lum[k]]++; }
+  let soma = 0; for (let t = 0; t < 256; t++) soma += t * hist[t];
+  let sB = 0, wB = 0, melhor = 0, limiar = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+    sB += t * hist[t]; const mB = sB / wB, mF = (soma - sB) / wF, v = wB * wF * (mB - mF) ** 2;
+    if (v > melhor) { melhor = v; limiar = t; }
+  }
+  let escuros = 0; for (let k = 0; k < n; k++) if (lum[k] <= limiar) escuros++;
+  const textoEscuro = escuros <= n / 2;   // o texto é a minoria dos pixels
+  const bin = new Uint8Array(n);
+  for (let k = 0, i = 0; k < n; k++, i += 4) {
+    const tinta = textoEscuro ? lum[k] <= limiar : lum[k] > limiar;
+    bin[k] = tinta ? 1 : 0; px[i] = px[i + 1] = px[i + 2] = tinta ? 0 : 255;
+  }
+  ctx.putImageData(d, pad, pad);
+  if (melhor / (n * n) < 50 || !bin.some(Boolean)) return '';   // célula vazia (sem contraste)
+  const todos = glifosDe(bin, BW, BH);
+  const hMax = Math.max(0, ...todos.map(g => g.h));
+  const glifos = Object.assign(todos.filter(g => g.h >= 0.35 * hMax || g.w >= 0.35 * hMax), {rot: todos.rot});   // sem pontos soltos
+  // célula com mais de uma linha de texto (cabeçalho quebrado): agrupa os glifos pelo centro vertical
+  const pre = glifosDe(bin, BW, BH).filter(g => g.h >= 6);
+  const hMed = pre.length ? pre.map(g => g.h).sort((x, y) => x - y)[Math.floor(pre.length / 2)] : 0;
+  const grupos = [];
+  for (const g of pre.filter(g => g.h <= 1.6 * hMed).sort((x, y) => (x.y0 + x.y1) - (y.y0 + y.y1))) {   // glifo alto (letras de duas linhas encostadas) não liga as linhas
+    const yc = (g.y0 + g.y1) / 2, u = grupos[grupos.length - 1];
+    if (u && yc - u.yc < 0.8 * hMed) { u.y0 = Math.min(u.y0, g.y0); u.y1 = Math.max(u.y1, g.y1); u.yc = yc; u.n++; }
+    else grupos.push({y0: g.y0, y1: g.y1, yc, n: 1});
+  }
+  const altas = grupos.filter(f => f.n >= 2);
+  let texto, conf;
+  if (altas.length >= 2) {
+    const partes = [];
+    let confs = 100;
+    for (const f of altas) {
+      const lc = document.createElement('canvas'); lc.width = c.width; lc.height = f.y1 - f.y0 + 1 + 2 * pad;
+      const lx = lc.getContext('2d'); lx.fillStyle = '#fff'; lx.fillRect(0, 0, lc.width, lc.height);
+      lx.drawImage(c, 0, pad + Math.max(0, f.y0 - 4), c.width, f.y1 - f.y0 + 9, 0, pad - 4, c.width, f.y1 - f.y0 + 9);
+      const rl = await w.recognize(lc); partes.push(rl.data.text.replace(/\s+/g, ' ').trim()); confs = Math.min(confs, rl.data.confidence);
+    }
+    texto = partes.filter(Boolean).join(' '); conf = confs;
+  } else {
+    const r = await w.recognize(c);
+    texto = r.data.text.replace(/\s+/g, ' ').trim(); conf = r.data.confidence;
+  }
+  const so = texto.replace(/\s/g, '');
+  // algarismos romanos de traços (I, II, III): o Tesseract não lê; conta as barras verticais ("1" é algarismo: não entra)
+  const barras = glifos.length && glifos.every(g => g.h >= 0.6 * hMax && g.w <= 0.45 * g.h) ? glifos.length : 0;
+  if (barras && (!so || /^[|lI!\[\]]+$/.test(so))) return 'I'.repeat(barras);
+  // expoente (X²⁻, Ca²⁺): glifo a glifo, que separa o expoente pela altura e posição
+  const base = Math.max(0, ...glifos.filter(g => g.h >= 0.7 * hMax).map(g => g.y1));
+  const temExpoente = glifos.length >= 2 && glifos.length <= 6 && !/[a-zà-ú]{3,}/i.test(so) && glifos.some(g => g.h < 0.72 * hMax && g.y1 < base - 0.35 * hMax);
+  if (temExpoente) { const l = lerGlifos(bin, BW, glifos, CARACTERES_OCR); if (l && l.nota > 0.35) return l.texto; }
+  // número com dígito engolido pelo Tesseract ("11" lido "1"): relê só com dígitos
+  if (/^\d+([,.]\d+)?$/.test(so) && glifos.filter(g => g.h >= 0.6 * hMax).length > so.replace(/[,.]/g, '').length) {
+    const l = lerGlifos(bin, BW, glifos, '0123456789,.'); if (l && l.nota > 0.3) return l.texto;
+  }
+  // um glifo só (rótulo P, Q, Z…) e Tesseract inseguro: modelos de maiúsculas e dígitos
+  if (glifos.length === 1 && !(so.length === 1 && conf >= 85)) { const l = lerGlifos(bin, BW, glifos, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'); if (l && l.nota > 0.45) return l.texto; }
+  return texto;
+}
+// componentes conexos (8-vizinhos) agrupados em glifos (acento/pingo sobre a letra entram juntos)
+function glifosDe(bin, W, H) {
+  const rot = new Int32Array(W * H), comps = [];
+  for (let i = 0; i < bin.length; i++) {
+    if (!bin[i] || rot[i]) continue;
+    const id = comps.length + 1, pilha = [i]; rot[i] = id; let x0 = W, x1 = 0, y0 = H, y1 = 0, nn = 0;
+    while (pilha.length) {
+      const k = pilha.pop(), x = k % W, y = (k - x) / W; nn++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const v = yy * W + xx; if (bin[v] && !rot[v]) { rot[v] = id; pilha.push(v); }
+      }
+    }
+    comps.push({x0, x1, y0, y1, ids: [id], n: nn});
+  }
+  const grandes = comps.filter(c => c.n > 12).sort((a, b) => a.x0 - b.x0);
+  const glifos = [];
+  for (const c of grandes) {   // sobreposição horizontal grande = mesmo glifo (Á, i, ú, %)
+    const vao = (g, c) => Math.max(g.y0, c.y0) - Math.min(g.y1, c.y1);   // espaço vertical entre as caixas
+    const g = glifos.find(g => Math.min(g.x1, c.x1) - Math.max(g.x0, c.x0) > 0.6 * Math.min(g.x1 - g.x0, c.x1 - c.x0) + 1
+      && vao(g, c) < 0.35 * Math.max(g.y1 - g.y0, c.y1 - c.y0) + 2);   // acento logo acima, não a linha de baixo
+    if (g) { g.x0 = Math.min(g.x0, c.x0); g.x1 = Math.max(g.x1, c.x1); g.y0 = Math.min(g.y0, c.y0); g.y1 = Math.max(g.y1, c.y1); g.ids.push(...c.ids); }
+    else glifos.push({...c, ids: [...c.ids]});
+  }
+  glifos.forEach(g => { g.w = g.x1 - g.x0 + 1; g.h = g.y1 - g.y0 + 1; });
+  glifos.rot = rot;
+  return glifos;
+}
+let modelosOcr = null;
+const CARACTERES_OCR = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+−-()%,.';
+function gradeGlifo(get, w, h) {
+  const G = 16, g = new Float32Array(G * G);
+  for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+    let s = 0, t = 0;
+    for (let y = Math.floor(gy * h / G); y < Math.ceil((gy + 1) * h / G); y++) for (let x = Math.floor(gx * w / G); x < Math.ceil((gx + 1) * w / G); x++) { s += get(x, y); t++; }
+    g[gy * G + gx] = t ? s / t : 0;
+  }
+  const m = g.reduce((a, b) => a + b) / g.length; let dd = 0;
+  for (let i = 0; i < g.length; i++) { g[i] -= m; dd += g[i] * g[i]; }
+  dd = Math.sqrt(dd) || 1; for (let i = 0; i < g.length; i++) g[i] /= dd;
+  return g;
+}
+function carregarModelosOcr() {
+  if (modelosOcr) return modelosOcr;
+  modelosOcr = [];
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const ctx = c.getContext('2d', {willReadFrequently: true});
+  for (const f of ['Roboto', 'Inter', 'Arial', 'Helvetica', 'Segoe UI', 'DejaVu Sans', 'Liberation Sans', 'sans-serif'])
+    for (const peso of ['bold', 'normal']) for (const ch of CARACTERES_OCR) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 160, 160); ctx.fillStyle = '#000';
+      ctx.font = `${peso} 100px "${f}"`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center'; ctx.fillText(ch, 80, 115);
+      const dd = ctx.getImageData(0, 0, 160, 160).data;
+      let x0 = 160, y0 = 160, x1 = -1, y1 = -1;
+      for (let y = 0; y < 160; y++) for (let x = 0; x < 160; x++) if (dd[(y * 160 + x) * 4] < 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) continue;
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      modelosOcr.push({ch, ar: w / h, g: gradeGlifo((x, y) => dd[((y0 + y) * 160 + x0 + x) * 4] < 128 ? 1 : 0, w, h)});
+    }
+  return modelosOcr;
+}
+function lerGlifos(bin, W, glifos, conjunto = CARACTERES_OCR) {
+  const modelos = carregarModelosOcr().filter(m => conjunto.includes(m.ch)), rot = glifos.rot;
+  const hMax = Math.max(...glifos.map(g => g.h)), base = Math.max(...glifos.filter(g => g.h >= 0.7 * hMax).map(g => g.y1));
+  let texto = '', simples = '', sup = '', nota = 1;
+  const fecharSup = () => { if (sup) { texto += `^{${sup}}`; sup = ''; } };
+  for (const g of glifos) {
+    const ids = new Set(g.ids), ar = g.w / g.h;
+    // traço (−) e barra (I/1): retângulos chapados, decididos pela proporção (modelo não distingue)
+    const expoente = g.h < 0.72 * hMax && g.y1 < base - 0.35 * hMax;
+    if (ar > 2.5 && g.h < 0.3 * hMax) { if (expoente) sup += '-'; else { fecharSup(); texto += '-'; } simples += '-'; continue; }
+    const soDigitos = !/[A-Za-z]/.test(conjunto);
+    if ((ar < 0.28 || (soDigitos && ar < 0.5)) && g.h >= 0.6 * hMax) { const b = soDigitos ? '1' : 'I'; if (expoente) sup += b; else { fecharSup(); texto += b; } simples += b; continue; }
+    const grade = gradeGlifo((x, y) => ids.has(rot[(g.y0 + y) * W + g.x0 + x]) ? 1 : 0, g.w, g.h);
+    let melhor = {ch: '?', s: -1};
+    for (const m of modelos) {
+      let r = 0; for (let i = 0; i < grade.length; i++) r += grade[i] * m.g[i];
+      r -= 0.25 * Math.abs(Math.log(ar / m.ar));
+      if (r > melhor.s) melhor = {ch: m.ch, s: r};
+    }
+    const ch = melhor.ch === '−' ? '-' : melhor.ch;
+    nota = Math.min(nota, melhor.s);
+    if (expoente) sup += ch; else { fecharSup(); texto += ch; }
+    simples += ch;
+  }
+  fecharSup();
+  return {texto, simples, nota};
+}
+async function ocrDaFigura(blob) {
+  const img = await createImageBitmap(blob);
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  c.getContext('2d', {willReadFrequently: true}).drawImage(img, 0, 0);
+  const E = UPQRecorte.ESCALA;
+  const g = UPQRecorte.gradeDaTabela(c, {x0: 0, y0: 0, x1: c.width / E, y1: c.height / E});
+  if (!g?.celulas?.ys.length || !g.celulas.xs.length) return null;
+  const ox = Math.round(g.x0 * E), oy = Math.round(g.y0 * E), w = await workerOcr();
+  const linhas = [];
+  for (const [y0, y1] of g.celulas.ys) {
+    const linha = [];
+    for (const [x0, x1] of g.celulas.xs) linha.push(await lerCelula(w, c, ox + x0, oy + y0, x1 - x0, y1 - y0));
+    if (linha.some(Boolean)) linhas.push(linha);
+  }
+  return linhas.length ? linhas : null;
+}
+const MARCA_OCR = '[TABELA DA FIGURA ';
+function blocoOcr(nome, linhas) {
+  return [`${MARCA_OCR}${nome} — lida por OCR do print; transcreva-a como tabela neste ponto]`,
+          ...linhas.map(l => '| ' + l.map(c => c.replace(/\|/g, '\\|') || ' ').join(' | ') + ' |')];
+}
+// insere as tabelas lidas no texto da questão, no ponto de cada figura (sem âncora: no fim)
+function comTabelasOcr(texto, figuras, lidas) {
+  // tira blocos de OCR de uma leitura anterior (marca + as linhas "| ..." logo abaixo dela)
+  const linhas = [];
+  let noBloco = false;
+  for (const l of String(texto || '').split('\n')) {
+    if (l.startsWith(MARCA_OCR)) { noBloco = true; continue; }
+    if (noBloco && l.startsWith('| ')) continue;
+    noBloco = false; linhas.push(l);
+  }
+  const alvo = (figuras || []).filter(f => lidas[f.nome]).sort((a, b) => (b.linha ?? linhas.length) - (a.linha ?? linhas.length));
+  for (const f of alvo) linhas.splice(Math.min(f.linha ?? linhas.length, linhas.length), 0, ...blocoOcr(f.nome, lidas[f.nome]));
+  return linhas.join('\n');
+}
+async function lerTabelasPorOcr(job) {
+  const alvos = job.m.questoes.flatMap(q => (q.figuras || []).filter(f => f.tabela && !(q.ocr && q.ocr[f.nome])).map(f => [q, f]));
+  let feitas = 0;
+  for (const [q, f] of alvos) {
+    atualizar(job, {mensagem: `Lendo tabelas coladas como imagem (OCR): ${++feitas} de ${alvos.length}…`});
+    try {
+      const lidas = await ocrDaFigura(f.blob);
+      if (lidas) q.ocr = {...(q.ocr || {}), [f.nome]: lidas};
+    } catch (e) { console.warn('OCR indisponível', e); break; }
+  }
+  for (const q of job.m.questoes) if (q.ocr && !q.ocrNoTexto) { q.textoPdf = comTabelasOcr(q.textoPdf, q.figuras, q.ocr); q.ocrNoTexto = true; }
 }
 
 // ============================================================ reprocessamento de questões com erro
 // Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
 // corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
 // "sem gabarito" e "recorte incompleto" não se resolvem reprocessando; tabela em imagem só com leitura por imagem
-const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e) && !(/os dados só existem na imagem/.test(e) && !comImagens()));
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e) && !(/os dados só existem na imagem/.test(e) && !comImagens() && ocr.estado === 'falhou'));
 function comCorrecao(q, erros, ctx) {
   const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
-  return {...q, correcao: erros, assuntosValidos};
+  return {...q, correcao: erros, assuntosValidos, anterior: q.enunciado || null};
 }
 // Uma rodada: devolve Map numero → questão nova, só quando a nova tem menos erros que a anterior.
 async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}, repetir = true) {
@@ -721,8 +973,16 @@ async function reprocessarQuestoes(qs) {
       const ctx = {titulo: imp.titulo, tipo: imp.tipo, gabarito: imp.gabarito || {}, disciplina: imp.disciplina, topico: imp.topico,
         simulado: imp.tipo === 'simulado' ? dadosSimulado(imp.arquivo) : null};
       const itens = [];
-      for (const q of grupo) itens.push({q, erros: errosReprocessaveis(q), imagem: comImagens() ? await baixarImagem(q.imagem) : null,
+      for (const q0 of grupo) {
+        let q = q0;
+        if (!comImagens() && (q.figuras || []).some(f => f.tabela)) {   // sem imagem: OCR das tabelas-imagem guardadas
+          const lidas = {};
+          for (const f of q.figuras.filter(f => f.tabela)) { try { const l = await ocrDaFigura(await baixarImagem(f.asset)); if (l) lidas[f.nome] = l; } catch (e) { console.warn('OCR', e); } }
+          if (Object.keys(lidas).length) q = {...q, ocr: lidas, textoPdf: comTabelasOcr(q.textoPdf, q.figuras, lidas)};
+        }
+        itens.push({q, erros: errosReprocessaveis(q0), imagem: comImagens() ? await baixarImagem(q.imagem) : null,
         manter: {imagem: q.imagem, figuras: q.figuras, gabaritoRecorte: q.gabaritoRecorte || null}});
+      }
       const melhores = await rodadaCorrecao(itens, ctx, (f) => toast(`Reprocessando: ${feitas + f} de ${qs.length}…`));
       feitas += grupo.length;
       const porParte = new Map();
@@ -763,6 +1023,7 @@ async function processar(job, {reprocessar = false} = {}) {
     const m = job.m;
     if (!job.ctx) {
       if (!comImagens()) { atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: 'Testando se o Claude recebe imagens nesta visualização…'}); await sondarImagens(); }
+      if (!comImagens()) await lerTabelasPorOcr(job);
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).
@@ -874,7 +1135,7 @@ async function salvarNoBanco(job) {
   for (const [pid, parte] of estado.partes)   // reprocessamento com menos questões: some com as partes que sobraram
     if (parte.importacao === id && parte.parte >= nPartes) await cap.db.doc(`partes/${pid}`).delete();
   await cap.db.doc(`importacoes/${id}`).set({arquivo: m.arquivo, hash: m.hash, titulo: m.titulo, tipo: m.tipo,
-    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito, gabaritoOrigem: ctx.gabaritoOrigem, gabaritoImagem,
+    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito, gabaritoOrigem: ctx.gabaritoOrigem, gabaritoImagem, modoLeitura: comImagens() ? 'imagem' : 'texto', testeImagem: cap.sonda || null, ocrEstado: ocr.estado, ocrErro: ocr.erro,
     classificacao: ctx.classificacao, criado_em: estado.importacoes.get(id)?.criado_em || agora(), atualizado_em: agora()});
   const padrao = [...estado.listas.entries()].find(([, l]) => l.origem === id);
   const listaId = padrao ? padrao[0] : id;
@@ -936,8 +1197,10 @@ function telaEnviar() {
       <li>Imagens anunciadas: ${cap.limites?.images ? 'sim' : 'não'}</li>
       <li>Teste real com imagem: ${!cap.sonda ? 'ainda não feito' : esc(cap.sonda.estado) + (cap.sonda.codigo ? ` · código ${esc(cap.sonda.codigo)}` : '') + (cap.sonda.mensagem ? ` · ${esc(cap.sonda.mensagem)}` : '')}</li>
       <li>Modo em uso: ${comImagens() ? 'leitura pela imagem' : 'só texto'}</li>
+      <li>OCR de tabelas em imagem (usado no modo só texto): ${esc(ocr.estado)}${ocr.erro ? ` · ${esc(ocr.erro)}` : ''}</li>
       <li>Navegador: ${esc(navigator.userAgent)}</li></ul>
-      <button class="botao" id="testar-imagem" ${cap.sonda?.estado === 'testando' ? 'disabled' : ''}>Testar leitura de imagem agora</button></details>` : ''}
+      <div class="form-linha"><button class="botao" id="testar-imagem" ${cap.sonda?.estado === 'testando' ? 'disabled' : ''}>Testar leitura de imagem agora</button>
+      <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button></div></details>` : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
@@ -948,6 +1211,7 @@ function telaEnviar() {
     <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${porChamada()} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
     <div class="envios" id="envios"></div>`;
   document.getElementById('testar-imagem')?.addEventListener('click', () => sondarImagens(true));
+  document.getElementById('testar-ocr')?.addEventListener('click', async () => { ocr.estado = 'carregando'; ocr.carregando = null; ocr.worker = null; desenhar(); try { await workerOcr(); toast('OCR pronto.'); } catch (e) { toast(`OCR falhou: ${e.message || e}`); } desenhar(); });
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
   input.addEventListener('change', () => { receber(input.files); input.value = ''; });
   ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); if (!bloqueado) zona.classList.add('ativo'); }));

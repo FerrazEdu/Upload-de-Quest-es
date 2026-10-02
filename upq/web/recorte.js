@@ -22,6 +22,69 @@ const UPQRecorte = (() => {
   // umaColuna: página com questões na largura toda (sem divisão em duas colunas)
   // negrito(fontName): se a fonte do pedaço é negrito (nome da fonte embutida no PDF).
   // Cada linha sai com `texto` (puro) e `marcado` (trechos em negrito entre **).
+  // Negrito pela espessura do traço, PALAVRA A PALAVRA: nas fontes Type3 destas listas a mesma fonte
+  // desenha letras normais e em negrito ("Assinale a alternativa CORRETA:" é um pedaço só), então não
+  // há nome nem fonte que diga o peso. Na página renderizada, cada pedaço é separado em palavras pelos
+  // vãos de tinta; o traço médio de cada palavra (relativo ao tamanho da letra) bem acima do da
+  // página = negrito.
+  function tracoDe(px, W, X0, X1, Y0, Y1) {
+    const runs = [];
+    for (let y = Y0; y < Y1; y++) {
+      let run = 0;
+      for (let x = X0; x < X1; x++) {
+        const j = (y * W + x) * 4, escuro = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2] < 120;
+        if (escuro) run++; else if (run) { runs.push(run); run = 0; }
+      }
+      if (run) runs.push(run);
+    }
+    if (runs.length < 4) return null;
+    runs.sort((a, b) => a - b);
+    const teto = 2.5 * runs[Math.floor(runs.length / 2)], uteis = runs.filter(r => r <= teto);   // sem barras de "e", "t"
+    return uteis.reduce((a, b) => a + b, 0) / uteis.length;
+  }
+  function negritoPorPalavra(canvas, ...listasDeLinhas) {
+    const W = canvas.width, H = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const medidas = [];   // {token, razao}
+    const vistos = new Set();
+    for (const linhas of listasDeLinhas) for (const l of linhas) for (const t of l.trechos || []) {
+      if (vistos.has(t) || !(t.h > 3) || !t.t.trim()) continue;
+      vistos.add(t);
+      const X0 = Math.max(0, Math.floor(t.x0 * ESCALA)), X1 = Math.min(W, Math.ceil(t.x1 * ESCALA));
+      const Y0 = Math.max(0, Math.round((t.base - 0.62 * t.h) * ESCALA)), Y1 = Math.min(H, Math.round((t.base - 0.1 * t.h) * ESCALA));
+      if (X1 - X0 < 4 || Y1 - Y0 < 3) continue;
+      // colunas com tinta → segmentos (palavras) separados por vãos de pelo menos 1/4 da altura da letra
+      const tem = [];
+      for (let x = X0; x < X1; x++) { let k = false; for (let y = Y0; y < Y1 && !k; y++) { const j = (y * W + x) * 4; k = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2] < 120; } tem.push(k); }
+      const vaoMin = Math.max(2, 0.22 * t.h * ESCALA), segs = [];
+      let ini = -1, ultimo = -1e9;
+      tem.forEach((k, i) => { if (!k) return; if (ini < 0) ini = i; else if (i - ultimo > vaoMin) { segs.push([ini, ultimo]); ini = i; } ultimo = i; });
+      if (ini >= 0) segs.push([ini, ultimo]);
+      const tokens = t.t.split(/(\s+)/), palavras = tokens.filter(x => x.trim());
+      if (segs.length !== palavras.length) continue;   // não deu para casar palavra e segmento: fica sem marca
+      t.palavras = tokens.map(tok => ({t: tok, negrito: false}));
+      let k = 0;
+      for (const tok of t.palavras) {
+        if (!tok.t.trim()) continue;
+        const [a0, a1] = segs[k++];
+        const traco = tracoDe(px, W, X0 + a0, X0 + a1 + 1, Y0, Y1);
+        // só palavras de 3+ letras/dígitos: letra de alternativa (em círculo pintado) e palavras curtas dão medida falsa
+        if (traco && (tok.t.match(/[A-Za-zÀ-ú0-9]/g) || []).length >= 3) medidas.push({tok, razao: traco / (t.h * ESCALA), n: tok.t.length});
+      }
+    }
+    if (medidas.length < 8) return;
+    // referência = traço típico das palavras da página (ponderado por letras; a maioria é texto corrido)
+    const pesos = medidas.flatMap(m => Array(Math.min(12, m.n)).fill(m.razao)).sort((a, b) => a - b);
+    const corpo = pesos[Math.floor(pesos.length * 0.4)];
+    for (const m of medidas) if (m.razao >= 1.22 * corpo) m.tok.negrito = true;
+  }
+  const marcadoDe = l => {
+    if (!l.trechos) return l.marcado;
+    const partes = l.trechos.flatMap(t => t.palavras ? t.palavras.map(p => ({t: p.t, negrito: t.negrito || p.negrito})) : [{t: t.t, negrito: t.negrito}]);
+    // espaço entre duas palavras em negrito fica dentro do negrito ("**alternativa CORRETA**")
+    partes.forEach((p, i) => { if (!p.t.trim()) p.negrito = !!(partes[i - 1]?.negrito && partes[i + 1]?.negrito); });
+    return marcarNegrito(partes);
+  };
+
   // Junta trechos vizinhos de mesmo peso e põe ** em volta dos negritos (espaços ficam fora).
   function marcarNegrito(trechos) {
     const runs = [];
@@ -43,7 +106,7 @@ const UPQRecorte = (() => {
       if (!it.str) continue;
       const [x, y] = viewport.convertToViewportPoint(it.transform[4], it.transform[5]);
       const h = it.height || Math.hypot(it.transform[2], it.transform[3]) || 8;
-      pedacos.push({str: it.str, x0: x, x1: x + (it.width || 0), base: y, h, col: x < meio ? 0 : 1, negrito: negrito(it.fontName)});
+      pedacos.push({str: it.str, x0: x, x1: x + (it.width || 0), base: y, h, col: x < meio ? 0 : 1, negrito: negrito(it.fontName), fonte: it.fontName});
     }
     pedacos.sort((a, b) => a.col - b.col || a.base - b.base || a.x0 - b.x0);
     const linhas = [];
@@ -60,10 +123,10 @@ const UPQRecorte = (() => {
         // sobreposição > 1 pt: a largura do pedaço anterior incluía o espaço final (o pdf.js o tira do texto)
         const espaco = fim !== null && (p.x0 - fim > 1.5 || fim - p.x0 > 1) && !texto.endsWith(' ') && !p.str.startsWith(' ') ? ' ' : '';
         texto += espaco + p.str; fim = p.x1;
-        trechos.push({t: espaco + p.str, negrito: p.negrito});
+        trechos.push({t: espaco + p.str, negrito: p.negrito, fonte: p.fonte, x0: p.x0, x1: p.x1, base: p.base, h: p.h});
       }
       const h = Math.max(...l.pedacos.map(p => p.h));
-      return {texto, marcado: marcarNegrito(trechos), col: l.col, x0: Math.min(...l.pedacos.map(p => p.x0)), x1: Math.max(...l.pedacos.map(p => p.x1)),
+      return {texto, marcado: marcarNegrito(trechos), trechos, col: l.col, x0: Math.min(...l.pedacos.map(p => p.x0)), x1: Math.max(...l.pedacos.map(p => p.x1)),
               y0: l.base - h, y1: l.base + h * 0.25, base: l.base};
     });
   }
@@ -143,7 +206,23 @@ const UPQRecorte = (() => {
     const vs = linhasDe(W, H, (x, y) => tinta[y * W + x], Math.round(0.8 * (base - topo))).filter(v => v.a0 >= esq - 4 && v.a1 <= dir + 4 && fina(v));
     if (vs.length < 2 || vs[0].a0 - esq > 0.05 * W || dir - vs[vs.length - 1].a1 > 0.05 * W) return null;
     const m = 2 * ESCALA;
-    return {x0: (X + esq - m) / ESCALA, y0: (Y + topo - m) / ESCALA, x1: (X + dir + m) / ESCALA, y1: (Y + base + m) / ESCALA};
+    // Células: separadores = fios finos + bordas das faixas pintadas (o cabeçalho pintado, que o
+    // texto branco parte em pedaços, vira UMA linha da tabela).
+    const faixas = [];
+    for (const g of grade) {
+      const u = faixas[faixas.length - 1];
+      if (u && !fina(g) && !u.fina && g.a0 - u.a1 < 12 * ESCALA) { u.a1 = g.a1; continue; }
+      faixas.push({a0: g.a0, a1: g.a1, fina: fina(g)});
+    }
+    const cortes = [];
+    for (const f of faixas) { if (f.fina) cortes.push([f.a0, f.a1]); else { cortes.push([f.a0, f.a0]); cortes.push([f.a1, f.a1]); } }
+    const ys = [];
+    for (let i = 0; i + 1 < cortes.length; i++) { const a = cortes[i][1] + 1, b = cortes[i + 1][0] - 1; if (b - a >= 4 * ESCALA) ys.push([a, b]); }
+    const xs = [];
+    for (let i = 0; i + 1 < vs.length; i++) { const a = vs[i].a1 + 1, b = vs[i + 1].a0 - 1; if (b - a >= 4 * ESCALA) xs.push([a, b]); }
+    const ox = esq - m, oy = topo - m;   // células relativas à caixa devolvida, na escala do render
+    return {x0: (X + esq - m) / ESCALA, y0: (Y + topo - m) / ESCALA, x1: (X + dir + m) / ESCALA, y1: (Y + base + m) / ESCALA,
+            celulas: {ys: ys.map(([a, b]) => [a - oy, b - oy]), xs: xs.map(([a, b]) => [a - ox, b - ox])}};
   }
 
   // Ordem de leitura das figuras: por faixas horizontais (figuras lado a lado, como alternativas
@@ -561,7 +640,7 @@ const UPQRecorte = (() => {
         if (comCabecalho && i === 0) return l.texto;
         const centralizada = l.texto.trim().length >= 3 && l.x1 - l.x0 < 0.8 * largura && l.x0 - esq > 0.06 * largura
           && (Math.abs((l.x0 + l.x1) / 2 - centro) < 0.04 * largura || Math.abs((l.x0 + l.x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-        return (centralizada ? '[centralizado] ' : '') + l.marcado;
+        return (centralizada ? '[centralizado] ' : '') + marcadoDe(l);
       });
       const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
@@ -581,7 +660,8 @@ const UPQRecorte = (() => {
       const centradas = new Set(faixas.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++)
-        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k), blob: await recortar(canvas, aparadas[k])});
+        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k),
+          linha: daParte.filter(l => (l.y0 + l.y1) / 2 < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
       // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
       const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
@@ -600,6 +680,7 @@ const UPQRecorte = (() => {
       if (!temCab && !continua) { semQuestao.push(p); if (p.pn > ultimaComQuestao) aberta = null; continue; }
       progresso({etapa: 'recortando', pagina: p.pn, total: doc.numPages});
       const canvas = await renderizar(p.page);
+      negritoPorPalavra(canvas, p.uma.linhas, p.duas.linhas);
       const imagens = (await imagensDaPagina(p.page, p.vp)).filter(r =>
         r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
       // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
@@ -621,7 +702,7 @@ const UPQRecorte = (() => {
         parte.dono = aberta;
       }
       // Trava: nenhum texto ou imagem da página pode ficar fora de todas as partes.
-      const dentroDe = r => partes.find(pt => r.x0 >= pt.regiao.x0 - 6 && r.x1 <= pt.regiao.x1 + 6 && (r.y0 + r.y1) / 2 >= pt.regiao.y0 && (r.y0 + r.y1) / 2 <= pt.regiao.y1 + 2);
+      const dentroDe = r => partes.find(pt => r.x0 >= pt.regiao.x0 - 6 && r.x1 <= pt.regiao.x1 + Math.max(8, 0.08 * (pt.regiao.x1 - pt.regiao.x0)) && (r.y0 + r.y1) / 2 >= pt.regiao.y0 && (r.y0 + r.y1) / 2 <= pt.regiao.y1 + 2);
       const dono = r => (partes.filter(pt => pt.dono && (r.y0 + r.y1) / 2 >= pt.regiao.y0 - 2).sort((a, b) => b.regiao.y0 - a.regiao.y0)[0] || partes.find(pt => pt.dono))?.dono;
       for (const l of m.linhas) {
         // a barra "Questão NN" é da própria questão (às vezes passa uns pontos do meio da página)
@@ -634,7 +715,9 @@ const UPQRecorte = (() => {
     for (const q of questoes) {
       const nn = String(q.numero).padStart(2, '0');
       q.textoPdf = q.partes.flatMap(pt => pt.texto).join('\n');
-      q.figuras = q.partes.flatMap(pt => pt.figuras).map((f, k) => ({nome: `Q${nn}_fig${k + 1}`, ...f}));
+      let base = 0;
+      q.figuras = q.partes.flatMap(pt => { const fs = pt.figuras.map(f => ({...f, linha: base + f.linha})); base += pt.texto.length; return fs; })
+        .map((f, k) => ({nome: `Q${nn}_fig${k + 1}`, ...f}));
       q.regioes = q.partes.map(pt => ({pagina: pt.pagina, ...pt.regiao}));
       q.imagem = await juntarRecortes(q.partes.map(pt => pt.recorte));
       delete q.partes;
@@ -695,5 +778,6 @@ const UPQRecorte = (() => {
     };
   }
 
-  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, gradeDaTabela, ETAPAS};
+  return {segmentar, gabaritoNaImagem, gabaritoEmTexto, linhasDaPagina, gradeDaTabela, ETAPAS, ESCALA,
+};
 })();
