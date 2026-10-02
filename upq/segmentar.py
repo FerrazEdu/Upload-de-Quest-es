@@ -64,40 +64,63 @@ def limites_colunas(pagina):
     return [(0, pagina.rect.width)] if cruzam >= 3 else duas_colunas(pagina)
 
 
-def regioes(pagina, colunas, fundo, figuras_pagina):
-    """Regiões das questões num modelo de colunas e o que ficou fora de todas elas."""
-    cabecalhos = []
+def fim_da_barra(pagina, r) -> float | None:
+    """Até onde vai a barra colorida da "Questão NN" (retângulo preenchido atrás do texto)."""
+    y = (r.y0 + r.y1) / 2
+    fins = [d["rect"].x1 for d in pagina.get_drawings()
+            if d.get("fill") and d["rect"].y0 - 1 <= y <= d["rect"].y1 + 1 and d["rect"].x0 - 1 <= r.x0 + 2 <= d["rect"].x1
+            and d["rect"].height < 40 and max(d["fill"]) - min(d["fill"]) > 0.1]
+    return max(fins) if fins else None
+
+
+def cabecalhos_da_pagina(pagina, colunas):
+    saida = []
     for texto, r in linhas(pagina):
         m = RE_QUESTAO.match(texto)
         if m and r.y0 > MARGEM_TOPO:
             col = 0 if len(colunas) == 1 or r.x0 < colunas[0][1] else 1
-            cabecalhos.append((col, r.y0, int(m.group(1).replace(" ", ""))))
-    saida = []
-    for col in range(len(colunas)):
-        na_coluna = sorted((y, n) for c, y, n in cabecalhos if c == col)
-        x0, x1 = colunas[col]
-        for i, (y, numero) in enumerate(na_coluna):
-            y_fim = na_coluna[i + 1][0] - 2 if i + 1 < len(na_coluna) else fundo - 2
-            saida.append({"col": col, "numero": numero, "regiao": pymupdf.Rect(x0 + 2, y - 2, x1 - 2, y_fim), "fora": []})
-    if not saida:
-        return saida, 0
-    dentro = lambda r: any(r.x0 >= q["regiao"].x0 - 6 and r.x1 <= q["regiao"].x1 + 6
-                           and q["regiao"].y0 <= (r.y0 + r.y1) / 2 <= q["regiao"].y1 + 2 for q in saida)
-    dono = lambda r: max((q for q in saida if (r.y0 + r.y1) / 2 >= q["regiao"].y0 - 2),
-                         key=lambda q: q["regiao"].y0, default=saida[0])
-    primeira = min(y for _, y, _ in cabecalhos) - 4
-    perdidos = 0
+            saida.append({"col": col, "y": r.y0, "r": r, "numero": int(m.group(1).replace(" ", ""))})
+    return saida
+
+
+def tem_conteudo(pagina, regiao, figuras_pagina) -> bool:
     for texto, r in linhas(pagina):
-        if texto.strip() in ETAPAS or len(texto.strip()) < 2:   # faixa de etapa entre questões não é conteúdo
+        t = texto.strip()
+        if len(t) >= 2 and t not in ETAPAS and regiao.contains(pymupdf.Point((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)):
+            return True
+    return any(regiao.contains(pymupdf.Point((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2)) for f in figuras_pagina)
+
+
+def partes_da_pagina(pagina, colunas, fundo, figuras_pagina):
+    """Partes em ordem de leitura: "nova" (começa numa barra Questão NN) ou "continuacao" (topo
+    de coluna antes da 1ª barra, ou coluna sem barra: o resto da questão anterior)."""
+    cabs = cabecalhos_da_pagina(pagina, colunas)
+    partes = []
+    for col, (x0, x1) in enumerate(colunas):
+        na_coluna = sorted((c for c in cabs if c["col"] == col), key=lambda c: c["y"])
+        topo = pymupdf.Rect(x0 + 2, MARGEM_TOPO, x1 - 2, (na_coluna[0]["y"] if na_coluna else fundo) - 2)
+        if topo.height > 6 and tem_conteudo(pagina, topo, figuras_pagina):
+            partes.append({"tipo": "continuacao", "col": col, "regiao": topo})
+        for i, c in enumerate(na_coluna):
+            y_fim = na_coluna[i + 1]["y"] - 2 if i + 1 < len(na_coluna) else fundo - 2
+            partes.append({"tipo": "nova", "col": col, "numero": c["numero"], "regiao": pymupdf.Rect(x0 + 2, c["y"] - 2, x1 - 2, y_fim)})
+    return partes, cabs
+
+
+def fora_do_recorte(pagina, partes, fundo, figuras_pagina) -> list[tuple[pymupdf.Rect, str]]:
+    """Texto ou imagem da página fora de todas as partes (a barra Questão NN e faixas de etapa
+    não contam)."""
+    dentro = lambda r: any(r.x0 >= pt["regiao"].x0 - 6 and r.x1 <= pt["regiao"].x1 + 6
+                           and pt["regiao"].y0 <= (r.y0 + r.y1) / 2 <= pt["regiao"].y1 + 2 for pt in partes)
+    saida = []
+    for texto, r in linhas(pagina):
+        t = texto.strip()
+        if len(t) < 2 or t in ETAPAS or RE_QUESTAO.match(texto) or not (MARGEM_TOPO <= r.y0 < fundo - 2):
             continue
-        if primeira <= r.y0 < fundo - 2 and not dentro(r):
-            perdidos += 1
-            dono(r)["fora"].append(texto.strip()[:80])
-    for f in figuras_pagina:
-        if primeira <= f.y0 < fundo and not dentro(f):
-            perdidos += 1
-            dono(f)["fora"].append("[imagem]")
-    return saida, perdidos
+        if not dentro(r):
+            saida.append((r, t[:80]))
+    saida += [(f, "[imagem]") for f in figuras_pagina if MARGEM_TOPO <= f.y0 < fundo and not dentro(f)]
+    return saida
 
 
 def fim_da_coluna(pagina):
@@ -109,13 +132,16 @@ def fim_da_coluna(pagina):
         and pymupdf.Rect(im["bbox"]).width > pagina.rect.width * 0.8
         and pymupdf.Rect(im["bbox"]).y0 > pagina.rect.height * 0.8
     ]
+    # sem o fio: o texto do rodapé ("Plataforma Assaad"), como no recorte do navegador
+    if not candidatos:
+        candidatos = [r.y0 - 8 for t, r in linhas(pagina) if r.y0 > pagina.rect.height * 0.85 and re.search("Plataforma|Assaad", t)]
     return min(candidatos) if candidatos else pagina.rect.height - 30
 
 
 NEGRITO = re.compile(r"bold|black|heavy|semibold|demibold|extrabold|,b$", re.I)
 
 
-def mancha(pagina, regiao) -> tuple[float, float]:
+def mancha(pagina, regiao, com_cabecalho: bool = True) -> tuple[float, float]:
     """Extensão horizontal do texto da questão (sem a barra do cabeçalho)."""
     rs = [pymupdf.Rect(sp["bbox"]) for b in pagina.get_text("dict", clip=regiao)["blocks"]
           for l in b.get("lines", []) for sp in l["spans"] if sp["text"].strip()]
@@ -123,7 +149,7 @@ def mancha(pagina, regiao) -> tuple[float, float]:
     if len(rs) < 2:
         return regiao.x0, regiao.x1
     topo = min(r.y0 for r in rs)
-    corpo = [r for r in rs if r.y0 > topo + 3] or rs
+    corpo = ([r for r in rs if r.y0 > topo + 3] or rs) if com_cabecalho else rs
     return min(r.x0 for r in corpo), max(r.x1 for r in corpo)
 
 
@@ -147,7 +173,7 @@ def figuras_centralizadas(figs, regiao, esq: float, dir_: float) -> set[int]:
     return saida
 
 
-def texto_marcado(pagina, regiao) -> str:
+def texto_marcado(pagina, regiao, com_cabecalho: bool = True) -> str:
     """Texto da questão com a formatação do PDF: trechos em **negrito** (fonte negrito) e
     "[centralizado] " nas linhas cujo centro coincide com o centro da questão (mesma regra
     de upq/web/recorte.js). A 1ª linha (barra "Questão NN  BANCA ANO") sai sem marcas."""
@@ -170,7 +196,7 @@ def texto_marcado(pagina, regiao) -> str:
         else:
             linhas_.append([p])
     # Referência: a mancha de texto da questão (sem a barra do cabeçalho), não a caixa da coluna.
-    corpo = [p for ps in linhas_[1:] for p in ps]
+    corpo = [p for ps in (linhas_[1:] if com_cabecalho else linhas_) for p in ps]
     esq = min((p["r"].x0 for p in corpo), default=regiao.x0)
     dir_ = max((p["r"].x1 for p in corpo), default=regiao.x1)
     largura, centro = max(1.0, dir_ - esq), (esq + dir_) / 2
@@ -194,11 +220,11 @@ def texto_marcado(pagina, regiao) -> str:
             else:
                 marcado += t
         x0, x1 = min(p["r"].x0 for p in ps), max(p["r"].x1 for p in ps)
-        centralizada = (i > 0 and len(texto.strip()) >= 3 and x1 - x0 < 0.8 * largura
+        centralizada = ((i > 0 or not com_cabecalho) and len(texto.strip()) >= 3 and x1 - x0 < 0.8 * largura
                         and x0 - esq > 0.06 * largura
                         and (abs((x0 + x1) / 2 - centro) < 0.04 * largura
                              or abs((x0 + x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura))
-        saida.append(("[centralizado] " if centralizada else "") + (texto if i == 0 else marcado))
+        saida.append(("[centralizado] " if centralizada else "") + (texto if i == 0 and com_cabecalho else marcado))
     return "\n".join(saida).strip()
 
 
@@ -250,6 +276,33 @@ def gabarito_em_texto(pagina) -> dict[str, str]:
     return {f"{int(n):02d}": letra for n, letra in pares}
 
 
+def juntar_recortes(doc, partes) -> "pymupdf.Pixmap":
+    """Imagem da questão: as partes (colunas ou páginas) empilhadas, cada uma só até onde há
+    conteúdo; uma parte só = o recorte da região."""
+    util = []
+    for pt in partes:
+        pagina, r = doc[pt["pagina"] - 1], pt["regiao"]
+        rs = [pymupdf.Rect(b[:4]) for b in pagina.get_text("blocks", clip=r) if b[4].strip()]
+        rs += [pymupdf.Rect(im["bbox"]) & r for im in pagina.get_image_info() if r.intersects(pymupdf.Rect(im["bbox"]))]
+        if rs:
+            r = pymupdf.Rect(r.x0, r.y0 if pt["com_cab"] else max(r.y0, min(x.y0 for x in rs) - 6), r.x1, min(r.y1, max(x.y1 for x in rs) + 8))
+        util.append((pagina, r))
+    if len(util) == 1:
+        return util[0][0].get_pixmap(dpi=DPI_QUESTAO, clip=util[0][1])
+    vao = 6
+    largura = max(r.width for _, r in util)
+    novo = pymupdf.open()
+    folha = novo.new_page(width=largura, height=sum(r.height for _, r in util) + vao * (len(util) - 1))
+    y = 0
+    for i, (pagina, r) in enumerate(util):
+        folha.show_pdf_page(pymupdf.Rect(0, y, r.width, y + r.height), pagina.parent, pagina.number, clip=r)
+        y += r.height
+        if i + 1 < len(util):
+            folha.draw_line((0, y + vao / 2), (largura, y + vao / 2), color=(0.8, 0.8, 0.8), width=0.6)
+            y += vao
+    return folha.get_pixmap(dpi=DPI_QUESTAO)
+
+
 def segmentar(caminho_pdf: Path, saida: Path) -> dict:
     doc = pymupdf.open(caminho_pdf)
     (saida / "questoes").mkdir(parents=True, exist_ok=True)
@@ -260,8 +313,10 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
     questoes = []
     paginas_sem_questao = []
 
+    com_barra = [pn for pn, pg in enumerate(doc, start=1) if cabecalhos_da_pagina(pg, duas_colunas(pg))]
+    ultima_com_questao = max(com_barra, default=0)
+    aberta, uma_anterior = None, False
     for pn, pagina in enumerate(doc, start=1):
-        colunas = limites_colunas(pagina)
         fundo = fim_da_coluna(pagina)
         linhas_texto = []
         for texto, r in linhas(pagina):
@@ -269,52 +324,79 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
                 linhas_texto.append(r)
             if not titulo_lista and texto.startswith("Lista de Exercícios"):
                 titulo_lista = texto.split("|", 1)[-1].strip()
-
         figuras_pagina = [
             pymupdf.Rect(im["bbox"]) for im in pagina.get_image_info()
             if pymupdf.Rect(im["bbox"]).width >= FIGURA_MIN
             and pymupdf.Rect(im["bbox"]).height >= FIGURA_MIN
             and pymupdf.Rect(im["bbox"]).y0 > MARGEM_TOPO
         ]
-        regs, perdidos = regioes(pagina, colunas, fundo, figuras_pagina)
-        if perdidos >= 2 or not regs:   # conteúdo ficou de fora: o outro modelo resolve?
-            outro = duas_colunas(pagina) if len(colunas) == 1 else [(0, pagina.rect.width)]
-            regs2, perdidos2 = regioes(pagina, outro, fundo, figuras_pagina)
-            if regs2 and (perdidos2 < perdidos or not regs):
-                regs = regs2
-
-        if not regs:
-            paginas_sem_questao.append(pn)
-            pagina.get_pixmap(dpi=DPI_QUESTAO).save(saida / "paginas" / f"p{pn}.png")
-            continue
-
-        for reg in regs:
-            col, numero, regiao = reg["col"], reg["numero"], reg["regiao"]
-            figuras = []
+        cabs2 = cabecalhos_da_pagina(pagina, duas_colunas(pagina))
+        if not cabs2:
+            # página sem barra: continuação da questão aberta se tiver texto e não for o gabarito
+            conteudo = [t for t, r in linhas(pagina) if MARGEM_TOPO < r.y0 < fundo and len(t.strip()) >= 2 and t.strip() not in ETAPAS]
+            continua = (aberta is not None and len(conteudo) >= 3 and not any(re.search("gabarito", t, re.I) for t in conteudo)
+                        and not gabarito_em_texto(pagina))
+            if not continua:
+                paginas_sem_questao.append(pn)
+                pagina.get_pixmap(dpi=DPI_QUESTAO).save(saida / "paginas" / f"p{pn}.png")
+                if pn > ultima_com_questao:
+                    aberta = None
+                continue
+        # Modelo da página pela largura da barra "Questão NN" (além do meio = largura toda); sem
+        # barra desenhada, pelo texto que atravessa o meio; página só de continuação segue a anterior.
+        fins = [x for x in (fim_da_barra(pagina, c["r"]) for c in cabs2) if x is not None]
+        if fins:
+            uma = sum(x > pagina.rect.width / 2 + 30 for x in fins) * 2 > len(fins)
+        elif cabs2:
+            uma = len(limites_colunas(pagina)) == 1
+        else:
+            uma = uma_anterior
+        uma_anterior = uma
+        colunas = [(0, pagina.rect.width)] if uma else duas_colunas(pagina)
+        partes, _ = partes_da_pagina(pagina, colunas, fundo, figuras_pagina)
+        for parte in partes:
+            if parte["tipo"] == "nova":
+                aberta = {"numero": parte["numero"], "pagina": pn, "coluna": parte["col"] + 1, "partes": [], "fora": []}
+                questoes.append(aberta)
+            elif aberta is None:
+                continue   # texto antes da 1ª questão (capa, instruções)
+            com_cab = parte["tipo"] == "nova"
+            regiao = parte["regiao"]
             aparadas = [aparar_figura(f, linhas_texto) for f in ordem_de_leitura(
                 [f for f in figuras_pagina if regiao.contains(pymupdf.Point((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2))])]
-            centradas = figuras_centralizadas(aparadas, regiao, *mancha(pagina, regiao))
-            for k, f in enumerate(aparadas, start=1):
-                nome = f"Q{numero:02d}_fig{k}.png"
+            centradas = figuras_centralizadas(aparadas, regiao, *mancha(pagina, regiao, com_cab))
+            aberta["partes"].append({"pagina": pn, "regiao": regiao, "texto": texto_marcado(pagina, regiao, com_cab),
+                                     "figuras": [(f, k in centradas) for k, f in enumerate(aparadas)], "com_cab": com_cab})
+            parte["dono"] = aberta
+        for r, t in fora_do_recorte(pagina, partes, fundo, figuras_pagina):
+            donos = [pt for pt in partes if pt.get("dono") and (r.y0 + r.y1) / 2 >= pt["regiao"].y0 - 2]
+            dono = max(donos, key=lambda pt: pt["regiao"].y0)["dono"] if donos else next((pt["dono"] for pt in partes if pt.get("dono")), None)
+            if dono:
+                dono["fora"].append(t)
+
+    # Junta as partes de cada questão: texto em ordem, figuras numeradas, imagem empilhada.
+    for q in questoes:
+        partes = q.pop("partes")
+        figuras = []
+        for pt in partes:
+            pagina = doc[pt["pagina"] - 1]
+            for f, centralizada in pt["figuras"]:
+                nome = f"Q{q['numero']:02d}_fig{len(figuras) + 1}.png"
                 # Renderiza o recorte em vez de extrair o arquivo da imagem: assim
                 # entram também rótulos desenhados por cima (vetores, ângulos, letras).
                 pagina.get_pixmap(dpi=DPI_FIGURA, clip=f).save(saida / "figuras" / nome)
-                figuras.append({"nome": nome.removesuffix(".png"),
-                                "arquivo": f"figuras/{nome}",
-                                "regiao": [round(v, 1) for v in f],
-                                "centralizada": k - 1 in centradas})
-            nome_q = f"Q{numero:02d}.png"
-            pagina.get_pixmap(dpi=DPI_QUESTAO, clip=regiao).save(saida / "questoes" / nome_q)
-            questoes.append({
-                "numero": numero,
-                "pagina": pn,
-                "coluna": col + 1,
-                "regiao": [round(v, 1) for v in regiao],
-                "imagem": f"questoes/{nome_q}",
-                "texto_pdf": texto_marcado(pagina, regiao),
-                "figuras": figuras,
-                "fora_do_recorte": reg["fora"],
-            })
+                figuras.append({"nome": nome.removesuffix(".png"), "arquivo": f"figuras/{nome}",
+                                "regiao": [round(v, 1) for v in f], "centralizada": centralizada})
+        nome_q = f"Q{q['numero']:02d}.png"
+        juntar_recortes(doc, partes).save(saida / "questoes" / nome_q)
+        q.update({
+            "regiao": [round(v, 1) for v in partes[0]["regiao"]],
+            "regioes": [{"pagina": pt["pagina"], "regiao": [round(v, 1) for v in pt["regiao"]]} for pt in partes],
+            "imagem": f"questoes/{nome_q}",
+            "texto_pdf": "\n".join(pt["texto"] for pt in partes if pt["texto"]),
+            "figuras": figuras,
+            "fora_do_recorte": q.pop("fora"),
+        })
 
     inicio_etapas = etapas_pelo_sumario(doc)
     for q in questoes:

@@ -110,7 +110,8 @@ def tabela_html(linhas: list[str], centralizada: bool = True) -> str:
     for c in (sep or []):
         alinh.append("center" if c.startswith(":") and c.endswith(":") else "right" if c.endswith(":") else
                      "left" if c.startswith(":") else None)
-    st = lambda i: f' style="text-align: {alinh[i]};"' if i < len(alinh) and alinh[i] else ""
+    # texto das células centralizado, como nas tabelas das listas (salvo alinhamento explícito)
+    st = lambda i: f' style="text-align: {alinh[i] if i < len(alinh) and alinh[i] else "center"};"'
     html = (T_CENTRO if centralizada else "<table>") + "<thead><tr>"
     html += "".join(f"<th{st(i)}>{inline_html(c)}</th>" for i, c in enumerate(cab)) + "</tr></thead><tbody>"
     for l in corpo:

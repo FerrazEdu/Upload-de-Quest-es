@@ -57,8 +57,12 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    Dentro do bloco vale o Markdown normal (tabela, ![...](figura:NOME), $LaTeX$, **negrito**).
    No texto extraído, as linhas centralizadas vêm com "[centralizado]" (não copie a marca).
    Texto justificado ou à esquerda fica fora do bloco. Referências seguem a regra 8 (à direita).
-10. COMPLETUDE: nenhuma coluna ou linha de tabela, figura ou trecho do PDF pode faltar. Use
-   TODAS as figuras informadas. Se algo não estiver legível, marque revisar = true.
+10. COMPLETUDE E NADA A MAIS: nenhuma coluna ou linha de tabela, figura ou trecho do PDF pode
+   faltar, e nenhum trecho pode aparecer mais vezes do que no PDF. Use TODAS as figuras
+   informadas. No texto extraído, cada linha de tabela vem numa linha só (o cabeçalho em negrito,
+   ex.: "**Nutriente I II III**"): ela entra SÓ dentro da tabela, nunca também como título ou
+   parágrafo. O título de uma tabela é a linha acima dela (ex.: "Tabela 1: ..."). Se algo não
+   estiver legível, marque revisar = true.
 """
 
 ABERTURA_UMA = """Você transcreve questões de listas de exercícios em PDF para o banco de questões

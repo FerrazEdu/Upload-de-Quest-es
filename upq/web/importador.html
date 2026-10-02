@@ -337,6 +337,17 @@ function trechosCentralizados(t) {
   return [...t.matchAll(/<p style="text-align: center;">([\s\S]*?)<\/p>/g), ...t.matchAll(/<table style="margin-left: auto; margin-right: auto;">([\s\S]*?)<\/table>/g)]
     .map(m => soAlnum(m[1])).join('|');
 }
+// Trava contra vazamento: nenhum trecho do PDF pode aparecer na transcrição mais vezes do que
+// aparece no PDF (ex.: cabeçalho de tabela repetido como título). Igual a upq/validar.py.
+function conferirRepeticoes(textoPdf, transcrito) {
+  const linhas = String(textoPdf || '').split('\n').slice(1).map(l => soAlnum(l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '')));
+  const pdf = linhas.join(''), tr = soAlnum(transcrito);
+  const conta = (t, n) => t.split(n).length - 1;
+  const repetidos = [...new Set(linhas.filter(n => n.length >= 12))].filter(n => conta(tr, n) > conta(pdf, n));
+  if (!repetidos.length) return [];
+  const original = String(textoPdf).split('\n').slice(1).map(l => l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '').trim());
+  return ['trecho repetido na transcrição (aparece mais vezes do que no PDF): ' + repetidos.slice(0, 3).map(n => `«${(original.find(l => soAlnum(l) === n) || n).slice(0, 60)}»`).join('; ')];
+}
 function conferirFormatacao(textoPdf, transcrito) {
   const erros = [], faltamN = [], faltamC = [];
   const negrito = trechosNegrito(transcrito), centro = trechosCentralizados(transcrito);
@@ -395,6 +406,7 @@ function validarQuestao(q, lista) {
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
   erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
   erros.push(...conferirFormatacao(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
+  erros.push(...conferirRepeticoes(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
   if (q.revisar && !q.revisada) avisos.unshift(`IA pediu revisão: ${q.observacoes || '(sem motivo)'}`);
   if (q.revisada) return {erros, avisos: []};
   return {erros, avisos};
@@ -529,7 +541,7 @@ function tabelaHtml(linhas, centralizada = true) {
   const sep = linhas.length > 1 && /^\s*\|?[\s:\-|]+\|?\s*$/.test(linhas[1]) ? celulas(linhas[1]) : null;
   const corpo = sep ? linhas.slice(2) : linhas.slice(1);
   const alinh = (sep || []).map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : null);
-  const st = i => alinh[i] ? ` style="text-align: ${alinh[i]};"` : '';
+  const st = i => ` style="text-align: ${alinh[i] || 'center'};"`;   // células centralizadas, como nas listas
   let html = (centralizada ? T_CENTRO : '<table>') + '<thead><tr>' + cab.map((c, i) => `<th${st(i)}>${inlineHtml(c)}</th>`).join('') + '</tr></thead><tbody>';
   for (const l of corpo) html += '<tr>' + celulas(l).map((c, i) => `<td${st(i)}>${inlineHtml(c)}</td>`).join('') + '</tr>';
   return html + '</tbody></table>';

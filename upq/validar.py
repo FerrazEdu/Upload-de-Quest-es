@@ -97,6 +97,19 @@ def conferir_formatacao(texto_pdf: str, transcricao: str) -> list[str]:
     return erros
 
 
+def conferir_repeticoes(texto_pdf: str, transcricao: str) -> list[str]:
+    """Trava contra vazamento: nenhum trecho do PDF aparece na transcrição mais vezes do que no
+    PDF (ex.: cabeçalho de tabela repetido como título)."""
+    originais = [l.removeprefix("[centralizado] ").replace("**", "").strip() for l in texto_pdf.splitlines()[1:]]
+    linhas = [_so_alnum(l) for l in originais]
+    pdf, tr = "".join(linhas), _so_alnum(transcricao)
+    repetidos = [n for n in dict.fromkeys(linhas) if len(n) >= 12 and tr.count(n) > pdf.count(n)]
+    if not repetidos:
+        return []
+    nomes = [next((o for o in originais if _so_alnum(o) == n), n)[:60] for n in repetidos[:3]]
+    return ["trecho repetido na transcrição (aparece mais vezes do que no PDF): " + "; ".join(f"«{t}»" for t in nomes)]
+
+
 def conferir_com_pdf(texto_pdf: str, transcricao: str) -> list[str]:
     """Compara números e palavras do PDF com a transcrição: o que falta é erro (trecho perdido)."""
     avisos = []
@@ -173,6 +186,7 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
         transcrito = "\n".join([q.enunciado, *q.alternativas.values()])
         erros += conferir_com_pdf(texto_pdf.get(q.numero, ""), transcrito)
         erros += conferir_formatacao(texto_pdf.get(q.numero, ""), transcrito)
+        erros += conferir_repeticoes(texto_pdf.get(q.numero, ""), transcrito)
         if q.revisar:
             avisos.insert(0, f"IA pediu revisão: {q.observacoes or '(sem motivo)'}")
         resultado[q.numero] = {"erros": erros, "avisos": avisos}

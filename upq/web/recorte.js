@@ -131,6 +131,30 @@ const UPQRecorte = (() => {
     return canvas;
   }
 
+  // Recorte (canvas) de uma região, na escala do render; juntarRecortes empilha as partes de uma
+  // questão dividida (colunas ou páginas) numa imagem só, do tamanho que o Claude lê.
+  function recortarCanvas(canvas, r) {
+    const sx = Math.max(0, r.x0 * ESCALA), sy = Math.max(0, r.y0 * ESCALA);
+    const sw = Math.max(1, Math.min(canvas.width - sx, (r.x1 - r.x0) * ESCALA)), sh = Math.max(1, Math.min(canvas.height - sy, (r.y1 - r.y0) * ESCALA));
+    const c = document.createElement('canvas'); c.width = Math.round(sw); c.height = Math.round(sh);
+    c.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  }
+  function juntarRecortes(recortes, {maxPx = MAX_PX_QUESTAO, qualidade = 0.86} = {}) {
+    const vao = recortes.length > 1 ? 6 * ESCALA : 0;
+    const W = Math.max(...recortes.map(c => c.width)), H = recortes.reduce((s, c) => s + c.height, 0) + vao * (recortes.length - 1);
+    const fator = Math.min(1, Math.sqrt(maxPx / (W * H)));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(W * fator)); c.height = Math.max(1, Math.round(H * fator));
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    let y = 0;
+    for (const r of recortes) {
+      ctx.drawImage(r, 0, 0, r.width, r.height, 0, Math.round(y * fator), Math.round(r.width * fator), Math.round(r.height * fator));
+      y += r.height + vao;
+      if (vao && y < H) { ctx.fillStyle = '#d0d0d0'; ctx.fillRect(0, Math.round((y - vao / 2) * fator), c.width, Math.max(1, Math.round(fator * 2))); ctx.fillStyle = '#fff'; }
+    }
+    return new Promise(res => c.toBlob(res, 'image/jpeg', qualidade));
+  }
+
   function recortar(canvas, r, {maxPx = Infinity, tipo = 'image/png', qualidade = 0.88} = {}) {
     const sx = Math.max(0, r.x0 * ESCALA), sy = Math.max(0, r.y0 * ESCALA);
     const sw = Math.min(canvas.width - sx, (r.x1 - r.x0) * ESCALA), sh = Math.min(canvas.height - sy, (r.y1 - r.y0) * ESCALA);
@@ -415,9 +439,9 @@ const UPQRecorte = (() => {
           return !!(f && (f.bold || f.black || /bold|black|heavy|semibold|demibold|extrabold|,b$/i.test(f.name || '')));
         } catch { return false; }
       };
-      // Modelo de duas colunas ou de uma coluna (questões na largura toda): no de duas, nenhum
-      // texto atravessa o meio da página; no de uma, quase toda linha atravessa. É só o palpite
-      // inicial: o recorte confere se algo ficou de fora e, se ficou, tenta o outro modelo.
+      // Os dois modelos de página: duas colunas ou uma coluna (questões na largura toda). Quem
+      // decide é a largura da barra "Questão NN" (medida no recorte); o texto que atravessa o
+      // meio da página é só o plano B, quando a barra não é encontrada.
       const meioPag = vp.width / 2;
       const cruzam = items.filter(it => {
         if (!it.str || it.str.trim().length < 8) return false;
@@ -427,100 +451,142 @@ const UPQRecorte = (() => {
       const modelo = umaColuna => {
         const linhas = linhasDaPagina(items, vp, umaColuna, negrito);
         const cabecalhos = linhas.filter(l => l.y0 > MARGEM_TOPO && RE_QUESTAO.test(l.texto))
-          .map(l => ({col: l.col, y: l.y0, numero: parseInt(l.texto.match(RE_QUESTAO)[1].replace(/ /g, ''), 10)}));
+          .map(l => ({col: l.col, y: l.y0, x0: l.x0, base: l.base, numero: parseInt(l.texto.match(RE_QUESTAO)[1].replace(/ /g, ''), 10)}));
         return {umaColuna, linhas, cabecalhos};
       };
-      const palpite = modelo(cruzam >= 3), alternativo = modelo(cruzam < 3);
-      const linhas = palpite.linhas;
+      const duas = modelo(false), uma = modelo(true);
+      const linhas = duas.linhas;
       if (!tituloLista) {
-        const t = linhas.find(l => l.texto.startsWith('Lista de Exercícios'));
+        const t = uma.linhas.find(l => l.texto.startsWith('Lista de Exercícios'));
         if (t) tituloLista = t.texto.split('|').slice(1).join('|').trim();
       }
-      const rodape = linhas.filter(l => l.y0 > vp.height * 0.85 && /Plataforma|Assaad/.test(l.texto));
+      const rodape = uma.linhas.filter(l => l.y0 > vp.height * 0.85 && /Plataforma|Assaad/.test(l.texto));
       const fundo = rodape.length ? Math.min(...rodape.map(l => l.y0)) - 8 : vp.height - 30;
-      paginas.push({pn, page, vp, fundo, modelos: [palpite, alternativo], ...palpite});
+      paginas.push({pn, page, vp, fundo, cruzam, duas, uma, linhas, cabecalhos: duas.cabecalhos.length ? duas.cabecalhos : uma.cabecalhos});
     }
 
-    // Recorta uma página num dos modelos; devolve as questões e o que ficou fora de todas elas.
-    async function recortarPagina(p, m, canvas, imagens) {
-      const questoes = [];
-      const meio = p.vp.width / 2;
+    // Até onde vai a barra colorida da "Questão NN": além do meio da página = questão na largura toda.
+    function fimDaBarra(canvas, cab) {
+      const y = Math.round(((cab.y + cab.base) / 2) * ESCALA);
+      if (y < 0 || y >= canvas.height) return null;
+      const linha = canvas.getContext('2d').getImageData(0, y, canvas.width, 1).data;
+      const cor = x => [linha[x * 4], linha[x * 4 + 1], linha[x * 4 + 2]];
+      const x0 = Math.max(0, Math.round((cab.x0 - 3) * ESCALA));
+      const c0 = cor(x0);
+      if (Math.min(...c0) > 215 || Math.max(...c0) - Math.min(...c0) < 25 && Math.min(...c0) > 150) return null;   // fundo claro: sem barra
+      const perto = c => Math.abs(c[0] - c0[0]) + Math.abs(c[1] - c0[1]) + Math.abs(c[2] - c0[2]) < 90;
+      let ultimo = x0;
+      for (let x = x0; x < canvas.width && x - ultimo < 18 * ESCALA; x++) if (perto(cor(x))) ultimo = x;   // pula as letras brancas
+      return ultimo / ESCALA;
+    }
+
+    // Uma página vira partes em ordem de leitura: "nova" (começa numa barra Questão NN) ou
+    // "continuação" (topo de coluna antes da 1ª barra, ou coluna sem barra): o resto da questão
+    // anterior, que pode vir da outra coluna ou da página anterior.
+    const temConteudo = (p, m, col, r, imagens) =>
+      m.linhas.some(l => (m.umaColuna || l.col === col) && l.texto.trim().length >= 2 && !ETAPAS.includes(l.texto.trim())
+        && (l.y0 + l.y1) / 2 > r.y0 && (l.y0 + l.y1) / 2 < r.y1)
+      || imagens.some(f => (f.x0 + f.x1) / 2 > r.x0 && (f.x0 + f.x1) / 2 < r.x1 && (f.y0 + f.y1) / 2 > r.y0 && (f.y0 + f.y1) / 2 < r.y1);
+    function partesDaPagina(p, m, imagens) {
+      const partes = [], meio = p.vp.width / 2;
       for (const col of m.umaColuna ? [0] : [0, 1]) {
-        const naColuna = m.cabecalhos.filter(c => c.col === col).sort((a, b) => a.y - b.y);
         const [x0, x1] = m.umaColuna ? [0, p.vp.width] : col === 0 ? [0, meio] : [meio, p.vp.width];
-        for (let i = 0; i < naColuna.length; i++) {
-          const {y, numero} = naColuna[i];
-          const yFim = i + 1 < naColuna.length ? naColuna[i + 1].y - 2 : p.fundo - 2;
-          const regiao = {x0: x0 + 2, y0: y - 2, x1: x1 - 2, y1: yFim};
-          const dentro = imagens.filter(f => {
-            const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
-            return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1;
-          });
-          // Referência: a mancha de texto da própria questão (não a caixa da coluna, que tem margens
-          // diferentes dos dois lados); centralizada = centro coincide E há recuo real à esquerda.
-          const daQuestao = m.linhas.filter(l => l.col === col && (l.y0 + l.y1) / 2 > regiao.y0 && (l.y0 + l.y1) / 2 < regiao.y1)
-            .sort((a, b) => a.base - b.base);
-          const corpo = daQuestao.slice(1);
-          const esq = corpo.length ? Math.min(...corpo.map(l => l.x0)) : regiao.x0, dir = corpo.length ? Math.max(...corpo.map(l => l.x1)) : regiao.x1;
-          const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
-          ordemDeLeitura(dentro);
-          const aparadas = dentro.map(f => aparar(f, m.linhas));
-          // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
-          const noCentro = (a, b) => b - a >= 0.85 * largura || (
-            Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
-          const faixaDe = [];
-          aparadas.forEach((f, k) => {
-            const u = faixaDe.length && faixaDe[faixaDe.length - 1];
-            if (u && f.y0 < u.y1 - 0.5 * Math.min(f.y1 - f.y0, u.y1 - u.y0)) { u.k.push(k); u.x0 = Math.min(u.x0, f.x0); u.x1 = Math.max(u.x1, f.x1); u.y1 = Math.max(u.y1, f.y1); }
-            else faixaDe.push({k: [k], x0: f.x0, x1: f.x1, y0: f.y0, y1: f.y1});
-          });
-          const centradas = new Set(faixaDe.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
-          // Texto de apoio com a formatação do PDF: **negrito** e [centralizado] nas linhas cujo
-          // centro coincide com o centro da questão (títulos, tabelas e legendas centralizados).
-          const textoPdf = daQuestao.map((l, i) => {
-              const centralizada = i > 0 && l.texto.trim().length >= 3 && l.x1 - l.x0 < 0.8 * largura
-                && l.x0 - esq > 0.06 * largura && (Math.abs((l.x0 + l.x1) / 2 - centro) < 0.04 * largura
-                  || Math.abs((l.x0 + l.x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-              return (centralizada ? '[centralizado] ' : '') + (i === 0 ? l.texto : l.marcado);
-            }).join('\n');
-          questoes.push({numero, pagina: p.pn, coluna: col + 1, regiao, textoPdf, aparadas, centradas, foraDoRecorte: []});
-        }
+        const cabs = m.cabecalhos.filter(c => m.umaColuna || c.col === col).sort((a, b) => a.y - b.y);
+        const topo = {x0: x0 + 2, y0: MARGEM_TOPO, x1: x1 - 2, y1: (cabs.length ? cabs[0].y : p.fundo) - 2};
+        if (topo.y1 - topo.y0 > 6 && temConteudo(p, m, col, topo, imagens)) partes.push({tipo: 'continuacao', col, regiao: topo});
+        cabs.forEach((c, i) => partes.push({tipo: 'nova', col, numero: c.numero,
+          regiao: {x0: x0 + 2, y0: c.y - 2, x1: x1 - 2, y1: (i + 1 < cabs.length ? cabs[i + 1].y : p.fundo) - 2}}));
       }
-      // Trava: nenhum texto ou imagem da página pode ficar fora do recorte de todas as questões.
-      const dentroDe = r => questoes.find(q => r.x0 >= q.regiao.x0 - 6 && r.x1 <= q.regiao.x1 + 6 && (r.y0 + r.y1) / 2 >= q.regiao.y0 && (r.y0 + r.y1) / 2 <= q.regiao.y1 + 2);
-      const donoPorAltura = r => questoes.filter(q => (r.y0 + r.y1) / 2 >= q.regiao.y0 - 2).sort((a, b) => b.regiao.y0 - a.regiao.y0)[0] || questoes[0];
-      const primeira = Math.min(...m.cabecalhos.map(c => c.y)) - 4;
-      let perdidos = 0;
-      for (const l of m.linhas) {
-        if (l.texto.trim().length < 2 || ETAPAS.includes(l.texto.trim()) || (RE_QUESTAO.test(l.texto) && m.umaColuna === false && dentroDe({...l, x1: l.x0 + 1})) || l.y0 < primeira || l.y0 >= p.fundo - 2 || dentroDe(l)) continue;   // faixa de etapa não é conteúdo
-        perdidos++; donoPorAltura(l)?.foraDoRecorte.push(l.texto.trim().slice(0, 80));
-      }
-      for (const f of imagens) if (!dentroDe(f) && f.y0 >= primeira && f.y0 < p.fundo) { perdidos++; donoPorAltura(f)?.foraDoRecorte.push('[imagem]'); }
-      return {questoes, perdidos};
+      return partes;
+    }
+
+    // Texto (com **negrito** e [centralizado]) e figuras de uma parte.
+    async function dadosDaParte(p, m, parte, canvas, imagens, comCabecalho) {
+      const {regiao, col} = parte;
+      const daParte = m.linhas.filter(l => (m.umaColuna || l.col === col) && (l.y0 + l.y1) / 2 > regiao.y0 && (l.y0 + l.y1) / 2 < regiao.y1)
+        .sort((a, b) => a.base - b.base);
+      const corpo = comCabecalho ? daParte.slice(1) : daParte;
+      const esq = corpo.length ? Math.min(...corpo.map(l => l.x0)) : regiao.x0, dir = corpo.length ? Math.max(...corpo.map(l => l.x1)) : regiao.x1;
+      const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
+      const texto = daParte.map((l, i) => {
+        if (comCabecalho && i === 0) return l.texto;
+        const centralizada = l.texto.trim().length >= 3 && l.x1 - l.x0 < 0.8 * largura && l.x0 - esq > 0.06 * largura
+          && (Math.abs((l.x0 + l.x1) / 2 - centro) < 0.04 * largura || Math.abs((l.x0 + l.x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
+        return (centralizada ? '[centralizado] ' : '') + l.marcado;
+      });
+      const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
+        return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
+      ordemDeLeitura(dentro);
+      const aparadas = dentro.map(f => aparar(f, m.linhas));
+      // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
+      const noCentro = (a, b) => b - a >= 0.85 * largura || (
+        Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
+      const faixas = [];
+      aparadas.forEach((f, k) => {
+        const u = faixas.length && faixas[faixas.length - 1];
+        if (u && f.y0 < u.y1 - 0.5 * Math.min(f.y1 - f.y0, u.y1 - u.y0)) { u.k.push(k); u.x0 = Math.min(u.x0, f.x0); u.x1 = Math.max(u.x1, f.x1); u.y1 = Math.max(u.y1, f.y1); }
+        else faixas.push({k: [k], x0: f.x0, x1: f.x1, y0: f.y0, y1: f.y1});
+      });
+      const centradas = new Set(faixas.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
+      const figuras = [];
+      for (let k = 0; k < aparadas.length; k++)
+        figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), blob: await recortar(canvas, aparadas[k])});
+      // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
+      const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
+      const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
+      return {texto, figuras, recorte: recortarCanvas(canvas, util)};
     }
 
     const questoes = [];
     const semQuestao = [];
+    const ultimaComQuestao = Math.max(0, ...paginas.filter(p => p.duas.cabecalhos.length || p.uma.cabecalhos.length).map(p => p.pn));
+    let aberta = null, umaColunaAnterior = false;
     for (const p of paginas) {
-      if (!p.modelos.some(m => m.cabecalhos.length)) { semQuestao.push(p); continue; }
+      const temCab = p.duas.cabecalhos.length || p.uma.cabecalhos.length;
+      // página sem barra: é continuação da questão aberta se tiver texto de conteúdo e não for o gabarito
+      const conteudo = p.uma.linhas.filter(l => l.y0 > MARGEM_TOPO && l.y0 < p.fundo && l.texto.trim().length >= 2 && !ETAPAS.includes(l.texto.trim()));
+      const continua = aberta && conteudo.length >= 3 && !conteudo.some(l => /gabarito/i.test(l.texto)) && !gabaritoEmTexto(p.uma.linhas).pares['01'];
+      if (!temCab && !continua) { semQuestao.push(p); if (p.pn > ultimaComQuestao) aberta = null; continue; }
       progresso({etapa: 'recortando', pagina: p.pn, total: doc.numPages});
       const canvas = await renderizar(p.page);
       const imagens = (await imagensDaPagina(p.page, p.vp)).filter(r =>
         r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
-      let r = await recortarPagina(p, p.modelos[0], canvas, imagens);
-      if (r.perdidos >= 2 || !r.questoes.length) {   // conteúdo ficou de fora: o outro modelo resolve?
-        const r2 = await recortarPagina(p, p.modelos[1], canvas, imagens);
-        if (r2.questoes.length && (r2.perdidos < r.perdidos || !r.questoes.length)) { r = r2; Object.assign(p, p.modelos[1]); }
+      // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
+      // continuação segue o modelo da anterior
+      const fins = p.uma.cabecalhos.map(c => fimDaBarra(canvas, c)).filter(x => x !== null);
+      const umaColuna = fins.length ? fins.filter(x => x > p.vp.width / 2 + 30).length * 2 > fins.length
+        : temCab ? p.cruzam >= 3 : umaColunaAnterior;
+      umaColunaAnterior = umaColuna;
+      const m = umaColuna ? p.uma : p.duas;
+      Object.assign(p, {linhas: m.linhas, cabecalhos: m.cabecalhos, umaColuna});
+      const partes = partesDaPagina(p, m, imagens);
+      for (const parte of partes) {
+        if (parte.tipo === 'nova') {
+          aberta = {numero: parte.numero, pagina: p.pn, coluna: parte.col + 1, regiao: parte.regiao, partes: [], foraDoRecorte: []};
+          questoes.push(aberta);
+        } else if (!aberta) continue;   // texto antes da 1ª questão da lista (capa, instruções)
+        const d = await dadosDaParte(p, m, parte, canvas, imagens, parte.tipo === 'nova');
+        aberta.partes.push({pagina: p.pn, col: parte.col, regiao: parte.regiao, ...d});
+        parte.dono = aberta;
       }
-      for (const q of r.questoes) {
-        const nn = String(q.numero).padStart(2, '0');
-        q.figuras = [];
-        for (let k = 0; k < q.aparadas.length; k++)
-          q.figuras.push({nome: `Q${nn}_fig${k + 1}`, regiao: q.aparadas[k], centralizada: q.centradas.has(k), blob: await recortar(canvas, q.aparadas[k])});
-        q.imagem = await recortar(canvas, q.regiao, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg', qualidade: 0.86});
-        delete q.aparadas; delete q.centradas;
-        questoes.push(q);
+      // Trava: nenhum texto ou imagem da página pode ficar fora de todas as partes.
+      const dentroDe = r => partes.find(pt => r.x0 >= pt.regiao.x0 - 6 && r.x1 <= pt.regiao.x1 + 6 && (r.y0 + r.y1) / 2 >= pt.regiao.y0 && (r.y0 + r.y1) / 2 <= pt.regiao.y1 + 2);
+      const dono = r => (partes.filter(pt => pt.dono && (r.y0 + r.y1) / 2 >= pt.regiao.y0 - 2).sort((a, b) => b.regiao.y0 - a.regiao.y0)[0] || partes.find(pt => pt.dono))?.dono;
+      for (const l of m.linhas) {
+        // a barra "Questão NN" é da própria questão (às vezes passa uns pontos do meio da página)
+        if (l.texto.trim().length < 2 || ETAPAS.includes(l.texto.trim()) || RE_QUESTAO.test(l.texto) || l.y0 < MARGEM_TOPO || l.y0 >= p.fundo - 2 || dentroDe(l)) continue;
+        dono(l)?.foraDoRecorte.push(l.texto.trim().slice(0, 80));
       }
+      for (const f of imagens) if (!dentroDe(f) && f.y0 >= MARGEM_TOPO && f.y0 < p.fundo) dono(f)?.foraDoRecorte.push('[imagem]');
+    }
+    // Junta as partes de cada questão: texto em ordem, figuras numeradas, imagem empilhada.
+    for (const q of questoes) {
+      const nn = String(q.numero).padStart(2, '0');
+      q.textoPdf = q.partes.flatMap(pt => pt.texto).join('\n');
+      q.figuras = q.partes.flatMap(pt => pt.figuras).map((f, k) => ({nome: `Q${nn}_fig${k + 1}`, ...f}));
+      q.regioes = q.partes.map(pt => ({pagina: pt.pagina, ...pt.regiao}));
+      q.imagem = await juntarRecortes(q.partes.map(pt => pt.recorte));
+      delete q.partes;
     }
 
     const inicio = etapasPeloSumario(paginas);
@@ -543,7 +609,7 @@ const UPQRecorte = (() => {
     let paginaGabarito = null, gabaritoPdf = {}, gabaritoMotivo = 'nenhuma página de gabarito depois das questões';
     const motivos = [], gabaritoRecortes = {};
     for (const pg of candidatas) {
-      const proximo = Object.keys(gabaritoPdf).length + 1;
+      const menor = Math.min(...numeros), proximo = menor + Object.keys(gabaritoPdf).length;   // a lista pode não começar na 1
       let {pares, caixas} = gabaritoEmTexto(pg.linhas);
       const c = await renderizar(pg.page);
       if (!Object.keys(pares).length) {
@@ -560,13 +626,13 @@ const UPQRecorte = (() => {
         paginaGabarito = paginaGabarito && !Object.keys(pares).length ? paginaGabarito
           : await recortar(c, {x0: 0, y0: 0, x1: pg.vp.width, y1: pg.vp.height}, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg'});
       Object.assign(gabaritoPdf, pares);
-      if (Object.keys(gabaritoPdf).length >= maior) break;
+      if (numeros.every(n => gabaritoPdf[String(n).padStart(2, '0')])) break;
     }
     const lidas = Object.keys(gabaritoPdf).length;
-    const completo = maior > 0 && [...Array(maior).keys()].every(i => gabaritoPdf[String(i + 1).padStart(2, '0')]);
+    const completo = numeros.length > 0 && numeros.every(n => gabaritoPdf[String(n).padStart(2, '0')]);
     if (completo) gabaritoMotivo = null;
     else {
-      gabaritoMotivo = lidas ? `a tabela tem ${lidas} respostas, a lista tem ${maior} questões` : (motivos.join('; ') || gabaritoMotivo);
+      gabaritoMotivo = lidas ? `a tabela tem ${lidas} respostas, a lista tem ${numeros.length} questões` : (motivos.join('; ') || gabaritoMotivo);
       gabaritoPdf = {};
       for (const n of Object.keys(gabaritoRecortes)) delete gabaritoRecortes[n];
     }
