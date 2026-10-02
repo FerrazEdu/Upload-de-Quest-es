@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "Durante o recreio, os curumins se divertem brincando e correndo pelo pátio da escola. Alguns deles brincam com um pedaço de madeira amarrado em uma corda. Eles giram o brinquedo sobre a cabeça e largam a corda. Vence quem consegue lançar o pedaço de madeira mais longe. Nessa brincadeira há conceitos físicos envolvidos.\n\nSabendo disso, assinale a alternativa INCORRETA.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "E",
-  "explicacao": "No movimento circular, as velocidades angular e tangencial (linear) estão ligadas pelo raio da trajetória:\n\n$$v = \\omega R$$\n\nPortanto elas **não** são independentes: para um mesmo raio, dobrar $\\omega$ dobra $v$. A alternativa E é a incorreta.\n\n- A: correta. A tração na corda puxa a madeira para o centro, isto é, para a mão do curumim.\n- B: correta. O peso é sempre vertical, apontando para o centro da Terra.\n- C: correta. Ao soltar a corda, a madeira sai pela tangente com a velocidade tangencial que tinha, e o alcance depende dela.\n- D: correta. Sem resultante centrípeta não há mudança de direção da velocidade, e o corpo seguiria em linha reta.\n\n**Gabarito: E**",
   "revisar": true,
   "observacoes": "Dificuldade 3, abaixo da faixa da etapa Desafios (4 a 5): questão conceitual de leitura direta."
 }

@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "O plasma sanguíneo é a parte líquida do sangue e corresponde à maior parte do seu volume. Nele, proteínas, sais minerais, dióxido de carbono e outras substâncias estão dissolvidos em água. Para separar o plasma, o método de centrifugação é comumente aplicado.\n\nAdmita uma centrífuga de laboratório, girando com frequência de $60\\ \\text{Hz}$.\n\n![Pessoa colocando tubos de amostra no rotor circular de uma centrífuga de laboratório](figura:Q19_fig1)\n\n*Fonte: USS, 2022.*\n\nSe considerarmos que as amostras periféricas se encontram a $15\\ \\text{cm}$ do centro de rotação, a velocidade linear, em m/s, é de aproximadamente:",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "D",
-  "explicacao": "As amostras periféricas descrevem uma circunferência de raio $R = 0{,}15\\ \\text{m}$ com frequência $f = 60\\ \\text{Hz}$. A velocidade linear é $v = 2\\pi R f$.\n\n$$v = 2\\pi \\cdot 0{,}15 \\cdot 60 = 18\\pi \\approx 18 \\cdot 3{,}14 \\approx 56{,}5\\ \\text{m/s}$$\n\nO valor mais próximo é $57\\ \\text{m/s}$.\n\n**Gabarito: D**",
   "revisar": false,
   "observacoes": null
 }

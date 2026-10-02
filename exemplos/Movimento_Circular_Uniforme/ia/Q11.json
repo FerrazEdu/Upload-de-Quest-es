@@ -5,6 +5,9 @@
   "adaptada": true,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "A prática esportiva de “pular corda” vem conquistando muitos adeptos e se tornando uma modalidade de competição. Numa prova de velocidade, um atleta consegue dar $105$ saltos em $30$ segundos.\n\nConsiderando que o ponto da corda que passa sob os pés e acima da cabeça do praticante descreve uma trajetória circular de raio $r = 90\\ \\text{cm}$, qual é a velocidade escalar desse ponto da corda?\n\nConsidere $\\pi = 3$.\n\n![Atleta pulando corda; ponto P da corda descreve trajetória circular tracejada ao redor dele](figura:Q11_fig1)",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "A cada salto a corda dá uma volta completa, então o número de saltos por segundo é a frequência do movimento circular do ponto P. A velocidade escalar é $v = 2\\pi r f$.\n\nFrequência:\n\n$$f = \\frac{105}{30\\ \\text{s}} = 3{,}5\\ \\text{Hz}$$\n\nVelocidade, com $r = 0{,}9\\ \\text{m}$:\n\n$$v = 2\\pi r f = 2 \\cdot 3 \\cdot 0{,}9 \\cdot 3{,}5 = 18{,}9\\ \\text{m/s}$$\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

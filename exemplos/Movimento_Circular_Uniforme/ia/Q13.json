@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "A centrifuga de mel é um equipamento composto de um tambor com cesto para os favos de mel e um corredor para a saída do mel. Os favos são colocados no cesto e centrifugados manualmente.\n\nA imagem a seguir ilustra um modelo dessa centrífuga.\n\n![Centrífuga de mel antiga com tambor de madeira, manivela e estrutura de madeira](figura:Q13_fig1)\n\n*(Centrifuga de Mel. Museu Histórico de Entre Rios, Distrito de Guarapuava. Disponível em: https://suabios.com.br/museu-historico/objetos-historicos. Acesso em: 16 jul. 2025.)*\n\nConsiderando a dinâmica do movimento circular, assinale a alternativa correta.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "E",
-  "explicacao": "No movimento circular, a aceleração centrípeta é responsável apenas pela mudança de direção da velocidade; ela tem a direção do raio e aponta para o centro da trajetória, com módulo $a_c = \\frac{v^2}{R} = \\omega^2 R$.\n\n- **A — Incorreta.** A variação da velocidade (em módulo) por unidade de tempo é a aceleração tangencial; a centrípeta está ligada à mudança de direção.\n- **B — Incorreta.** A frequência é o número de voltas por unidade de tempo, não o total de voltas ao final do processo.\n- **C — Incorreta.** O período é o tempo de uma volta completa, não o tempo total da extração.\n- **D — Incorreta.** A aceleração centrípeta é radial (perpendicular à velocidade), não tangente.\n- **E — Correta.** A aceleração centrípeta tem a direção do raio do tambor, apontando para o centro.\n\n**Gabarito: E**",
   "revisar": false,
   "observacoes": null
 }

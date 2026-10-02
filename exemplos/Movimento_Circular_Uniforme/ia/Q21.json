@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "Um parafuso está encravado na periferia de um disco giratório horizontal de raio $1\\ \\text{m}$. A figura abaixo ilustra as posições do parafuso em tempos sucessivos.\n\n![Quatro discos com o parafuso em posições sucessivas e uma seta abaixo de cada um](figura:Q21_fig1)\n\n*Fonte: UECE, 2012.*\n\nUm engenheiro precisa monitorar a passagem do parafuso por uma dada posição, como a indicada pela seta. Para isso, faz uso de uma luz estroboscópica, que acende durante curtos intervalos de tempo a uma frequência de $2\\ \\text{kHz}$. Para que haja sincronismo entre a passagem do parafuso pela posição indicada pela seta e a lâmpada, a velocidade escalar do parafuso em m/s deve ser aproximadamente",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "B",
-  "explicacao": "Para haver sincronismo, a cada flash da lâmpada o parafuso deve estar de novo na posição da seta, ou seja, ele dá uma volta completa a cada intervalo entre flashes. Assim, a frequência de rotação do disco é igual à frequência da luz.\n\n$$f = 2\\ \\text{kHz} = 2 \\times 10^{3}\\ \\text{Hz}$$\n\nA velocidade escalar de um ponto da periferia é:\n\n$$v = 2\\pi R f = 2 \\cdot 3{,}14 \\cdot 1 \\cdot 2 \\times 10^{3} \\approx 12{,}56 \\times 10^{3}\\ \\text{m/s}$$\n\n**Gabarito: B**",
   "revisar": true,
   "observacoes": "A figura recortada tem pequenos ícones espúrios (artefato do PDF) ao lado do terceiro disco; conferir se a figura precisa de limpeza."
 }

@@ -5,6 +5,10 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular",
+    "Lançamento horizontal"
+  ],
   "dificuldade": 3,
   "enunciado": "Uma pessoa gira um objeto 1 de massa $m_1 = 200\\ \\text{g}$ acima da cabeça em movimento circular, com auxílio de um cordão. Em um dado instante ela solta o cordão e observa o objeto atingir o solo alguns metros à sua frente. Em seguida, utilizando o mesmo cordão, ela substitui o objeto 1 pelo objeto 2, de mesmo formato e dimensões, porém com massa $m_2 = 400\\ \\text{g}$. Novamente realiza um movimento circular da mesma maneira da situação anterior. Ao soltar o cordão observa que este objeto 2 cai no mesmo ponto que o primeiro.\n\nEnquanto os objetos estão girando, presos pelo cordão, realizam Movimento Circular Uniforme (MCU). Em seguida, quando o cordão é solto, os objetos são denominados de projéteis. Em ambas as situações o ângulo de lançamento é zero, assim, os projéteis realizam, na horizontal, Movimento Retilíneo Uniforme (MRU) e, na vertical, Movimento Retilíneo Uniformemente Variado (MRUV).\n\nCom relação às situações apresentadas no texto, é **CORRETO** afirmar que:",
   "alternativas": [
@@ -26,7 +30,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "Após soltar o cordão, cada objeto faz um lançamento horizontal a partir da mesma altura. O tempo de queda depende só da altura, $t = \\sqrt{\\frac{2h}{g}}$, e não da massa; o alcance é $A = v_x \\cdot t$.\n\nComo os dois caem da mesma altura (mesmo $t$) e atingem o mesmo ponto (mesmo $A$):\n\n$$v_{x,1} = \\frac{A}{t} = v_{x,2}$$\n\n- **A — Incorreta.** Mesma velocidade tangencial e mesmo raio (mesmo cordão) dão a mesma velocidade angular, $\\omega = \\frac{v}{R}$.\n- **B — Incorreta.** O tempo de queda independe da massa; os dois levam o mesmo tempo.\n- **C — Correta.** Mesmo tempo de queda e mesmo alcance implicam a mesma velocidade horizontal.\n- **D — Incorreta.** $F_c = \\frac{m v^2}{R}$: com mesmos $v$ e $R$, a força sobre o objeto 2 é o dobro da do objeto 1.\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "As máquinas cortadeiras e colheitadeiras de cana-de-açúcar podem substituir dezenas de trabalhadores rurais, o que pode alterar de forma significativa a relação de trabalho nas lavouras de cana-de-açúcar. A pá cortadeira da máquina ilustrada na figura abaixo gira em movimento circular uniforme a uma frequência de $300\\ \\text{rpm}$.\n\nA velocidade de um ponto extremo P da pá vale\n\n(Considere $\\pi \\cong 3$)\n\n![Pá cortadeira em forma de estrela com ponto P na borda e raio R = 60 cm](figura:Q16_fig1)\n\n*Fonte: UNICAMP, 2014.*",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "O ponto P descreve uma circunferência de raio $R = 60\\ \\text{cm}$ (dado na figura). Sua velocidade linear é $v = 2\\pi R f$, com a frequência em hertz.\n\nConversão da frequência:\n\n$$f = \\frac{300\\ \\text{rpm}}{60} = 5\\ \\text{Hz}$$\n\nVelocidade do ponto P, com $R = 0{,}6\\ \\text{m}$:\n\n$$v = 2\\pi R f = 2 \\cdot 3 \\cdot 0{,}6 \\cdot 5 = 18\\ \\text{m/s}$$\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

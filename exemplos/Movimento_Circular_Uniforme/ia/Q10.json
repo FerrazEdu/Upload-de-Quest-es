@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "Movimento circular uniforme é o movimento que ocorre no plano, com velocidade escalar constante ao longo de uma trajetória circular. Apesar do termo uniforme, esse movimento é acelerado, uma vez que há mudança na direção do vetor velocidade. Isso acontece por conta da existência de uma aceleração de direção radial, cujo sentido aponta para o centro da curva, como ilustra a figura a seguir.\n\n![Carro em rotatória com raio r e aceleração centrípeta apontando para o centro](figura:Q10_fig1)\n\n*(Disponível em: <https://brasilescola.uol.com.br/fisica/movimento-circular-uniforme-mcu.htm>. Acesso em: 19 out. 2021.)*\n\nNo exemplo da figura, um veículo entra na rotatória de raio $r = 4\\ \\text{m}$, com velocidade constante $v = 36\\ \\text{km/h}$.\n\nConsiderando os dados apresentados e $\\pi = 3{,}14$, assinale a alternativa que apresenta, correta e respectivamente, a velocidade angular do veículo, a aceleração centrípeta e o período do movimento.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "B",
-  "explicacao": "No MCU, as grandezas se relacionam por $v = \\omega r$, $a_c = \\frac{v^2}{r}$ e $T = \\frac{2\\pi}{\\omega}$. Primeiro, converta a velocidade para o SI: $v = 36\\ \\text{km/h} = \\frac{36}{3{,}6} = 10\\ \\text{m/s}$.\n\n$$\\omega = \\frac{v}{r} = \\frac{10\\ \\text{m/s}}{4\\ \\text{m}} = 2{,}5\\ \\text{rad/s}$$\n\n$$a_c = \\frac{v^2}{r} = \\frac{(10\\ \\text{m/s})^2}{4\\ \\text{m}} = 25\\ \\text{m/s}^2$$\n\n$$T = \\frac{2\\pi}{\\omega} = \\frac{2 \\cdot 3{,}14}{2{,}5\\ \\text{rad/s}} \\approx 2{,}5\\ \\text{s}$$\n\nA alternativa A tem o $\\omega$ correto, mas erra a aceleração e o período; as demais não satisfazem as relações do MCU com os dados fornecidos.\n\n**Gabarito: B**",
   "revisar": false,
   "observacoes": null
 }

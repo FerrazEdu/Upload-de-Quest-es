@@ -50,12 +50,12 @@ def enviar(pasta: Path, url: str, chave: str) -> str:
             return RE_FIGURA.sub(lambda m: m.group(0).replace(f"figura:{m.group(1)}", urls[m.group(1)]), texto)
 
         q.enunciado = trocar(q.enunciado)
-        q.explicacao = trocar(q.explicacao)
         q.alternativas = {k: trocar(v) for k, v in q.alternativas.items()}
 
     payload = {
         "arquivo": lista.arquivo, "hash_pdf": lista.hash_pdf, "tipo": lista.tipo,
-        "titulo": lista.titulo, "disciplina": lista.disciplina, "topico": lista.topico,
+        "titulo": lista.titulo, "nome": lista.nome, "descricao": lista.descricao,
+        "disciplina": lista.disciplina, "topico": lista.topico, "tags": lista.tags,
         "questoes": [
             {**q.model_dump(exclude={"imagem"}),
              "figuras": [{"nome": f.nome, "url": f.url} for f in q.figuras]}

@@ -1,11 +1,11 @@
 """Prompts da transcrição. Adaptados do Prompt Mestre (docs/prompt_mestre_original.md):
 mesmas regras de classificação, dificuldade e fidelidade, mas com LaTeX e Markdown
-no lugar de Unicode puro, e com resolução gerada junto."""
+no lugar de Unicode puro. Sem resolução: só transcrição e classificação."""
 
 from . import topicos
 
 REGRAS_FORMATACAO = r"""
-FORMATAÇÃO DO TEXTO (enunciado, alternativas e explicação)
+FORMATAÇÃO DO TEXTO (enunciado e alternativas)
 O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (MathJax).
 
 1. Fórmulas, números com unidade, potências, índices, símbolos e variáveis vão em LaTeX:
@@ -59,10 +59,13 @@ CABEÇALHO
   ano 2022. "(ADAPTADO)" → adaptada true e não entra na instituição. Sem banca → null; sem
   ano → null. Não confunda com datas citadas no enunciado.
 
-DISCIPLINA E TÓPICO
+DISCIPLINA, TÓPICO E ASSUNTOS
 - Somente pares que existem no ANEXO — BASE DE TÓPICOS, copiados com a grafia exata.
-  A coluna tópico recebe o nome do TÓPICO, nunca o do assunto.
+  O campo topico recebe o nome do TÓPICO, nunca o do assunto.
 - Em lista de exercícios a mensagem informa a disciplina e o tópico da lista: use-os.
+- assuntos: 1 ou 2 assuntos do tópico escolhido (os que aparecem depois de "Tópico:" no
+  anexo), com a grafia exata, pelo conteúdo que a questão cobra. Tópico sem assuntos listados
+  → assuntos = [nome do tópico].
 
 DIFICULDADE (inteiro de 1 a 5, obrigatório)
 1 = Muito Fácil · 2 = Fácil · 3 = Média · 4 = Difícil · 5 = Muito Difícil
@@ -78,23 +81,13 @@ DIFICULDADE (inteiro de 1 a 5, obrigatório)
   questão claramente não corresponde à etapa; nesse caso explique em observacoes.
 - A banca não define a dificuldade: classifique a questão.
 
-GABARITO E EXPLICAÇÃO
-- gabarito = a letra do gabarito oficial informada na mensagem. Nunca troque.
-- explicacao = resolução comentada para o aluno, em português, no mesmo padrão de formatação:
-  1. Um parágrafo curto com a ideia central (conceito ou lei usada).
-  2. Os passos de cálculo, cada equação importante em $$...$$, com unidades.
-  3. Em questões de afirmativas (I, II, III), analise cada uma: "**I. Verdadeira.** ...".
-     Em questões conceituais, diga por que a correta está certa e, em uma linha cada, o erro
-     das principais distratoras.
-  4. Termine com a linha: **Gabarito: X**
-  Seja direto: sem saudação e sem repetir o enunciado.
-- Resolva de verdade antes de escrever. Se a sua resolução não chegar ao gabarito oficial,
-  NÃO force: escreva a resolução que você encontrou, marque revisar = true e explique a
-  divergência em observacoes.
+GABARITO
+- gabarito = a letra do gabarito oficial informada na mensagem. Nunca troque e não resolva
+  a questão: este trabalho é só de transcrição e classificação.
 
 REVISAR
 revisar = true sempre que houver: trecho ilegível ou cortado no recorte, figura com
-informação essencial que você não conseguiu ler, divergência com o gabarito, dificuldade
+informação essencial que você não conseguiu ler, gabarito oficial ausente, dificuldade
 fora da faixa da etapa, ou qualquer dúvida de transcrição. Explique em observacoes
 (curto e objetivo). Caso contrário revisar = false e observacoes = null.
 

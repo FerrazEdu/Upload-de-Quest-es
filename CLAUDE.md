@@ -24,8 +24,8 @@ Quando pedirem "transcreva a lista X", faça exatamente o que `upq/transcrever.p
    figuras em `figuras` (use os `nome` em `![descrição](figura:NOME)`), o `texto_pdf`
    (apoio, com símbolos trocados) e a letra do gabarito oficial.
    - `alternativas` é uma lista `[{"letra": "A", "texto": "..."}]`.
-   - Resolva a questão de verdade para escrever a `explicacao`; se não chegar ao gabarito
-     oficial, `revisar: true` e explique em `observacoes`.
+   - `assuntos`: 1 ou 2 assuntos do tópico, com a grafia de `dados/base_topicos.txt`.
+   - Não gere resolução: o trabalho é só transcrição e classificação.
 5. Rode `python -m upq revisar saida/<nome>`, corrija os ERROS apontados e revise os avisos.
 
 Não invente gabarito, banca ou ano. Não altere `dados/base_topicos.txt` sem pedido.

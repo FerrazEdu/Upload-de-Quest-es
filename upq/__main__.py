@@ -41,7 +41,7 @@ def processar_pdf(pdf: Path, saida: Path):
               f"`python -m upq revisar {pasta}`")
         return
     from . import transcrever
-    asyncio.run(transcrever.executar(pasta, paralelo=8, esforco="medium", refazer=False))
+    asyncio.run(transcrever.executar(pasta, paralelo=8, esforco="low", refazer=False))
     revisar(pasta)
     print(f"  total: {time.time() - inicio:.0f}s")
 

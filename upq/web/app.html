@@ -1,0 +1,421 @@
+<title>Importador de Questões</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script>
+window.MathJax = {
+  tex: {inlineMath: [['$', '$']], displayMath: [['$$', '$$']], processEscapes: true},
+  svg: {fontCache: 'global'},
+  options: {ignoreHtmlClass: 'sem-tex'},
+  startup: {typeset: false}
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Layout: barra lateral fixa com as duas telas (Enviar lista, Listas) + área de trabalho.
+   Escuro por padrão, como o painel da plataforma; o tema claro segue o sistema. */
+:root {
+  --bg: #121418; --painel: #1a1d23; --campo: #20242b; --borda: #2c313a; --borda-forte: #3a414c;
+  --texto: #e8eaee; --suave: #9aa1ad; --fraco: #6c7380;
+  --acento: #5b8cff; --acento-fundo: #1f2a44; --acento-texto: #ffffff;
+  --ok: #3fb67a; --ok-fundo: #173327; --alerta: #e0a43a; --alerta-fundo: #3a2e17;
+  --erro: #ef5d5d; --erro-fundo: #3d1d1f;
+  --fonte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --raio: 8px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f3f4f7; --painel: #ffffff; --campo: #f6f7f9; --borda: #dfe2e8; --borda-forte: #c9ced7;
+  --texto: #181b21; --suave: #5b6270; --fraco: #8a909b;
+  --acento: #2f63e6; --acento-fundo: #e7eeff; --acento-texto: #ffffff;
+  --ok: #1f8a55; --ok-fundo: #e2f4ea; --alerta: #a86b00; --alerta-fundo: #fbf0d9;
+  --erro: #c43a3a; --erro-fundo: #fbe5e5; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f3f4f7; --painel: #ffffff; --campo: #f6f7f9; --borda: #dfe2e8; --borda-forte: #c9ced7;
+  --texto: #181b21; --suave: #5b6270; --fraco: #8a909b;
+  --acento: #2f63e6; --acento-fundo: #e7eeff; --acento-texto: #ffffff;
+  --ok: #1f8a55; --ok-fundo: #e2f4ea; --alerta: #a86b00; --alerta-fundo: #fbf0d9;
+  --erro: #c43a3a; --erro-fundo: #fbe5e5; color-scheme: light; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--texto); font: 14px/1.5 var(--fonte); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100%; }
+.lateral { background: var(--painel); border-right: 1px solid var(--borda); padding: 18px 12px;
+  display: flex; flex-direction: column; gap: 4px; }
+.marca { font-weight: 700; font-size: 15px; padding: 0 10px 14px; letter-spacing: .01em; }
+.marca small { display: block; font-weight: 400; color: var(--fraco); font-size: 12px; }
+.nav { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0;
+  background: transparent; padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--suave); }
+.nav:hover { background: var(--campo); color: var(--texto); }
+.nav[aria-current="page"] { background: var(--acento-fundo); color: var(--texto); font-weight: 600; }
+.nav svg { width: 16px; height: 16px; flex: none; }
+.nav .contagem { margin-left: auto; font-size: 12px; color: var(--fraco); font-variant-numeric: tabular-nums; }
+.modo { margin-top: auto; font-size: 12px; color: var(--fraco); padding: 10px; border-top: 1px solid var(--borda); }
+
+main { padding-block: 22px 40px; padding-inline: 24px; min-width: 0; }
+.cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+.migalha { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--suave); margin-bottom: 6px; }
+.migalha button { border: 0; background: none; padding: 0; color: var(--suave); cursor: pointer; }
+.migalha button:hover { color: var(--texto); text-decoration: underline; }
+
+.botao { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--borda-forte);
+  background: var(--campo); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.botao:hover { border-color: var(--acento); }
+.botao.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+.botao:disabled { opacity: .5; cursor: not-allowed; }
+
+.painel { background: var(--painel); border: 1px solid var(--borda); border-radius: var(--raio); }
+
+/* Tela de envio */
+.soltar { border: 1.5px dashed var(--borda-forte); border-radius: var(--raio); background: var(--painel);
+  padding: 36px 20px; text-align: center; display: grid; gap: 8px; justify-items: center; cursor: pointer; }
+.soltar.ativo { border-color: var(--acento); background: var(--acento-fundo); }
+.soltar strong { font-size: 16px; }
+.soltar p { margin: 0; color: var(--suave); }
+.soltar svg { width: 34px; height: 34px; color: var(--acento); }
+.dica { color: var(--fraco); font-size: 13px; margin: 10px 0 0; }
+.envios { display: grid; gap: 10px; margin-top: 22px; }
+.envio { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; padding: 14px 16px; }
+.envio .nome { font-weight: 600; overflow-wrap: anywhere; }
+.envio .msg { color: var(--suave); font-size: 13px; }
+.etapas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.etapa { font-size: 12px; color: var(--fraco); display: grid; gap: 5px; }
+.etapa i { height: 4px; border-radius: 2px; background: var(--borda); display: block; }
+.etapa.feita { color: var(--suave); } .etapa.feita i { background: var(--ok); }
+.etapa.atual { color: var(--texto); font-weight: 500; } .etapa.atual i { background: var(--acento); animation: pulso 1.2s ease-in-out infinite; }
+.etapa.parada { color: var(--alerta); } .etapa.parada i { background: var(--alerta); }
+.etapa.falhou { color: var(--erro); } .etapa.falhou i { background: var(--erro); }
+@keyframes pulso { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .etapa.atual i { animation: none; } }
+
+/* Tabelas */
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.campo { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+.tabela-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-weight: 600; color: var(--suave); padding: 10px 12px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+td { padding: 11px 12px; border-bottom: 1px solid var(--borda); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr.clicavel { cursor: pointer; }
+tbody tr.clicavel:hover td { background: var(--campo); }
+tbody tr.sel td { background: var(--acento-fundo); }
+tbody tr.pendente td { color: var(--fraco); }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.tag { display: inline-block; border: 1px solid var(--borda-forte); border-radius: 5px; padding: 1px 7px; font-size: 12px; margin: 2px 4px 2px 0; white-space: nowrap; }
+.selo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.selo::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.selo.ok { color: var(--ok); background: var(--ok-fundo); }
+.selo.alerta { color: var(--alerta); background: var(--alerta-fundo); }
+.selo.erro { color: var(--erro); background: var(--erro-fundo); }
+.selo.info { color: var(--acento); background: var(--acento-fundo); }
+.vazio { padding: 28px 16px; color: var(--suave); text-align: center; }
+
+/* Gerenciamento de questões */
+.gerenciar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .gerenciar { grid-template-columns: 1fr; } }
+.lista-q { max-height: calc(100vh - 170px); overflow: auto; }
+.resumo-lista { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--suave); font-size: 13px; margin-top: 4px; }
+.detalhe { padding: 18px; display: grid; gap: 16px; position: sticky; top: env(safe-area-inset-top, 0px); }
+.detalhe h2 { font-size: 16px; margin: 0; }
+.grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grade.duas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .grade, .grade.duas { grid-template-columns: 1fr; } }
+.rotulo { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; color: var(--texto); }
+.valor { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 8px 10px; min-height: 37px; overflow-wrap: anywhere; }
+.enunciado { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 12px 14px; overflow-wrap: anywhere; }
+.enunciado p { margin: 0 0 10px; } .enunciado p:last-child { margin-bottom: 0; }
+.enunciado img, .alt img { max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; background: #fff; }
+.enunciado table { border-collapse: collapse; } .enunciado td, .enunciado th { border: 1px solid var(--borda-forte); padding: 4px 8px; }
+mjx-container { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+mjx-container[display="true"] { margin: .6em 0 !important; }
+.alternativas { border: 1px solid var(--borda); border-radius: 6px; overflow: hidden; }
+.alt { display: grid; grid-template-columns: 34px minmax(0, 1fr) 76px; gap: 10px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--borda); }
+.alt:first-child { border-top: 0; }
+.alt.cab-alt { background: var(--campo); font-size: 12px; color: var(--suave); font-weight: 600; }
+.alt .letra { width: 26px; height: 26px; border-radius: 6px; background: var(--acento); color: var(--acento-texto); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.alt .conteudo p { margin: 0; }
+.chave { width: 34px; height: 20px; border-radius: 99px; background: var(--borda-forte); position: relative; justify-self: center; }
+.chave::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--painel); transition: left .15s; }
+.chave.on { background: var(--acento); } .chave.on::after { left: 17px; }
+.avisos { border-radius: 6px; padding: 10px 12px 10px 30px; margin: 0; font-size: 13px; }
+.avisos.erro { background: var(--erro-fundo); } .avisos.alerta { background: var(--alerta-fundo); }
+.original summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--suave); }
+.original img { width: 100%; height: auto; margin-top: 8px; border-radius: 6px; border: 1px solid var(--borda); background: #fff; }
+.aviso-demo { background: var(--acento-fundo); border: 1px solid var(--borda); border-radius: 6px; padding: 10px 12px; font-size: 13px; color: var(--texto); margin-bottom: 14px; }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .lateral { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--borda); }
+  .marca { padding: 0 8px 0 4px; } .marca small, .modo { display: none; }
+  .nav { width: auto; }
+  main { padding-inline: 16px; }
+  .etapas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+
+<div class="app">
+  <nav class="lateral" aria-label="Telas">
+    <div class="marca">Importador de Questões<small>PDF → banco de questões</small></div>
+    <button class="nav" data-tela="enviar" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0-4 4m4-4 4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+      Enviar lista</button>
+    <button class="nav" data-tela="listas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      Listas <span class="contagem" id="contagem-listas"></span></button>
+    <div class="modo" id="modo"></div>
+  </nav>
+  <main id="principal"></main>
+</div>
+
+<script>
+const DEMO = window.UPQ_DEMO || null;
+const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'Pronta para envio'];
+const DIFICULDADE = {1: 'Muito Fácil', 2: 'Fácil', 3: 'Média', 4: 'Difícil', 5: 'Muito Difícil'};
+const STATUS = {
+  processando: ['info', 'Processando'], aguardando_transcricao: ['alerta', 'Aguardando transcrição'],
+  com_erros: ['erro', 'Com erros'], revisar: ['alerta', 'Revisar avisos'], pronta: ['ok', 'Pronta para envio'],
+  enviada: ['ok', 'Enviada ao banco'], falhou: ['erro', 'Falhou'],
+};
+
+// ---------- acesso aos dados: servidor local ou dados embutidos (demonstração) ----------
+const api = DEMO ? {
+  async listas() { return DEMO.listas.map(l => l.resumo); },
+  async lista(id) { return DEMO.listas.find(l => l.resumo.id === id); },
+  arquivo(id, caminho) { return DEMO.arquivos[id]?.[caminho] || ''; },
+  async envios() { return demoEnvios; },
+  async enviarPdf(arquivo) {
+    const job = {id: 'demo-' + Date.now(), arquivo: arquivo.name, etapa: 0, estado: 'rodando',
+                 mensagem: 'Recortando questões e figuras…', lista: null};
+    demoEnvios.unshift(job);
+    const passos = [
+      [1, 'Transcrevendo questões com a IA…'], [2, 'Validando LaTeX, figuras e base de tópicos…'],
+      [3, 'Demonstração: o envio é simulado e mostra a lista de exemplo.']];
+    passos.forEach(([etapa, msg], i) => setTimeout(() => {
+      Object.assign(job, {etapa, mensagem: msg});
+      if (etapa === 3) Object.assign(job, {estado: 'concluido', lista: DEMO.listas[0].resumo.id});
+      if (tela.nome === 'enviar') desenhar();
+    }, 1400 * (i + 1)));
+    return job;
+  },
+  async enviarBanco() { throw new Error('Na demonstração o envio ao banco está desligado.'); },
+} : {
+  async listas() { return (await req('/api/listas')).listas; },
+  async lista(id) { return req(`/api/listas/${encodeURIComponent(id)}`); },
+  arquivo(id, caminho) { return `/api/listas/${encodeURIComponent(id)}/arquivos/${caminho}`; },
+  async envios() { return (await req('/api/envios')).envios; },
+  async enviarPdf(arquivo) {
+    return req('/api/envios', {method: 'POST', body: arquivo,
+      headers: {'Content-Type': 'application/pdf', 'X-Nome-Arquivo': encodeURIComponent(arquivo.name)}});
+  },
+  async enviarBanco(id) { return req(`/api/listas/${encodeURIComponent(id)}/enviar`, {method: 'POST'}); },
+};
+const demoEnvios = [];
+async function req(url, opcoes) {
+  const r = await fetch(url, opcoes);
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
+  return dados;
+}
+
+// ---------- utilidades ----------
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+// Na tabela só "Questão NN": banca e ano têm colunas próprias e o título completo fica no detalhe.
+const tituloCurto = t => (String(t || '').match(/Questão \d+/) || [t])[0];
+function selo(status) { const [cls, txt] = STATUS[status] || ['info', status]; return `<span class="selo ${cls}">${txt}</span>`; }
+
+// Markdown + LaTeX: guarda as fórmulas antes do Markdown para não perder _ e * dentro delas.
+function md(texto, figuras) {
+  const guardadas = [];
+  const t = String(texto || '').replace(/\\\$/g, '\u0001')
+    .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, m => { guardadas.push(m); return `\u0002${guardadas.length - 1}\u0002`; })
+    .replace(/\(figura:([A-Za-z0-9_]+)\)/g, (m, n) => `(${figuras[n] || ''})`);
+  const html = window.marked ? marked.parse(t) : `<p>${esc(t)}</p>`;
+  return html.replace(/\u0002(\d+)\u0002/g, (m, i) => esc(guardadas[+i])).replace(/\u0001/g, '\\$');
+}
+function tipografar(el) {
+  if (window.MathJax?.typesetPromise) MathJax.typesetPromise([el]).catch(() => {});
+  else setTimeout(() => tipografar(el), 300);
+}
+
+// ---------- telas ----------
+const tela = {nome: 'enviar', lista: null, questao: 0, filtro: '', disciplina: ''};
+const principal = document.getElementById('principal');
+let cacheListas = [];
+
+document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => ir(b.dataset.tela)));
+function ir(nome, extra = {}) { Object.assign(tela, {nome, ...extra}); desenhar(); window.scrollTo(0, 0); }
+
+async function desenhar() {
+  document.querySelectorAll('.nav').forEach(b =>
+    b.setAttribute('aria-current', b.dataset.tela === (tela.nome === 'lista' ? 'listas' : tela.nome) ? 'page' : 'false'));
+  try {
+    if (tela.nome === 'enviar') await telaEnviar();
+    else if (tela.nome === 'listas') await telaListas();
+    else await telaLista();
+  } catch (e) {
+    principal.innerHTML = `<div class="painel vazio">Não foi possível carregar: ${esc(e.message)}</div>`;
+  }
+}
+
+async function telaEnviar() {
+  const envios = await api.envios();
+  principal.innerHTML = `
+    <div class="cab"><h1>Enviar lista</h1></div>
+    ${DEMO ? '<div class="aviso-demo">Demonstração: escolha qualquer PDF para ver as etapas. O processamento é simulado e termina na lista de exemplo.</div>' : ''}
+    <label class="soltar" id="soltar" for="arquivo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
+      <strong>Arraste os PDFs das listas para cá</strong>
+      <p>ou clique para escolher · vários arquivos de uma vez</p>
+      <input type="file" id="arquivo" accept="application/pdf,.pdf" multiple hidden>
+    </label>
+    <p class="dica">Cada lista passa por: recorte das questões e figuras, transcrição com IA (LaTeX e formatação), validação automática e, por fim, fica pronta para você revisar e enviar ao banco.</p>
+    <div class="envios">${envios.length ? envios.map(cartaoEnvio).join('') : ''}</div>`;
+  const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
+  input.addEventListener('change', () => receber(input.files));
+  ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.add('ativo'); }));
+  ['dragleave', 'drop'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.remove('ativo'); }));
+  zona.addEventListener('drop', e => receber(e.dataTransfer.files));
+  principal.querySelectorAll('[data-abrir]').forEach(b => b.addEventListener('click', () => ir('lista', {lista: b.dataset.abrir, questao: 0})));
+  if (!DEMO && envios.some(e => e.estado === 'rodando')) setTimeout(() => tela.nome === 'enviar' && desenhar(), 2000);
+}
+
+function cartaoEnvio(e) {
+  const etapas = ETAPAS.map((nome, i) => {
+    let cls = i < e.etapa ? 'feita' : i === e.etapa ? 'atual' : '';
+    if (e.estado === 'concluido') cls = 'feita';
+    if (e.estado === 'parado' && i === e.etapa) cls = 'parada';
+    if (e.estado === 'falhou' && i === e.etapa) cls = 'falhou';
+    return `<div class="etapa ${cls}"><i></i>${nome}</div>`;
+  }).join('');
+  const acao = e.lista && e.estado === 'concluido' ? `<button class="botao" data-abrir="${esc(e.lista)}">Ver lista</button>` : '';
+  return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>${acao}<div class="etapas">${etapas}</div></div>`;
+}
+
+async function receber(arquivos) {
+  for (const a of arquivos) {
+    if (!/\.pdf$/i.test(a.name)) continue;
+    try { await api.enviarPdf(a); } catch (e) { demoEnvios.unshift({arquivo: a.name, etapa: 0, estado: 'falhou', mensagem: e.message}); }
+  }
+  desenhar();
+}
+
+async function telaListas() {
+  cacheListas = await api.listas();
+  document.getElementById('contagem-listas').textContent = cacheListas.length || '';
+  const disciplinas = [...new Set(cacheListas.map(l => l.disciplina).filter(Boolean))].sort();
+  const filtradas = cacheListas.filter(l =>
+    (!tela.filtro || (l.nome + ' ' + l.descricao).toLowerCase().includes(tela.filtro.toLowerCase())) &&
+    (!tela.disciplina || l.disciplina === tela.disciplina));
+  principal.innerHTML = `
+    <div class="cab"><h1>Listas de questões</h1><button class="botao primario" data-tela-ir="enviar">+ Enviar lista</button></div>
+    <div class="filtros">
+      <input class="campo" id="filtro" placeholder="Filtrar pelo nome…" value="${esc(tela.filtro)}" aria-label="Filtrar pelo nome">
+      <select class="campo" id="disciplina" aria-label="Disciplina"><option value="">Todas as disciplinas</option>
+        ${disciplinas.map(d => `<option ${d === tela.disciplina ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select>
+    </div>
+    <div class="painel tabela-wrap"><table>
+      <thead><tr><th>Nome</th><th>Qtd. questões</th><th>Descrição</th><th>Disciplina</th><th>Tópico</th><th>Tags</th><th>Situação</th></tr></thead>
+      <tbody>${filtradas.length ? filtradas.map(l => `
+        <tr ${l.status === 'aguardando_transcricao' ? 'class="pendente" title="Ainda sem transcrição"' : `class="clicavel" data-lista="${esc(l.id)}" tabindex="0"`}>
+          <td><strong>${esc(l.nome)}</strong></td><td class="num">${l.total_questoes}</td><td>${esc(l.descricao)}</td>
+          <td>${esc(l.disciplina || '—')}</td><td>${esc(l.topico || '—')}</td>
+          <td>${(l.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</td>
+          <td>${selo(l.status)}</td></tr>`).join('')
+        : `<tr><td colspan="7" class="vazio">${cacheListas.length ? 'Nenhuma lista com esse filtro.' : 'Nenhuma lista ainda. Envie o primeiro PDF na tela Enviar lista.'}</td></tr>`}</tbody>
+    </table></div>`;
+  const f = document.getElementById('filtro');
+  f.addEventListener('input', () => { tela.filtro = f.value; telaListas().then(() => { const n = document.getElementById('filtro'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); });
+  document.getElementById('disciplina').addEventListener('change', e => { tela.disciplina = e.target.value; telaListas(); });
+  principal.querySelector('[data-tela-ir]').addEventListener('click', () => ir('enviar'));
+  principal.querySelectorAll('[data-lista]').forEach(tr => {
+    const abrir = () => ir('lista', {lista: tr.dataset.lista, questao: 0});
+    tr.addEventListener('click', abrir);
+    tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+  });
+}
+
+async function telaLista() {
+  const dados = await api.lista(tela.lista);
+  const l = dados.lista, val = dados.validacao || {}, r = dados.resumo;
+  const q = l.questoes[tela.questao] || l.questoes[0];
+  principal.innerHTML = `
+    <div class="migalha"><button data-voltar>Listas</button><span>›</span><span>Gerenciamento de questões</span></div>
+    <div class="cab"><div><h1>${esc(l.nome)}</h1>
+      <div class="resumo-lista"><span>${l.questoes.length} questões</span><span>${esc(l.disciplina || '')} · ${esc(l.topico || '')}</span>
+      <span>${selo(r.status)}</span><span>${r.erros} erro(s) · ${r.avisos} aviso(s)</span></div></div>
+      <button class="botao primario" id="enviar-banco" ${r.status === 'com_erros' ? 'disabled' : ''}>Enviar ao banco</button></div>
+    <div class="gerenciar">
+      <div class="painel lista-q tabela-wrap"><table>
+        <thead><tr><th>#</th><th>Título</th><th>Instituição</th><th>Ano</th><th>Dificuldade</th><th></th></tr></thead>
+        <tbody>${l.questoes.map((x, i) => {
+          const v = val[x.numero] || {erros: [], avisos: []};
+          const marca = v.erros.length ? '<span class="selo erro">erro</span>' : (v.avisos.length ? '<span class="selo alerta">revisar</span>' : '');
+          return `<tr class="clicavel ${i === tela.questao ? 'sel' : ''}" data-q="${i}" tabindex="0">
+            <td class="num">${x.numero}</td><td title="${esc(x.titulo)}" style="white-space:nowrap">${esc(tituloCurto(x.titulo))}</td><td>${esc(x.instituicao || '—')}</td>
+            <td class="num">${x.ano || '—'}</td><td>${DIFICULDADE[x.dificuldade]}</td><td>${marca}</td></tr>`;
+        }).join('')}</tbody></table></div>
+      <section class="painel detalhe" id="detalhe" aria-label="Detalhes da questão">${detalheQuestao(q, val[q.numero], l)}</section>
+    </div>`;
+  principal.querySelector('[data-voltar]').addEventListener('click', () => ir('listas'));
+  principal.querySelectorAll('[data-q]').forEach(tr => {
+    const abrir = () => { tela.questao = +tr.dataset.q; telaLista(); };
+    tr.addEventListener('click', abrir);
+    tr.addEventListener('keydown', e => e.key === 'Enter' && abrir());
+  });
+  document.getElementById('enviar-banco').addEventListener('click', async ev => {
+    const b = ev.currentTarget; b.disabled = true; b.textContent = 'Enviando…';
+    try { await api.enviarBanco(tela.lista); b.textContent = 'Enviada'; }
+    catch (e) { b.textContent = 'Enviar ao banco'; b.disabled = false; mostrarErro(e.message); }
+  });
+  principal.querySelector('tr.sel')?.scrollIntoView({block: 'nearest'});
+  tipografar(document.getElementById('detalhe'));
+}
+
+function mostrarErro(msg) {
+  const d = document.getElementById('detalhe');
+  d.insertAdjacentHTML('afterbegin', `<ul class="avisos erro sem-tex"><li>${esc(msg)}</li></ul>`);
+}
+
+function detalheQuestao(q, v = {erros: [], avisos: []}, lista) {
+  const figs = Object.fromEntries((q.figuras || []).map(f => [f.nome, f.url || api.arquivo(lista.id, f.arquivo)]));
+  const alts = Object.entries(q.alternativas).map(([letra, texto]) => `
+    <div class="alt"><span class="letra">${letra}</span><div class="conteudo">${md(texto, figs)}</div>
+      <span class="chave ${letra === q.gabarito ? 'on' : ''}" role="img" aria-label="${letra === q.gabarito ? 'Correta' : 'Incorreta'}"></span></div>`).join('');
+  return `
+    <h2>Detalhes da questão</h2>
+    ${v.erros.length ? `<ul class="avisos erro sem-tex">${v.erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    ${v.avisos.length ? `<ul class="avisos alerta sem-tex">${v.avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+    <div><div class="rotulo">Título da pergunta (uso interno)</div><div class="valor">${esc(q.titulo)}</div></div>
+    <div class="grade">
+      <div><div class="rotulo">Instituição</div><div class="valor">${esc(q.instituicao || '—')}</div></div>
+      <div><div class="rotulo">Disciplina</div><div class="valor">${esc(q.disciplina)}</div></div>
+      <div><div class="rotulo">Tópico</div><div class="valor">${esc(q.topico)}</div></div>
+    </div>
+    <div><div class="rotulo">Enunciado</div><div class="enunciado">${md(q.enunciado, figs)}</div></div>
+    <div><div class="rotulo">Assuntos</div><div class="valor">${(q.assuntos || []).map(a => `<span class="tag">${esc(a)}</span>`).join('') || '—'}</div></div>
+    <div class="grade duas">
+      <div><div class="rotulo">Dificuldade da questão</div><div class="valor">${DIFICULDADE[q.dificuldade]}${q.etapa ? ` <span class="sem-tex" style="color:var(--fraco)">· etapa ${esc(q.etapa)}</span>` : ''}</div></div>
+      <div><div class="rotulo">Ano</div><div class="valor num">${q.ano || '—'}</div></div>
+    </div>
+    <div><div class="rotulo">Alternativas</div><div class="alternativas">
+      <div class="alt cab-alt"><span>#</span><span>Conteúdo da alternativa</span><span style="justify-self:center">Correta?</span></div>${alts}</div></div>
+    <details class="original"><summary>Ver original no PDF (página ${q.pagina})</summary><img src="${api.arquivo(lista.id, q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
+}
+
+document.getElementById('modo').textContent = DEMO
+  ? 'Demonstração com a lista de exemplo. No app local, os PDFs são processados de verdade.'
+  : 'App local · os dados ficam na pasta saida/';
+(async () => {
+  try { const ls = await api.listas(); document.getElementById('contagem-listas').textContent = ls.length || ''; } catch {}
+  if (DEMO) { tela.nome = 'listas'; }
+  desenhar();
+})();
+</script>

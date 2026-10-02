@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "O jovem João Arthur resolveu viajar para uma cidade no interior do estado e foi no seu carro, um Creta 1.6 Flex, ano 2019. Seu veículo possui pneus 205/65 R15 que, com o aro, medem um diâmetro de $625\\ \\text{mm}$.\n\nDeslocando-se a velocidade constante de $90\\ \\text{km/h}$ em uma rodovia federal, plana e horizontal, assinale a opção que indica qual a faixa de rotação, em rpm, de um dos pneus do carro, considerando estarem devidamente calibrados e a temperatura constante?\n\nAdote $\\pi$ (pi) $= 3{,}0$.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "D",
-  "explicacao": "Sem deslizamento, a velocidade do carro é igual à velocidade linear dos pontos da borda do pneu: $v = 2\\pi R f$. Basta isolar a frequência e convertê-la para rpm.\n\nDados no SI: $v = 90\\ \\text{km/h} = 25\\ \\text{m/s}$ e $R = \\frac{625}{2}\\ \\text{mm} = 0{,}3125\\ \\text{m}$.\n\n$$f = \\frac{v}{2\\pi R} = \\frac{25}{2 \\cdot 3{,}0 \\cdot 0{,}3125} = \\frac{25}{1{,}875} \\approx 13{,}3\\ \\text{Hz}$$\n\nEm rotações por minuto:\n\n$$f = 13{,}3 \\cdot 60 \\approx 800\\ \\text{rpm}$$\n\nO valor está na faixa entre $751$ e $800$ rpm.\n\n**Gabarito: D**",
   "revisar": false,
   "observacoes": null
 }

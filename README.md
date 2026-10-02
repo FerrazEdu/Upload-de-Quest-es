@@ -1,7 +1,8 @@
 # Upload de Questões
 
 Transforma listas de exercícios em PDF em questões no banco (Supabase), com **LaTeX,
-negrito/itálico, tabelas e figuras em alta resolução**, e uma resolução comentada por questão.
+negrito/itálico, tabelas e figuras em alta resolução**. Só transcreve e classifica: não gera
+resolução.
 
 ```
 PDF ──segmentar──▶ recortes + figuras + manifesto ──transcrever (IA)──▶ ia/QNN.json
@@ -30,7 +31,23 @@ PDF ──segmentar──▶ recortes + figuras + manifesto ──transcrever (I
 pip install -r requirements.txt
 ```
 
-## Uso
+## App web (envio + listas cadastradas)
+
+```
+python -m upq.web            # http://localhost:8000
+```
+
+- **Enviar lista**: arraste um ou vários PDFs; cada um mostra as etapas
+  (recorte → transcrição → validação → pronta para envio).
+- **Listas**: a tabela das listas (nome, quantidade, descrição, disciplina, tópico, tags,
+  situação). Clique numa lista para ver as questões; clique numa questão para ver os detalhes
+  como na plataforma (título interno, instituição, disciplina, tópico, enunciado renderizado,
+  assuntos, dificuldade, ano, alternativas com "Correta?") e o recorte original do PDF.
+- **Enviar ao banco** manda a lista ao Supabase (precisa de `SUPABASE_URL` e `SUPABASE_SECRET_KEY`).
+
+`python -m upq.web --demo demo.html` gera um HTML único, sem servidor, com as listas de `saida/`.
+
+## Uso pela linha de comando
 
 ```
 # 1. Segmentar + transcrever + validar + gerar revisão (uma lista ou uma pasta inteira)
@@ -72,8 +89,8 @@ Migrações em `supabase/migrations/`, já aplicadas no projeto `wrexjikxwjqwxcs
 | Tabela | Conteúdo |
 |---|---|
 | `topicos` | base oficial de tópicos (166 pares disciplina/tópico, de `dados/base_topicos.txt`) |
-| `listas` | uma linha por PDF (`hash_pdf` único: reenviar o mesmo PDF atualiza) |
-| `questoes` | enunciado, `alternativas` (JSON A–E), gabarito, explicação, figuras, dificuldade, etapa |
+| `listas` | uma linha por PDF: nome, descrição, tags (`hash_pdf` único: reenviar atualiza) |
+| `questoes` | enunciado, `alternativas` (JSON A–E), gabarito, assuntos, figuras, dificuldade, etapa |
 
 - Texto rico é **Markdown + LaTeX** (`$...$`, `$$...$$`); figuras são `![descrição](URL pública)`.
 - `importar_lista(p jsonb)` grava a lista inteira numa transação e nunca apaga questões.
@@ -85,11 +102,12 @@ Migrações em `supabase/migrations/`, já aplicadas no projeto `wrexjikxwjqwxcs
 | Caminho | O quê |
 |---|---|
 | `upq/segmentar.py` | recorta questões e figuras, lê etapas do sumário e o gabarito |
-| `upq/prompt.py` | regras de transcrição, formatação, dificuldade e resolução (adaptadas do Prompt Mestre) |
+| `upq/prompt.py` | regras de transcrição, formatação, classificação e dificuldade (adaptadas do Prompt Mestre) |
 | `upq/transcrever.py` | motor da API do Claude (paralelo, cache do prompt, saída em JSON Schema) |
 | `upq/montar.py` | junta tudo em `transcricao.json` com título, etapa e gabarito oficial |
 | `upq/validar.py` | estrutura, base de tópicos, LaTeX, figuras e conferência com o texto do PDF |
 | `upq/revisao.py` | gera `revisao.html` |
 | `upq/enviar.py` / `upq/exportar.py` | Supabase / .xlsx |
+| `upq/web.py` + `upq/web/app.html` | app web local (envio de PDFs e listas cadastradas) |
 | `visualizador.html` | o banco publicado, como o aluno vê |
 | `docs/prompt_mestre_original.md` | prompt usado antes, para referência |

@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "O velocímetro dos automóveis indica a velocidade a partir do raio das rodas do automóvel e da contagem do número de voltas que essas rodas efetuam em certo intervalo de tempo. Suponha que um velocímetro, calibrado para um automóvel com rodas de raio $30\\ \\text{cm}$, esteja indicando a velocidade de $90\\ \\text{km/h}$, mas está erroneamente instalado em um automóvel com rodas de raio $27\\ \\text{cm}$.\n\nEsse automóvel está se movendo com velocidade de",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "O velocímetro mede a frequência $f$ das rodas e calcula $v = 2\\pi R f$ usando o raio para o qual foi calibrado ($30\\ \\text{cm}$). A frequência real é a mesma; o que muda é o raio verdadeiro ($27\\ \\text{cm}$).\n\nFrequência que gera a indicação de $90\\ \\text{km/h}$:\n\n$$90 = 2\\pi \\cdot 0{,}30 \\cdot f$$\n\nVelocidade real, com a mesma $f$:\n\n$$v_{\\text{real}} = 2\\pi \\cdot 0{,}27 \\cdot f = 90 \\cdot \\frac{0{,}27}{0{,}30} = 90 \\cdot 0{,}9 = 81\\ \\text{km/h}$$\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

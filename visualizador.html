@@ -31,8 +31,6 @@ nav small{color:var(--suave);display:block}
 ol.alts{list-style:none;padding:0}ol.alts li{display:flex;gap:8px;padding:5px 8px;border-radius:6px}
 ol.alts li p{margin:0}ol.alts .l{font-weight:700}
 .q.aberta li.certa{background:var(--certa)}
-.resp{display:none;border-top:1px dashed var(--borda);margin-top:10px;padding-top:6px}
-.q.aberta .resp{display:block}
 .q>button{border:1px solid var(--borda);background:var(--fundo);color:var(--texto);border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit;font-size:14px}
 .vazio{color:var(--suave)}
 mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
@@ -62,7 +60,7 @@ async function abrir(lista, botao) {
     const alts = Object.entries(q.alternativas).map(([l, t]) =>
       `<li class="${l === q.gabarito ? 'certa' : ''}"><span class="l">${l})</span><div>${md(t)}</div></li>`).join('');
     s.innerHTML = `<h2>${q.titulo}</h2>${md(q.enunciado)}<ol class="alts">${alts}</ol>
-      <button>Ver resposta</button><div class="resp">${md(q.explicacao || '')}</div>`;
+      <button>Ver gabarito</button>`;
     s.querySelector('button').onclick = () => s.classList.toggle('aberta');
     main.appendChild(s);
   }

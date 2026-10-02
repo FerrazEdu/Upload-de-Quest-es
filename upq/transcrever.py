@@ -5,7 +5,7 @@ formato que o modo manual produz (ver CLAUDE.md).
 Requer ANTHROPIC_API_KEY (ou `ant auth login`).
 
 Uso:
-    python -m upq.transcrever saida/MCU [--paralelo 8] [--esforco medium] [--refazer]
+    python -m upq.transcrever saida/MCU [--paralelo 8] [--esforco low] [--refazer]
 """
 
 import argparse
@@ -163,7 +163,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pasta", type=Path, help="pasta gerada por upq.segmentar")
     ap.add_argument("--paralelo", type=int, default=8, help="chamadas simultâneas")
-    ap.add_argument("--esforco", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
+    ap.add_argument("--esforco", default="low", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--refazer", action="store_true", help="refaz questões já transcritas")
     args = ap.parse_args()
     asyncio.run(executar(args.pasta, args.paralelo, args.esforco, args.refazer))

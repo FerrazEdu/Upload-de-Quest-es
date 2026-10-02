@@ -94,7 +94,7 @@ for (const q of D.questoes) {
   s.dataset.aviso = v.avisos.length > 0;
   s.innerHTML = `
     <div class="cab"><b>Questão ${String(q.numero).padStart(2, '0')}</b>
-      <span class="meta">${esc(q.instituicao || 'sem banca')} ${esc(q.ano || '')} · ${esc(q.etapa || '')} · dificuldade ${q.dificuldade} · p.${q.pagina}</span>
+      <span class="meta">${esc(q.instituicao || 'sem banca')} ${esc(q.ano || '')} · ${esc(q.etapa || '')} · dificuldade ${q.dificuldade} · ${esc((q.assuntos || []).join(', '))} · p.${q.pagina}</span>
       ${v.erros.length ? `<span class="selo erro">${v.erros.length} erro(s)</span>` : ''}
       ${v.avisos.length ? `<span class="selo aviso">${v.avisos.length} aviso(s)</span>` : ''}
       <span class="meta" style="flex-basis:100%">${esc(q.titulo)}</span></div>
@@ -103,7 +103,7 @@ for (const q of D.questoes) {
     <div class="corpo">
       <div class="orig"><img loading="lazy" src="${q.imagem}" alt="Original da questão ${q.numero}"></div>
       <div class="render">${md(q.enunciado, figs)}<ol class="alts">${alts}</ol>
-        <details><summary>Explicação do professor</summary>${md(q.explicacao, figs)}</details></div>
+</div>
     </div>`;
   main.appendChild(s);
 }

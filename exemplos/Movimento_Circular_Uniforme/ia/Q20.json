@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "Um carro percorre uma rotatória circular de raio $100$ metros. O motorista mantém uma velocidade constante de $72\\ \\text{km/h}$ durante todo o trajeto.\n\nAnalise as proposições com base na informação.\n\nI. O módulo da aceleração centrípeta do carro é $4\\ \\text{m/s}^2$.\n\nII. A direção da aceleração centrípeta é sempre radial, apontando para o centro da rotatória.\n\nIII. O vetor deslocamento do carro, ao completar uma volta completa na rotatória, tem magnitude igual a $200$ metros.\n\nIV. A força centrípeta responsável por manter o carro em movimento circular é proporcionada pela força de atrito entre os pneus e o asfalto.\n\nV. O período para o carro completar uma volta completa, na rotatória, é de $10$ segundos.\n\nAssinale a alternativa **correta**.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "B",
-  "explicacao": "Em MCU a velocidade tem módulo constante e a aceleração é só centrípeta, $a_c = \\frac{v^2}{R}$, voltada para o centro. Dados: $v = 72\\ \\text{km/h} = 20\\ \\text{m/s}$ e $R = 100\\ \\text{m}$.\n\n**I. Verdadeira.**\n\n$$a_c = \\frac{v^2}{R} = \\frac{20^2}{100} = 4\\ \\text{m/s}^2$$\n\n**II. Verdadeira.** A aceleração centrípeta é radial e aponta para o centro da curva.\n\n**III. Falsa.** Ao completar uma volta o carro retorna ao ponto de partida: o deslocamento é nulo. (A distância percorrida seria $2\\pi R \\approx 628\\ \\text{m}$, não $200\\ \\text{m}$.)\n\n**IV. Verdadeira.** Numa rotatória plana, a resultante centrípeta é dada pelo atrito lateral entre os pneus e o asfalto.\n\n**V. Falsa.**\n\n$$T = \\frac{2\\pi R}{v} = \\frac{2\\pi \\cdot 100}{20} = 10\\pi \\approx 31{,}4\\ \\text{s}$$\n\nSão verdadeiras apenas I, II e IV.\n\n**Gabarito: B**",
   "revisar": false,
   "observacoes": null
 }

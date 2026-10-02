@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "No canto da sala, sobre uma pequena mesa, estava colocado o antigo relógio pertencente à família. Apesar de empoeirado e esquecido pelo tempo, ainda funcionando perfeitamente. O ponteiro indicador dos minutos medindo exatamente $10\\ \\text{cm}$ do eixo até a extremidade. Um ponto nesta extremidade possui uma velocidade tangencial, em m/s, igual a _____.\n\nAssinale a alternativa que completa a lacuna do texto anterior.",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "D",
-  "explicacao": "O ponteiro dos minutos dá uma volta completa a cada hora, logo seu período é $T = 1\\ \\text{h} = 3.600\\ \\text{s}$. O raio é $R = 10\\ \\text{cm} = 0{,}1\\ \\text{m}$.\n\n$$v = \\frac{2\\pi R}{T} = \\frac{2\\pi \\cdot 0{,}1\\ \\text{m}}{3.600\\ \\text{s}} = \\frac{0{,}2\\pi}{3.600} = \\frac{\\pi}{18000}\\ \\text{m/s}$$\n\n**Gabarito: D**",
   "revisar": false,
   "observacoes": null
 }

@@ -98,10 +98,14 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
         faixa = FAIXA_ETAPA.get(q.etapa or "")
         if faixa and not faixa[0] <= q.dificuldade <= faixa[1]:
             avisos.append(f"dificuldade {q.dificuldade} fora da faixa {faixa[0]}–{faixa[1]} de {q.etapa}")
-        if not q.explicacao.rstrip().endswith(f"**Gabarito: {q.gabarito}**"):
-            avisos.append("explicação não termina com **Gabarito: X** igual ao gabarito")
+        validos = base.get((q.disciplina, q.topico)) or [q.topico]
+        if not q.assuntos:
+            erros.append("sem assunto")
+        for a in q.assuntos:
+            if a not in validos:
+                erros.append(f"assunto fora da base para {q.topico}: {a}")
 
-        campos = {"enunciado": q.enunciado, "explicacao": q.explicacao,
+        campos = {"enunciado": q.enunciado,
                   **{f"alternativa {k}": v for k, v in q.alternativas.items()}}
         for nome, texto in campos.items():
             e, a = checar_latex(nome, texto)

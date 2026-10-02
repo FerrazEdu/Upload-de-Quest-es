@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "No momento em que o cadeirante solta as mãos das rodas da cadeira, a frequência de rotação das rodas é igual a $5$ voltas por segundo.\n\nSe o diâmetro das rodas é igual a $60\\ \\text{cm}$, assinale a alternativa que apresenta, corretamente, a velocidade linear da cadeira nesse instante.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "Rodando sem deslizar, a cadeira avança com a mesma velocidade linear dos pontos da borda da roda: $v = 2\\pi R f$.\n\nCom $R = 30\\ \\text{cm} = 0{,}3\\ \\text{m}$ e $f = 5\\ \\text{Hz}$:\n\n$$v = 2\\pi \\cdot 0{,}3 \\cdot 5 = 3\\pi \\approx 3 \\cdot 3{,}14 \\approx 9{,}4\\ \\text{m/s}$$\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "Na embalagem de uma furadeira elétrica é informado que ela gira a $3000\\ \\text{rpm}$. A unidade rpm, cuja sigla abrevia a expressão “rotações por minuto”, é muito utilizada no cotidiano, apesar de não ser a unidade escolhida pelo Sistema Internacional de Unidades.\n\nNesse sistema, a informação que equivale a $3000\\ \\text{rpm}$ é",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "A grandeza expressa em rpm é a frequência de rotação. No SI, a frequência é medida em hertz ($1\\ \\text{Hz} = 1$ rotação por segundo), então basta converter minutos em segundos.\n\n$$f = \\frac{3000\\ \\text{rotações}}{60\\ \\text{s}} = 50\\ \\text{Hz}$$\n\nAs alternativas A e D tratam do período, que seria $T = \\frac{1}{50} = 0{,}02\\ \\text{s}$; a B confunde frequência com velocidade angular ($\\omega = 2\\pi f = 100\\pi\\ \\text{rad/s}$); a E multiplica por 60 em vez de dividir.\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

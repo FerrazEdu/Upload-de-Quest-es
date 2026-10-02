@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 3,
   "enunciado": "Em uma rodovia, o raio de curva simples, sem inclinação, é selecionado de acordo com as características técnicas da estrada e da topografia da região. Em um trecho da rodovia BR-116, um veículo que trafega com velocidade $V$ descreve uma curva simples de raio $R$ sob a ação de uma resultante central de módulo $F$.\n\nPara que a intensidade da resultante sobre o veículo seja reduzida à metade em um trecho da rodovia com o dobro do limite de velocidade, o raio da curva simples deverá ser de",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "D",
-  "explicacao": "Na curva, a resultante central é a força centrípeta, $F = \\frac{mV^2}{R}$.\n\nSituação inicial e nova situação (velocidade $2V$, força $\\frac{F}{2}$, raio $R'$):\n\n$$F = \\frac{mV^2}{R} \\qquad \\frac{F}{2} = \\frac{m(2V)^2}{R'} = \\frac{4mV^2}{R'}$$\n\nDividindo a segunda pela primeira:\n\n$$\\frac{1}{2} = \\frac{4R}{R'} \\Rightarrow R' = 8R$$\n\n**Gabarito: D**",
   "revisar": true,
   "observacoes": "Dificuldade 3, abaixo da faixa da etapa Desafios (4 a 5): proporção direta na fórmula da força centrípeta."
 }

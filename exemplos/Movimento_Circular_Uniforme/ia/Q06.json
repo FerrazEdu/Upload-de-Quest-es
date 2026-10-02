@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "Os últimos anos testemunharam a retomada do interesse de alguns países pela exploração da Lua. Diversas missões com destino a esse satélite foram lançadas: Chandrayaan-3 (Índia, 2023), Luna 25 (Rússia, 2023), Peregrine Mission One (EUA, 2024), Slim (Japão, 2024) e Chang'e 6 (China, 2024).\n\nUma sonda descreve, em torno da Lua, uma órbita circular de raio $r = 1{,}848 \\times 10^{6}\\ \\text{m}$ e dá uma volta completa num período $T = 2{,}0\\ \\text{h}$. Nesse movimento circular uniforme, qual a velocidade escalar da sonda em relação ao centro da Lua? Se necessário, use $\\pi \\approx 3{,}0$.",
   "alternativas": [
@@ -26,7 +29,6 @@
     }
   ],
   "gabarito": "B",
-  "explicacao": "No MCU, a velocidade escalar é o comprimento da órbita dividido pelo período. É preciso converter o período para segundos: $T = 2{,}0\\ \\text{h} = 7.200\\ \\text{s}$.\n\n$$v = \\frac{2\\pi r}{T} = \\frac{2 \\cdot 3{,}0 \\cdot 1{,}848 \\times 10^{6}\\ \\text{m}}{7.200\\ \\text{s}} = \\frac{11{,}088 \\times 10^{6}\\ \\text{m}}{7.200\\ \\text{s}} = 1.540\\ \\text{m/s}$$\n\nA alternativa A corresponde a $\\frac{r}{T}$, esquecendo o fator $2\\pi$; C e D trazem valores em km/s muito acima do correto ($1{,}54\\ \\text{km/s}$).\n\n**Gabarito: B**",
   "revisar": false,
   "observacoes": null
 }

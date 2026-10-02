@@ -5,6 +5,9 @@
   "adaptada": true,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 2,
   "enunciado": "A aceleração centrípeta é um conceito importante no estudo da física e do movimento circular.\n\nCom base nesse conceito, analise o efeito da aceleração centrípeta na velocidade de um objeto em movimento circular. Selecione a alternativa correta.",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "C",
-  "explicacao": "A aceleração centrípeta é sempre perpendicular ao vetor velocidade e aponta para o centro da curva. Por ser perpendicular, ela não tem componente na direção do movimento: muda apenas a direção de $\\vec{v}$, nunca o seu módulo. Quem altera o módulo é a aceleração tangencial.\n\n$$a_c = \\frac{v^2}{R}$$\n\n- A e B: aumentar ou diminuir o módulo da velocidade é papel da aceleração tangencial.\n- D: a aceleração centrípeta não altera a magnitude de $\\vec{v}$.\n- E: em movimentos retilíneos não há aceleração centrípeta.\n\n**Gabarito: C**",
   "revisar": false,
   "observacoes": null
 }

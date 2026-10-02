@@ -5,6 +5,9 @@
   "adaptada": false,
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "assuntos": [
+    "Movimento circular"
+  ],
   "dificuldade": 4,
   "enunciado": "A corrida é um dos esportes mais democráticos, afinal, basta um tênis adequado, uma roupa confortável e muita força de vontade. Sua prática garante uma melhor expectativa de vida, pois colabora no funcionamento cardíaco, na redução da pressão arterial e do colesterol LDL. Os amigos Beto e Vini são praticantes de corrida e costumam realizá-la em uma pista circular. Beto demora $48$ segundos para dar a volta completa na pista. Vini corre em sentido oposto e encontra Beto a cada $18$ segundos.\n\nO tempo em segundos que Vini demora para dar uma volta completa é:\n\n![Dois corredores em sentidos opostos sobre uma pista circular vermelha](figura:Q25_fig1)\n\n*Fonte: UPE, 2022.*",
   "alternativas": [
@@ -30,7 +33,6 @@
     }
   ],
   "gabarito": "A",
-  "explicacao": "Correndo em sentidos opostos, as velocidades angulares se somam no movimento relativo. Entre dois encontros, juntos eles completam uma volta ($2\\pi$), então as frequências se somam:\n\n$$\\frac{1}{T_{B}} + \\frac{1}{T_{V}} = \\frac{1}{T_{\\text{enc}}}$$\n\n$$\\frac{1}{48} + \\frac{1}{T_{V}} = \\frac{1}{18}$$\n\n$$\\frac{1}{T_{V}} = \\frac{1}{18} - \\frac{1}{48} = \\frac{8 - 3}{144} = \\frac{5}{144}$$\n\n$$T_{V} = \\frac{144}{5} = 28{,}8\\ \\text{s}$$\n\n**Gabarito: A**",
   "revisar": false,
   "observacoes": null
 }

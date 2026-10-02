@@ -3,8 +3,14 @@
   "hash_pdf": "b82871727b1450eb44617a1334365711a5e2e1b7d93de7f71bd3eb5561e3d88e",
   "tipo": "lista",
   "titulo": "Movimento Circular Uniforme",
+  "nome": "Lista de Movimento Circular Uniforme",
+  "descricao": "Lista completa de Movimento Circular Uniforme",
   "disciplina": "Física",
   "topico": "Cinemática II",
+  "tags": [
+    "Movimento circular",
+    "Lançamento horizontal"
+  ],
   "questoes": [
     {
       "numero": 1,
@@ -13,6 +19,9 @@
       "ano": 2021,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "Na embalagem de uma furadeira elétrica é informado que ela gira a $3000\\ \\text{rpm}$. A unidade rpm, cuja sigla abrevia a expressão “rotações por minuto”, é muito utilizada no cotidiano, apesar de não ser a unidade escolhida pelo Sistema Internacional de Unidades.\n\nNesse sistema, a informação que equivale a $3000\\ \\text{rpm}$ é",
@@ -24,7 +33,6 @@
         "E": "$180\\ \\text{Hz}$, representando a frequência de rotação."
       },
       "gabarito": "C",
-      "explicacao": "A grandeza expressa em rpm é a frequência de rotação. No SI, a frequência é medida em hertz ($1\\ \\text{Hz} = 1$ rotação por segundo), então basta converter minutos em segundos.\n\n$$f = \\frac{3000\\ \\text{rotações}}{60\\ \\text{s}} = 50\\ \\text{Hz}$$\n\nAs alternativas A e D tratam do período, que seria $T = \\frac{1}{50} = 0{,}02\\ \\text{s}$; a B confunde frequência com velocidade angular ($\\omega = 2\\pi f = 100\\pi\\ \\text{rad/s}$); a E multiplica por 60 em vez de dividir.\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q01.png",
@@ -38,6 +46,9 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "A aceleração centrípeta é um conceito importante no estudo da física e do movimento circular.\n\nCom base nesse conceito, analise o efeito da aceleração centrípeta na velocidade de um objeto em movimento circular. Selecione a alternativa correta.",
@@ -49,7 +60,6 @@
         "E": "A aceleração centrípeta sempre está presente nos movimentos descritos pela cinemática."
       },
       "gabarito": "C",
-      "explicacao": "A aceleração centrípeta é sempre perpendicular ao vetor velocidade e aponta para o centro da curva. Por ser perpendicular, ela não tem componente na direção do movimento: muda apenas a direção de $\\vec{v}$, nunca o seu módulo. Quem altera o módulo é a aceleração tangencial.\n\n$$a_c = \\frac{v^2}{R}$$\n\n- A e B: aumentar ou diminuir o módulo da velocidade é papel da aceleração tangencial.\n- D: a aceleração centrípeta não altera a magnitude de $\\vec{v}$.\n- E: em movimentos retilíneos não há aceleração centrípeta.\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q02.png",
@@ -63,6 +73,9 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "Apesar de a estreia, em 1877, do balé “*O Lago dos Cisnes*”, do compositor russo P. I. Tchaikovsky, ter sido um fracasso, hoje ele é um dos mais aclamados no mundo das artes.\n\nNo terceiro ato do balé, o(a) bailarino(a) que interpreta o Cisne Negro realiza uma sequência de 32 *fouettés*. Um *fouetté* é um movimento circular em torno do próprio corpo do(a) bailarino(a), que funciona como um eixo central. Nesse movimento giratório, considerado um dos mais difíceis do balé, o(a) bailarino(a) mantém o corpo ereto com apenas a ponta de um dos pés no piso. A cada volta, o calcanhar do pé, que está no chão, sobe e desce à medida que mantém a energia envolvida no sistema. Enquanto isso, o(a) bailarino(a) dobra e estica a outra perna, mantendo-a no ar sem tocar o piso.\n\nAdotando-se um observador externo como referencial e baseando-se na descrição apresentada, é correto afirmar que uma das grandezas físicas observada para a manutenção desse movimento rotacional é",
@@ -74,7 +87,6 @@
         "E": "a temperatura do corpo."
       },
       "gabarito": "D",
-      "explicacao": "Um movimento de rotação em torno de um eixo é descrito pela velocidade angular $\\omega$, que indica o ângulo descrito por unidade de tempo. Para o observador externo, manter o giro significa manter o corpo girando com velocidade angular (não nula) em torno do eixo.\n\n$$\\omega = \\frac{\\Delta\\varphi}{\\Delta t}$$\n\n- A: massa é grandeza escalar; não existe “massa vetorial”.\n- B: força centrífuga só aparece para um observador no referencial que gira (não inercial), não para o observador externo.\n- C: não há mola ou deformação elástica relevante descrita.\n- E: temperatura não é grandeza cinemática do movimento.\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q03.png",
@@ -88,6 +100,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "Quando observada em um referencial fixo na Terra, a Lua tem uma órbita quase circular em torno da Terra com um raio aproximado de $4{,}0 \\times 10^{8}\\ \\text{m}$ e um período de rotação de $27{,}3$ dias ou $2{,}4 \\times 10^{6}\\ \\text{s}$. Isso é possível, mesmo com a presença da força de atração gravitacional que existe entre elas, porque a Lua se movimenta com velocidade tangencial suficiente para se manter sempre aproximadamente à mesma distância da Terra.\n\nCom base nessas informações dadas e usando $\\pi \\approx 3$, o módulo da velocidade tangencial da Lua, considerando a sua órbita circular e o referencial fixo na Terra, é",
@@ -98,7 +113,6 @@
         "D": "$500\\ \\text{km/h}$."
       },
       "gabarito": "A",
-      "explicacao": "Em movimento circular uniforme, a Lua percorre uma circunferência inteira ($2\\pi R$) em um período $T$.\n\n$$v = \\frac{2\\pi R}{T} = \\frac{2 \\cdot 3 \\cdot 4{,}0 \\times 10^{8}}{2{,}4 \\times 10^{6}}\\ \\text{m/s} = \\frac{24 \\times 10^{8}}{2{,}4 \\times 10^{6}}\\ \\text{m/s} = 1.000\\ \\text{m/s}$$\n\nConvertendo para km/h (multiplica por $3{,}6$):\n\n$$v = 1.000 \\cdot 3{,}6 = 3.600\\ \\text{km/h}$$\n\nA alternativa B traz o valor numérico em m/s, mas com a unidade errada.\n\n**Gabarito: A**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q04.png",
@@ -112,6 +126,9 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "Em uma pista de teste circular de $4{,}2\\ \\text{km}$ de comprimento, um veículo partiu do marco inicial da pista e manteve uma velocidade constante de $35\\ \\text{m/s}$ executando voltas completas na pista. As dimensões do veículo, em relação às dimensões da pista, podem ser desprezadas e o movimento executado foi circular e uniforme.\n\nO valor do período, em segundos, observado no movimento é igual a",
@@ -122,7 +139,6 @@
         "D": "$140$."
       },
       "gabarito": "B",
-      "explicacao": "O período é o tempo de uma volta completa. Como o comprimento da pista já é o perímetro da circunferência, basta dividir a distância de uma volta pela velocidade escalar.\n\n$$T = \\frac{2\\pi R}{v} = \\frac{4.200\\ \\text{m}}{35\\ \\text{m/s}} = 120\\ \\text{s}$$\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q05.png",
@@ -136,6 +152,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Fixação",
       "dificuldade": 2,
       "enunciado": "Os últimos anos testemunharam a retomada do interesse de alguns países pela exploração da Lua. Diversas missões com destino a esse satélite foram lançadas: Chandrayaan-3 (Índia, 2023), Luna 25 (Rússia, 2023), Peregrine Mission One (EUA, 2024), Slim (Japão, 2024) e Chang'e 6 (China, 2024).\n\nUma sonda descreve, em torno da Lua, uma órbita circular de raio $r = 1{,}848 \\times 10^{6}\\ \\text{m}$ e dá uma volta completa num período $T = 2{,}0\\ \\text{h}$. Nesse movimento circular uniforme, qual a velocidade escalar da sonda em relação ao centro da Lua? Se necessário, use $\\pi \\approx 3{,}0$.",
@@ -146,7 +165,6 @@
         "D": "$5.544\\ \\text{km/s}$."
       },
       "gabarito": "B",
-      "explicacao": "No MCU, a velocidade escalar é o comprimento da órbita dividido pelo período. É preciso converter o período para segundos: $T = 2{,}0\\ \\text{h} = 7.200\\ \\text{s}$.\n\n$$v = \\frac{2\\pi r}{T} = \\frac{2 \\cdot 3{,}0 \\cdot 1{,}848 \\times 10^{6}\\ \\text{m}}{7.200\\ \\text{s}} = \\frac{11{,}088 \\times 10^{6}\\ \\text{m}}{7.200\\ \\text{s}} = 1.540\\ \\text{m/s}$$\n\nA alternativa A corresponde a $\\frac{r}{T}$, esquecendo o fator $2\\pi$; C e D trazem valores em km/s muito acima do correto ($1{,}54\\ \\text{km/s}$).\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 3,
       "imagem": "questoes/Q06.png",
@@ -160,6 +178,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 3,
       "enunciado": "Os satélites artificiais e as sondas para exploração espacial são algumas das grandes realizações humanas desenvolvidas no último século. Para coletar e armazenar informações ao longo de anos, esses equipamentos precisam de energia. Como forma de fornecer energia limpa ao satélite, são acoplados diversos painéis de células solares, que, em fotografias, muitas vezes são confundidos com “asas”.\n\nUm satélite geoestacionário precisa armazenar a energia obtida pelos seus painéis solares em suas baterias. Como forma de otimizar o processo de absorção da energia solar, o ideal é que a superfície dos painéis mantenha-se perpendicular aos raios solares incidentes. Para isso, foi adaptado um sistema que rotaciona os painéis solares com velocidade angular constante.\n\nQual é a velocidade de rotação dos painéis em comparação à velocidade de rotação da Terra ($R_T$)?",
@@ -171,7 +192,6 @@
         "E": "$4\\ R_T$"
       },
       "gabarito": "C",
-      "explicacao": "Um satélite geoestacionário acompanha a rotação da Terra: ele completa uma volta em torno do eixo terrestre no mesmo tempo que a Terra gira em torno de si mesma (cerca de 24 h) e mantém sempre a mesma face voltada para a Terra. Assim, o corpo do satélite gira, em relação ao Sol, uma vez por dia.\n\nPara que os painéis fiquem sempre perpendiculares aos raios solares (direção praticamente fixa), eles precisam girar em relação ao satélite compensando exatamente esse giro: uma volta a cada dia, isto é, com o mesmo período da Terra.\n\n$$T_{\\text{painéis}} = T_{\\text{Terra}} \\Rightarrow \\omega_{\\text{painéis}} = \\frac{2\\pi}{T_{\\text{Terra}}} = R_T$$\n\nValores como $0{,}5\\ R_T$ ou $2\\ R_T$ fariam os painéis se adiantarem ou se atrasarem em relação ao Sol ao longo do dia.\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 4,
       "imagem": "questoes/Q07.png",
@@ -185,6 +205,9 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 2,
       "enunciado": "Dada máquina de lavar, com abertura superior para colocação da roupa, tem capacidade de $16\\ \\text{kg}$ e centrifugação de $720$ rotações por minuto. Considere um ponto preso à superfície do tambor da máquina, localizado a $50\\ \\text{cm}$ do eixo de rotação, e o valor de $\\pi = 3$.\n\nA velocidade linear, em m/s, deste ponto vale:",
@@ -195,7 +218,6 @@
         "D": "$36{,}0$"
       },
       "gabarito": "D",
-      "explicacao": "A velocidade linear de um ponto em MCU é $v = 2\\pi R f$. É preciso converter a frequência para hertz e o raio para metros (a capacidade de $16\\ \\text{kg}$ não interfere).\n\n$$f = \\frac{720}{60\\ \\text{s}} = 12\\ \\text{Hz} \\qquad R = 50\\ \\text{cm} = 0{,}5\\ \\text{m}$$\n\n$$v = 2\\pi R f = 2 \\cdot 3 \\cdot 0{,}5 \\cdot 12 = 36{,}0\\ \\text{m/s}$$\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 4,
       "imagem": "questoes/Q08.png",
@@ -209,6 +231,9 @@
       "ano": 2023,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 2,
       "enunciado": "No canto da sala, sobre uma pequena mesa, estava colocado o antigo relógio pertencente à família. Apesar de empoeirado e esquecido pelo tempo, ainda funcionando perfeitamente. O ponteiro indicador dos minutos medindo exatamente $10\\ \\text{cm}$ do eixo até a extremidade. Um ponto nesta extremidade possui uma velocidade tangencial, em m/s, igual a _____.\n\nAssinale a alternativa que completa a lacuna do texto anterior.",
@@ -219,7 +244,6 @@
         "D": "$\\frac{\\pi}{18000}$"
       },
       "gabarito": "D",
-      "explicacao": "O ponteiro dos minutos dá uma volta completa a cada hora, logo seu período é $T = 1\\ \\text{h} = 3.600\\ \\text{s}$. O raio é $R = 10\\ \\text{cm} = 0{,}1\\ \\text{m}$.\n\n$$v = \\frac{2\\pi R}{T} = \\frac{2\\pi \\cdot 0{,}1\\ \\text{m}}{3.600\\ \\text{s}} = \\frac{0{,}2\\pi}{3.600} = \\frac{\\pi}{18000}\\ \\text{m/s}$$\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 4,
       "imagem": "questoes/Q09.png",
@@ -233,6 +257,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 3,
       "enunciado": "Movimento circular uniforme é o movimento que ocorre no plano, com velocidade escalar constante ao longo de uma trajetória circular. Apesar do termo uniforme, esse movimento é acelerado, uma vez que há mudança na direção do vetor velocidade. Isso acontece por conta da existência de uma aceleração de direção radial, cujo sentido aponta para o centro da curva, como ilustra a figura a seguir.\n\n![Carro em rotatória com raio r e aceleração centrípeta apontando para o centro](figura:Q10_fig1)\n\n*(Disponível em: <https://brasilescola.uol.com.br/fisica/movimento-circular-uniforme-mcu.htm>. Acesso em: 19 out. 2021.)*\n\nNo exemplo da figura, um veículo entra na rotatória de raio $r = 4\\ \\text{m}$, com velocidade constante $v = 36\\ \\text{km/h}$.\n\nConsiderando os dados apresentados e $\\pi = 3{,}14$, assinale a alternativa que apresenta, correta e respectivamente, a velocidade angular do veículo, a aceleração centrípeta e o período do movimento.",
@@ -244,7 +271,6 @@
         "E": "$\\omega = 32{,}4\\ \\text{rad/s}$; $a_c = 324{,}00\\ \\text{m/s}^2$; $T = 03{,}4\\ \\text{s}$"
       },
       "gabarito": "B",
-      "explicacao": "No MCU, as grandezas se relacionam por $v = \\omega r$, $a_c = \\frac{v^2}{r}$ e $T = \\frac{2\\pi}{\\omega}$. Primeiro, converta a velocidade para o SI: $v = 36\\ \\text{km/h} = \\frac{36}{3{,}6} = 10\\ \\text{m/s}$.\n\n$$\\omega = \\frac{v}{r} = \\frac{10\\ \\text{m/s}}{4\\ \\text{m}} = 2{,}5\\ \\text{rad/s}$$\n\n$$a_c = \\frac{v^2}{r} = \\frac{(10\\ \\text{m/s})^2}{4\\ \\text{m}} = 25\\ \\text{m/s}^2$$\n\n$$T = \\frac{2\\pi}{\\omega} = \\frac{2 \\cdot 3{,}14}{2{,}5\\ \\text{rad/s}} \\approx 2{,}5\\ \\text{s}$$\n\nA alternativa A tem o $\\omega$ correto, mas erra a aceleração e o período; as demais não satisfazem as relações do MCU com os dados fornecidos.\n\n**Gabarito: B**",
       "figuras": [
         {
           "nome": "Q10_fig1",
@@ -264,6 +290,9 @@
       "ano": 2023,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 2,
       "enunciado": "A prática esportiva de “pular corda” vem conquistando muitos adeptos e se tornando uma modalidade de competição. Numa prova de velocidade, um atleta consegue dar $105$ saltos em $30$ segundos.\n\nConsiderando que o ponto da corda que passa sob os pés e acima da cabeça do praticante descreve uma trajetória circular de raio $r = 90\\ \\text{cm}$, qual é a velocidade escalar desse ponto da corda?\n\nConsidere $\\pi = 3$.\n\n![Atleta pulando corda; ponto P da corda descreve trajetória circular tracejada ao redor dele](figura:Q11_fig1)",
@@ -274,7 +303,6 @@
         "D": "$567\\ \\text{m/s}$."
       },
       "gabarito": "C",
-      "explicacao": "A cada salto a corda dá uma volta completa, então o número de saltos por segundo é a frequência do movimento circular do ponto P. A velocidade escalar é $v = 2\\pi r f$.\n\nFrequência:\n\n$$f = \\frac{105}{30\\ \\text{s}} = 3{,}5\\ \\text{Hz}$$\n\nVelocidade, com $r = 0{,}9\\ \\text{m}$:\n\n$$v = 2\\pi r f = 2 \\cdot 3 \\cdot 0{,}9 \\cdot 3{,}5 = 18{,}9\\ \\text{m/s}$$\n\n**Gabarito: C**",
       "figuras": [
         {
           "nome": "Q11_fig1",
@@ -294,6 +322,9 @@
       "ano": 2023,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 3,
       "enunciado": "O jovem João Arthur resolveu viajar para uma cidade no interior do estado e foi no seu carro, um Creta 1.6 Flex, ano 2019. Seu veículo possui pneus 205/65 R15 que, com o aro, medem um diâmetro de $625\\ \\text{mm}$.\n\nDeslocando-se a velocidade constante de $90\\ \\text{km/h}$ em uma rodovia federal, plana e horizontal, assinale a opção que indica qual a faixa de rotação, em rpm, de um dos pneus do carro, considerando estarem devidamente calibrados e a temperatura constante?\n\nAdote $\\pi$ (pi) $= 3{,}0$.",
@@ -305,7 +336,6 @@
         "E": "Entre $801$ - $850$."
       },
       "gabarito": "D",
-      "explicacao": "Sem deslizamento, a velocidade do carro é igual à velocidade linear dos pontos da borda do pneu: $v = 2\\pi R f$. Basta isolar a frequência e convertê-la para rpm.\n\nDados no SI: $v = 90\\ \\text{km/h} = 25\\ \\text{m/s}$ e $R = \\frac{625}{2}\\ \\text{mm} = 0{,}3125\\ \\text{m}$.\n\n$$f = \\frac{v}{2\\pi R} = \\frac{25}{2 \\cdot 3{,}0 \\cdot 0{,}3125} = \\frac{25}{1{,}875} \\approx 13{,}3\\ \\text{Hz}$$\n\nEm rotações por minuto:\n\n$$f = 13{,}3 \\cdot 60 \\approx 800\\ \\text{rpm}$$\n\nO valor está na faixa entre $751$ e $800$ rpm.\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 5,
       "imagem": "questoes/Q12.png",
@@ -319,6 +349,9 @@
       "ano": 2026,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 2,
       "enunciado": "A centrifuga de mel é um equipamento composto de um tambor com cesto para os favos de mel e um corredor para a saída do mel. Os favos são colocados no cesto e centrifugados manualmente.\n\nA imagem a seguir ilustra um modelo dessa centrífuga.\n\n![Centrífuga de mel antiga com tambor de madeira, manivela e estrutura de madeira](figura:Q13_fig1)\n\n*(Centrifuga de Mel. Museu Histórico de Entre Rios, Distrito de Guarapuava. Disponível em: https://suabios.com.br/museu-historico/objetos-historicos. Acesso em: 16 jul. 2025.)*\n\nConsiderando a dinâmica do movimento circular, assinale a alternativa correta.",
@@ -330,7 +363,6 @@
         "E": "Uma gota de mel está sujeita à aceleração centrípeta, que tem a mesma direção do raio do tambor."
       },
       "gabarito": "E",
-      "explicacao": "No movimento circular, a aceleração centrípeta é responsável apenas pela mudança de direção da velocidade; ela tem a direção do raio e aponta para o centro da trajetória, com módulo $a_c = \\frac{v^2}{R} = \\omega^2 R$.\n\n- **A — Incorreta.** A variação da velocidade (em módulo) por unidade de tempo é a aceleração tangencial; a centrípeta está ligada à mudança de direção.\n- **B — Incorreta.** A frequência é o número de voltas por unidade de tempo, não o total de voltas ao final do processo.\n- **C — Incorreta.** O período é o tempo de uma volta completa, não o tempo total da extração.\n- **D — Incorreta.** A aceleração centrípeta é radial (perpendicular à velocidade), não tangente.\n- **E — Correta.** A aceleração centrípeta tem a direção do raio do tambor, apontando para o centro.\n\n**Gabarito: E**",
       "figuras": [
         {
           "nome": "Q13_fig1",
@@ -350,6 +382,9 @@
       "ano": 2019,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 2,
       "enunciado": "No momento em que o cadeirante solta as mãos das rodas da cadeira, a frequência de rotação das rodas é igual a $5$ voltas por segundo.\n\nSe o diâmetro das rodas é igual a $60\\ \\text{cm}$, assinale a alternativa que apresenta, corretamente, a velocidade linear da cadeira nesse instante.",
@@ -361,7 +396,6 @@
         "E": "$13{,}2\\ \\text{m/s}$"
       },
       "gabarito": "C",
-      "explicacao": "Rodando sem deslizar, a cadeira avança com a mesma velocidade linear dos pontos da borda da roda: $v = 2\\pi R f$.\n\nCom $R = 30\\ \\text{cm} = 0{,}3\\ \\text{m}$ e $f = 5\\ \\text{Hz}$:\n\n$$v = 2\\pi \\cdot 0{,}3 \\cdot 5 = 3\\pi \\approx 3 \\cdot 3{,}14 \\approx 9{,}4\\ \\text{m/s}$$\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 5,
       "imagem": "questoes/Q14.png",
@@ -375,6 +409,9 @@
       "ano": 2023,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Treinamento",
       "dificuldade": 3,
       "enunciado": "Um móvel ao realizar um movimento circular uniforme em uma pista de raio igual a $6$ metros, percorre entre os tempos $t = 2\\ \\text{s}$ e $t = 5\\ \\text{s}$ a distância de $108$ metros.\n\nQual o período, em segundos, desse movimento?",
@@ -385,7 +422,6 @@
         "D": "$\\frac{\\pi}{6}$"
       },
       "gabarito": "B",
-      "explicacao": "No MCU a velocidade escalar é constante, então ela sai da distância percorrida no intervalo. Depois, o período vem de $v = \\frac{2\\pi R}{T}$.\n\nVelocidade escalar:\n\n$$v = \\frac{\\Delta s}{\\Delta t} = \\frac{108\\ \\text{m}}{(5 - 2)\\ \\text{s}} = 36\\ \\text{m/s}$$\n\nPeríodo:\n\n$$T = \\frac{2\\pi R}{v} = \\frac{2\\pi \\cdot 6}{36} = \\frac{\\pi}{3}\\ \\text{s}$$\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 5,
       "imagem": "questoes/Q15.png",
@@ -399,6 +435,9 @@
       "ano": 2014,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "As máquinas cortadeiras e colheitadeiras de cana-de-açúcar podem substituir dezenas de trabalhadores rurais, o que pode alterar de forma significativa a relação de trabalho nas lavouras de cana-de-açúcar. A pá cortadeira da máquina ilustrada na figura abaixo gira em movimento circular uniforme a uma frequência de $300\\ \\text{rpm}$.\n\nA velocidade de um ponto extremo P da pá vale\n\n(Considere $\\pi \\cong 3$)\n\n![Pá cortadeira em forma de estrela com ponto P na borda e raio R = 60 cm](figura:Q16_fig1)\n\n*Fonte: UNICAMP, 2014.*",
@@ -409,7 +448,6 @@
         "D": "$60\\ \\text{m/s}$."
       },
       "gabarito": "C",
-      "explicacao": "O ponto P descreve uma circunferência de raio $R = 60\\ \\text{cm}$ (dado na figura). Sua velocidade linear é $v = 2\\pi R f$, com a frequência em hertz.\n\nConversão da frequência:\n\n$$f = \\frac{300\\ \\text{rpm}}{60} = 5\\ \\text{Hz}$$\n\nVelocidade do ponto P, com $R = 0{,}6\\ \\text{m}$:\n\n$$v = 2\\pi R f = 2 \\cdot 3 \\cdot 0{,}6 \\cdot 5 = 18\\ \\text{m/s}$$\n\n**Gabarito: C**",
       "figuras": [
         {
           "nome": "Q16_fig1",
@@ -429,6 +467,10 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular",
+        "Lançamento horizontal"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "Uma pessoa gira um objeto 1 de massa $m_1 = 200\\ \\text{g}$ acima da cabeça em movimento circular, com auxílio de um cordão. Em um dado instante ela solta o cordão e observa o objeto atingir o solo alguns metros à sua frente. Em seguida, utilizando o mesmo cordão, ela substitui o objeto 1 pelo objeto 2, de mesmo formato e dimensões, porém com massa $m_2 = 400\\ \\text{g}$. Novamente realiza um movimento circular da mesma maneira da situação anterior. Ao soltar o cordão observa que este objeto 2 cai no mesmo ponto que o primeiro.\n\nEnquanto os objetos estão girando, presos pelo cordão, realizam Movimento Circular Uniforme (MCU). Em seguida, quando o cordão é solto, os objetos são denominados de projéteis. Em ambas as situações o ângulo de lançamento é zero, assim, os projéteis realizam, na horizontal, Movimento Retilíneo Uniforme (MRU) e, na vertical, Movimento Retilíneo Uniformemente Variado (MRUV).\n\nCom relação às situações apresentadas no texto, é **CORRETO** afirmar que:",
@@ -439,7 +481,6 @@
         "D": "As forças centrípetas sobre os objetos são iguais."
       },
       "gabarito": "C",
-      "explicacao": "Após soltar o cordão, cada objeto faz um lançamento horizontal a partir da mesma altura. O tempo de queda depende só da altura, $t = \\sqrt{\\frac{2h}{g}}$, e não da massa; o alcance é $A = v_x \\cdot t$.\n\nComo os dois caem da mesma altura (mesmo $t$) e atingem o mesmo ponto (mesmo $A$):\n\n$$v_{x,1} = \\frac{A}{t} = v_{x,2}$$\n\n- **A — Incorreta.** Mesma velocidade tangencial e mesmo raio (mesmo cordão) dão a mesma velocidade angular, $\\omega = \\frac{v}{R}$.\n- **B — Incorreta.** O tempo de queda independe da massa; os dois levam o mesmo tempo.\n- **C — Correta.** Mesmo tempo de queda e mesmo alcance implicam a mesma velocidade horizontal.\n- **D — Incorreta.** $F_c = \\frac{m v^2}{R}$: com mesmos $v$ e $R$, a força sobre o objeto 2 é o dobro da do objeto 1.\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 6,
       "imagem": "questoes/Q17.png",
@@ -453,6 +494,9 @@
       "ano": 2020,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "O velocímetro dos automóveis indica a velocidade a partir do raio das rodas do automóvel e da contagem do número de voltas que essas rodas efetuam em certo intervalo de tempo. Suponha que um velocímetro, calibrado para um automóvel com rodas de raio $30\\ \\text{cm}$, esteja indicando a velocidade de $90\\ \\text{km/h}$, mas está erroneamente instalado em um automóvel com rodas de raio $27\\ \\text{cm}$.\n\nEsse automóvel está se movendo com velocidade de",
@@ -464,7 +508,6 @@
         "E": "$72\\ \\text{km/h}$."
       },
       "gabarito": "C",
-      "explicacao": "O velocímetro mede a frequência $f$ das rodas e calcula $v = 2\\pi R f$ usando o raio para o qual foi calibrado ($30\\ \\text{cm}$). A frequência real é a mesma; o que muda é o raio verdadeiro ($27\\ \\text{cm}$).\n\nFrequência que gera a indicação de $90\\ \\text{km/h}$:\n\n$$90 = 2\\pi \\cdot 0{,}30 \\cdot f$$\n\nVelocidade real, com a mesma $f$:\n\n$$v_{\\text{real}} = 2\\pi \\cdot 0{,}27 \\cdot f = 90 \\cdot \\frac{0{,}27}{0{,}30} = 90 \\cdot 0{,}9 = 81\\ \\text{km/h}$$\n\n**Gabarito: C**",
       "figuras": [],
       "pagina": 6,
       "imagem": "questoes/Q18.png",
@@ -478,6 +521,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "O plasma sanguíneo é a parte líquida do sangue e corresponde à maior parte do seu volume. Nele, proteínas, sais minerais, dióxido de carbono e outras substâncias estão dissolvidos em água. Para separar o plasma, o método de centrifugação é comumente aplicado.\n\nAdmita uma centrífuga de laboratório, girando com frequência de $60\\ \\text{Hz}$.\n\n![Pessoa colocando tubos de amostra no rotor circular de uma centrífuga de laboratório](figura:Q19_fig1)\n\n*Fonte: USS, 2022.*\n\nSe considerarmos que as amostras periféricas se encontram a $15\\ \\text{cm}$ do centro de rotação, a velocidade linear, em m/s, é de aproximadamente:",
@@ -488,7 +534,6 @@
         "D": "$57$"
       },
       "gabarito": "D",
-      "explicacao": "As amostras periféricas descrevem uma circunferência de raio $R = 0{,}15\\ \\text{m}$ com frequência $f = 60\\ \\text{Hz}$. A velocidade linear é $v = 2\\pi R f$.\n\n$$v = 2\\pi \\cdot 0{,}15 \\cdot 60 = 18\\pi \\approx 18 \\cdot 3{,}14 \\approx 56{,}5\\ \\text{m/s}$$\n\nO valor mais próximo é $57\\ \\text{m/s}$.\n\n**Gabarito: D**",
       "figuras": [
         {
           "nome": "Q19_fig1",
@@ -508,6 +553,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "Um carro percorre uma rotatória circular de raio $100$ metros. O motorista mantém uma velocidade constante de $72\\ \\text{km/h}$ durante todo o trajeto.\n\nAnalise as proposições com base na informação.\n\nI. O módulo da aceleração centrípeta do carro é $4\\ \\text{m/s}^2$.\n\nII. A direção da aceleração centrípeta é sempre radial, apontando para o centro da rotatória.\n\nIII. O vetor deslocamento do carro, ao completar uma volta completa na rotatória, tem magnitude igual a $200$ metros.\n\nIV. A força centrípeta responsável por manter o carro em movimento circular é proporcionada pela força de atrito entre os pneus e o asfalto.\n\nV. O período para o carro completar uma volta completa, na rotatória, é de $10$ segundos.\n\nAssinale a alternativa **correta**.",
@@ -519,7 +567,6 @@
         "E": "Todas as proposições são verdadeiras."
       },
       "gabarito": "B",
-      "explicacao": "Em MCU a velocidade tem módulo constante e a aceleração é só centrípeta, $a_c = \\frac{v^2}{R}$, voltada para o centro. Dados: $v = 72\\ \\text{km/h} = 20\\ \\text{m/s}$ e $R = 100\\ \\text{m}$.\n\n**I. Verdadeira.**\n\n$$a_c = \\frac{v^2}{R} = \\frac{20^2}{100} = 4\\ \\text{m/s}^2$$\n\n**II. Verdadeira.** A aceleração centrípeta é radial e aponta para o centro da curva.\n\n**III. Falsa.** Ao completar uma volta o carro retorna ao ponto de partida: o deslocamento é nulo. (A distância percorrida seria $2\\pi R \\approx 628\\ \\text{m}$, não $200\\ \\text{m}$.)\n\n**IV. Verdadeira.** Numa rotatória plana, a resultante centrípeta é dada pelo atrito lateral entre os pneus e o asfalto.\n\n**V. Falsa.**\n\n$$T = \\frac{2\\pi R}{v} = \\frac{2\\pi \\cdot 100}{20} = 10\\pi \\approx 31{,}4\\ \\text{s}$$\n\nSão verdadeiras apenas I, II e IV.\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 7,
       "imagem": "questoes/Q20.png",
@@ -533,6 +580,9 @@
       "ano": 2012,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "Um parafuso está encravado na periferia de um disco giratório horizontal de raio $1\\ \\text{m}$. A figura abaixo ilustra as posições do parafuso em tempos sucessivos.\n\n![Quatro discos com o parafuso em posições sucessivas e uma seta abaixo de cada um](figura:Q21_fig1)\n\n*Fonte: UECE, 2012.*\n\nUm engenheiro precisa monitorar a passagem do parafuso por uma dada posição, como a indicada pela seta. Para isso, faz uso de uma luz estroboscópica, que acende durante curtos intervalos de tempo a uma frequência de $2\\ \\text{kHz}$. Para que haja sincronismo entre a passagem do parafuso pela posição indicada pela seta e a lâmpada, a velocidade escalar do parafuso em m/s deve ser aproximadamente",
@@ -543,7 +593,6 @@
         "D": "$6{,}28 \\times 10^{3}$."
       },
       "gabarito": "B",
-      "explicacao": "Para haver sincronismo, a cada flash da lâmpada o parafuso deve estar de novo na posição da seta, ou seja, ele dá uma volta completa a cada intervalo entre flashes. Assim, a frequência de rotação do disco é igual à frequência da luz.\n\n$$f = 2\\ \\text{kHz} = 2 \\times 10^{3}\\ \\text{Hz}$$\n\nA velocidade escalar de um ponto da periferia é:\n\n$$v = 2\\pi R f = 2 \\cdot 3{,}14 \\cdot 1 \\cdot 2 \\times 10^{3} \\approx 12{,}56 \\times 10^{3}\\ \\text{m/s}$$\n\n**Gabarito: B**",
       "figuras": [
         {
           "nome": "Q21_fig1",
@@ -563,6 +612,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
       "enunciado": "A imagem a seguir representa uma rotatória com raio $R$ na cidade de Palmas - TO.\n\n![Circunferência da rotatória com o raio R indicado](figura:Q22_fig1)\n\n*Fonte: UNITINS, 2025.*\n\nDado: $\\pi = 3$ e $R = 20\\ \\text{m}$.\n\nUm carro percorreu $420\\ \\text{m}$ em volta da rotatória com velocidade constante de $36\\ \\text{km/h}$, e sua trajetória é representada fielmente pela imagem. Com base nisso, julgue as proposições a seguir.\n\nI. A velocidade angular é $0{,}5\\ \\text{rad/s}$.\n\nII. A frequência do movimento é $1/12\\ \\text{Hz}$.\n\nIII. A distância percorrida pelo carro é $3{,}5$ vezes o comprimento da rotatória.\n\nÉ correto o que se afirma em",
@@ -574,7 +626,6 @@
         "E": "I, II e III."
       },
       "gabarito": "E",
-      "explicacao": "No movimento circular uniforme, a velocidade linear relaciona-se com a angular por $v = \\omega R$, e a frequência por $\\omega = 2\\pi f$.\n\nConvertendo a velocidade:\n\n$$v = 36\\ \\text{km/h} = \\frac{36}{3{,}6} = 10\\ \\text{m/s}$$\n\n**I. Verdadeira.**\n\n$$\\omega = \\frac{v}{R} = \\frac{10}{20} = 0{,}5\\ \\text{rad/s}$$\n\n**II. Verdadeira.**\n\n$$f = \\frac{\\omega}{2\\pi} = \\frac{0{,}5}{2 \\cdot 3} = \\frac{1}{12}\\ \\text{Hz}$$\n\n**III. Verdadeira.** O comprimento da rotatória é\n\n$$C = 2\\pi R = 2 \\cdot 3 \\cdot 20 = 120\\ \\text{m}$$\n\ne $\\frac{420}{120} = 3{,}5$.\n\n**Gabarito: E**",
       "figuras": [
         {
           "nome": "Q22_fig1",
@@ -594,6 +645,9 @@
       "ano": 2023,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Aprofundamento",
       "dificuldade": 4,
       "enunciado": "O Autorama ou Automodelismo de Fenda é um tipo de modelismo profissional ou amador em que carros movidos a eletricidade ou a pilha competem em pistas especialmente fabricadas para o esporte ou o entretenimento. Em uma competição hipotética, dois carrinhos NP e AS irão competir em pistas circulares concêntricas. O carrinho NP encontra-se na pista de raio $R$ e desenvolve uma velocidade linear de módulo $V$ constante, ao passo que o carrinho AS, na pista de raio $1{,}5R$, desenvolve uma velocidade linear de módulo $2V$ constante. Os carrinhos iniciam a corrida alinhados e voltam a se alinhar pela primeira vez após $2\\ \\text{s}$ do início da corrida. Por alinhado, entenda-se que o raio vetor com origem em O e extremidade em NP e o raio vetor com origem em O e extremidade em AS têm mesmas direção e sentido.\n\nO instante, em segundos, em que os carrinhos voltam a se encontrar pela terceira vez é",
@@ -604,7 +658,6 @@
         "D": "$6$."
       },
       "gabarito": "D",
-      "explicacao": "Como as pistas são concêntricas, o alinhamento depende só das velocidades angulares. O carrinho mais rápido (em ângulo) ganha uma volta sobre o outro a cada alinhamento, com velocidade angular relativa constante.\n\nVelocidades angulares:\n\n$$\\omega_{NP} = \\frac{V}{R} \\qquad \\omega_{AS} = \\frac{2V}{1{,}5R} = \\frac{4V}{3R}$$\n\nVelocidade angular relativa:\n\n$$\\omega_{\\text{rel}} = \\frac{4V}{3R} - \\frac{V}{R} = \\frac{V}{3R}$$\n\nEntre dois alinhamentos consecutivos o ângulo relativo varia $2\\pi$, e isso leva sempre o mesmo tempo:\n\n$$\\Delta t = \\frac{2\\pi}{\\omega_{\\text{rel}}} = 2\\ \\text{s}$$\n\nLogo, os alinhamentos ocorrem em $t = 2\\ \\text{s}$, $4\\ \\text{s}$ e $6\\ \\text{s}$. O terceiro reencontro ocorre em $t = 6\\ \\text{s}$.\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 7,
       "imagem": "questoes/Q23.png",
@@ -618,6 +671,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 3,
       "enunciado": "Em um treinamento para levar astronautas ao espaço, um astronauta é colocado numa cabine que gira no plano horizontal, em movimento circular de raio $5{,}0\\ \\text{m}$. Em dado intervalo de tempo, o movimento é circular e uniforme, de período $3{,}0\\ \\text{s}$.\n\nNessa situação, qual é o módulo da aceleração a que o astronauta está submetido? Considere $\\pi = 3{,}0$ nos seus cálculos e a aceleração da gravidade $g = 10\\ \\text{m/s}^2$.",
@@ -629,7 +685,6 @@
         "E": "$5g$"
       },
       "gabarito": "B",
-      "explicacao": "No movimento circular uniforme a aceleração é apenas a centrípeta, $a_{cp} = \\omega^2 R$, com $\\omega = \\frac{2\\pi}{T}$.\n\n$$\\omega = \\frac{2\\pi}{T} = \\frac{2 \\cdot 3{,}0}{3{,}0} = 2\\ \\text{rad/s}$$\n\n$$a_{cp} = \\omega^2 R = 2^2 \\cdot 5{,}0 = 20\\ \\text{m/s}^2$$\n\nComparando com $g$:\n\n$$\\frac{a_{cp}}{g} = \\frac{20}{10} = 2 \\Rightarrow a_{cp} = 2g$$\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 8,
       "imagem": "questoes/Q24.png",
@@ -643,6 +698,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 4,
       "enunciado": "A corrida é um dos esportes mais democráticos, afinal, basta um tênis adequado, uma roupa confortável e muita força de vontade. Sua prática garante uma melhor expectativa de vida, pois colabora no funcionamento cardíaco, na redução da pressão arterial e do colesterol LDL. Os amigos Beto e Vini são praticantes de corrida e costumam realizá-la em uma pista circular. Beto demora $48$ segundos para dar a volta completa na pista. Vini corre em sentido oposto e encontra Beto a cada $18$ segundos.\n\nO tempo em segundos que Vini demora para dar uma volta completa é:\n\n![Dois corredores em sentidos opostos sobre uma pista circular vermelha](figura:Q25_fig1)\n\n*Fonte: UPE, 2022.*",
@@ -654,7 +712,6 @@
         "E": "$38{,}4$ segundos."
       },
       "gabarito": "A",
-      "explicacao": "Correndo em sentidos opostos, as velocidades angulares se somam no movimento relativo. Entre dois encontros, juntos eles completam uma volta ($2\\pi$), então as frequências se somam:\n\n$$\\frac{1}{T_{B}} + \\frac{1}{T_{V}} = \\frac{1}{T_{\\text{enc}}}$$\n\n$$\\frac{1}{48} + \\frac{1}{T_{V}} = \\frac{1}{18}$$\n\n$$\\frac{1}{T_{V}} = \\frac{1}{18} - \\frac{1}{48} = \\frac{8 - 3}{144} = \\frac{5}{144}$$\n\n$$T_{V} = \\frac{144}{5} = 28{,}8\\ \\text{s}$$\n\n**Gabarito: A**",
       "figuras": [
         {
           "nome": "Q25_fig1",
@@ -674,6 +731,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 3,
       "enunciado": "Em uma rodovia, o raio de curva simples, sem inclinação, é selecionado de acordo com as características técnicas da estrada e da topografia da região. Em um trecho da rodovia BR-116, um veículo que trafega com velocidade $V$ descreve uma curva simples de raio $R$ sob a ação de uma resultante central de módulo $F$.\n\nPara que a intensidade da resultante sobre o veículo seja reduzida à metade em um trecho da rodovia com o dobro do limite de velocidade, o raio da curva simples deverá ser de",
@@ -684,7 +744,6 @@
         "D": "$8R$."
       },
       "gabarito": "D",
-      "explicacao": "Na curva, a resultante central é a força centrípeta, $F = \\frac{mV^2}{R}$.\n\nSituação inicial e nova situação (velocidade $2V$, força $\\frac{F}{2}$, raio $R'$):\n\n$$F = \\frac{mV^2}{R} \\qquad \\frac{F}{2} = \\frac{m(2V)^2}{R'} = \\frac{4mV^2}{R'}$$\n\nDividindo a segunda pela primeira:\n\n$$\\frac{1}{2} = \\frac{4R}{R'} \\Rightarrow R' = 8R$$\n\n**Gabarito: D**",
       "figuras": [],
       "pagina": 8,
       "imagem": "questoes/Q26.png",
@@ -698,6 +757,9 @@
       "ano": 2026,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 3,
       "enunciado": "Durante o recreio, os curumins se divertem brincando e correndo pelo pátio da escola. Alguns deles brincam com um pedaço de madeira amarrado em uma corda. Eles giram o brinquedo sobre a cabeça e largam a corda. Vence quem consegue lançar o pedaço de madeira mais longe. Nessa brincadeira há conceitos físicos envolvidos.\n\nSabendo disso, assinale a alternativa INCORRETA.",
@@ -709,7 +771,6 @@
         "E": "A velocidade escalar média angular do pedaço de madeira e a velocidade escalar média tangencial são independentes."
       },
       "gabarito": "E",
-      "explicacao": "No movimento circular, as velocidades angular e tangencial (linear) estão ligadas pelo raio da trajetória:\n\n$$v = \\omega R$$\n\nPortanto elas **não** são independentes: para um mesmo raio, dobrar $\\omega$ dobra $v$. A alternativa E é a incorreta.\n\n- A: correta. A tração na corda puxa a madeira para o centro, isto é, para a mão do curumim.\n- B: correta. O peso é sempre vertical, apontando para o centro da Terra.\n- C: correta. Ao soltar a corda, a madeira sai pela tangente com a velocidade tangencial que tinha, e o alcance depende dela.\n- D: correta. Sem resultante centrípeta não há mudança de direção da velocidade, e o corpo seguiria em linha reta.\n\n**Gabarito: E**",
       "figuras": [],
       "pagina": 8,
       "imagem": "questoes/Q27.png",
@@ -723,6 +784,9 @@
       "ano": 2022,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 4,
       "enunciado": "Os satélites geoestacionários realizam MCU (Movimento Circular Uniforme) com órbitas que pertencem a um plano imaginário que corta a Terra na Linha do Equador e que apresenta o mesmo período de rotação da Terra. Isso é obtido quando o satélite está a uma altura de $36.000\\ \\text{km}$ em relação a um ponto na superfície e com uma determinada velocidade tangencial.\n\nSe esse ponto situado na superfície, na Linha do Equador, apresenta uma velocidade tangencial de módulo igual a $1.600\\ \\text{km/h}$, o módulo da velocidade tangencial de um satélite geoestacionário será de \\_\\_\\_\\_\\_ km/h.\n\nUtilize $\\pi = 3$.",
@@ -733,7 +797,6 @@
         "D": "$21.200$"
       },
       "gabarito": "B",
-      "explicacao": "O satélite geoestacionário e o ponto do Equador têm o mesmo período ($T = 24\\ \\text{h}$), logo a mesma velocidade angular. Então a velocidade tangencial é proporcional ao raio: $v = \\omega r$.\n\nRaio da Terra, a partir da velocidade do ponto no Equador:\n\n$$v_T = \\frac{2\\pi R_T}{T} \\Rightarrow R_T = \\frac{v_T\\, T}{2\\pi} = \\frac{1600 \\cdot 24}{2 \\cdot 3} = 6400\\ \\text{km}$$\n\nRaio da órbita do satélite:\n\n$$r = R_T + h = 6400 + 36000 = 42400\\ \\text{km}$$\n\nCom a mesma $\\omega$:\n\n$$\\frac{v_S}{v_T} = \\frac{r}{R_T} \\Rightarrow v_S = 1600 \\cdot \\frac{42400}{6400} = 10600\\ \\text{km/h}$$\n\n**Gabarito: B**",
       "figuras": [],
       "pagina": 8,
       "imagem": "questoes/Q28.png",
@@ -747,6 +810,9 @@
       "ano": 2025,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 4,
       "enunciado": "Quando necessário, adote os seguintes valores:\n\n$$\\pi = 3$$\n\n$$g = 10\\ \\text{m/s}^2$$\n\n$$\\text{sen}\\,45^\\circ = \\cos 45^\\circ = \\frac{\\sqrt{2}}{2} = 0{,}71$$\n\nUm avião de pequeno porte, com massa total de duas toneladas, descreve uma curva à esquerda num plano horizontal em trajetória circular de raio $R = 1000\\ \\text{m}$, com velocidade escalar constante, conforme representado na figura a seguir, onde $\\vec{F}$ é a força de sustentação, perpendicular às asas, e $45^\\circ$ é o ângulo de inclinação das asas em relação ao plano horizontal:\n\n![Avião inclinado 45° com a força de sustentação F, o peso mg e o raio R](figura:Q29_fig1)\n\nI. A resultante das forças externas que atuam sobre o avião é nula.\n\nII. A força centrípeta sobre o avião tem intensidade igual a $20\\ \\text{kN}$.\n\nIII. A velocidade escalar do avião é igual a $360\\ \\text{km/h}$.\n\nConsiderando apenas as forças indicadas na figura, podemos afirmar que:\n\nAssinale a alternativa **CORRETA**:",
@@ -758,7 +824,6 @@
         "E": "Todas as afirmativas são verdadeiras."
       },
       "gabarito": "D",
-      "explicacao": "Na curva horizontal, a componente vertical da sustentação equilibra o peso e a componente horizontal faz o papel de resultante centrípeta. Com $m = 2000\\ \\text{kg}$:\n\n$$F\\cos 45^\\circ = mg \\qquad F\\,\\text{sen}\\,45^\\circ = F_{cp}$$\n\nDividindo uma pela outra:\n\n$$F_{cp} = mg \\tan 45^\\circ = 2000 \\cdot 10 \\cdot 1 = 20000\\ \\text{N} = 20\\ \\text{kN}$$\n\nE, como $F_{cp} = \\frac{mv^2}{R}$:\n\n$$\\frac{mv^2}{R} = mg\\tan 45^\\circ \\Rightarrow v^2 = gR = 10 \\cdot 1000 = 10000 \\Rightarrow v = 100\\ \\text{m/s} = 360\\ \\text{km/h}$$\n\n**I. Falsa.** O avião faz curva, então a resultante é centrípeta e não nula.\n\n**II. Verdadeira.** $F_{cp} = 20\\ \\text{kN}$.\n\n**III. Verdadeira.** $v = 100\\ \\text{m/s} = 360\\ \\text{km/h}$.\n\n**Gabarito: D**",
       "figuras": [
         {
           "nome": "Q29_fig1",
@@ -778,6 +843,9 @@
       "ano": 2024,
       "disciplina": "Física",
       "topico": "Cinemática II",
+      "assuntos": [
+        "Movimento circular"
+      ],
       "etapa": "Desafios",
       "dificuldade": 4,
       "enunciado": "A figura a seguir representa a trajetória do movimento circular uniforme, realizado totalmente num plano vertical em um local onde há gravidade, em que um veículo está, durante todo o movimento, em contato com um trilho . Nessa figura estão assinaladas quatro posições (1, 2, 3 e 4). A posição 1 está diametralmente oposta à posição 3, assim como a posição 2 está em relação a 4. As posições 3 e 1 pertencem à linha tracejada na vertical (V) e, respectivamente, são a posição mais elevada e menos elevada da trajetória. Enquanto as posições 4 e 2 pertencem à linha tracejada na horizontal (H) e paralela ao solo.\n\n![Trilho circular vertical sobre o solo com as posições 1, 2, 3 e 4](figura:Q30_fig1)\n\n*Fonte: EEAR, 2024.*\n\nAssinale a alternativa que indica corretamente uma relação entre os módulos das reações normais ($N_1$, $N_2$, $N_3$ e $N_4$) em cada uma dessas posições ($N_1$ na posição 1, $N_2$ na posição 2, $N_3$ na posição 3 e $N_4$ na posição 4).",
@@ -788,7 +856,6 @@
         "D": "$N_1 = N_3 = N_4 = N_2$"
       },
       "gabarito": "B",
-      "explicacao": "No MCU a resultante centrípeta tem o mesmo módulo em todos os pontos, $F_{cp} = \\frac{mv^2}{R}$, sempre apontando para o centro. O veículo percorre o trilho por dentro, então a normal aponta para o centro.\n\n**Posição 1 (ponto mais baixo):** normal para cima (centro), peso para baixo.\n\n$$N_1 - mg = \\frac{mv^2}{R} \\Rightarrow N_1 = \\frac{mv^2}{R} + mg$$\n\n**Posição 3 (ponto mais alto):** normal e peso para baixo (centro).\n\n$$N_3 + mg = \\frac{mv^2}{R} \\Rightarrow N_3 = \\frac{mv^2}{R} - mg$$\n\n**Posições 2 e 4 (horizontal):** o peso é perpendicular ao raio e só a normal é centrípeta.\n\n$$N_2 = N_4 = \\frac{mv^2}{R}$$\n\nPortanto $N_1 > N_2 = N_4 > N_3$, o que confirma $N_1 > N_3$ e $N_4 = N_2$.\n\n**Gabarito: B**",
       "figuras": [
         {
           "nome": "Q30_fig1",

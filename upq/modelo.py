@@ -4,7 +4,7 @@ A IA devolve `QuestaoIA` (só o que exige leitura e julgamento). O código compl
 o resto (título, etapa, página, figuras) e grava `Questao` em transcricao.json,
 que é o que a revisão mostra e o que vai para o Supabase.
 
-Texto rico (enunciado, alternativas, explicação) é Markdown com LaTeX:
+Texto rico (enunciado e alternativas) é Markdown com LaTeX:
   - fórmulas: $...$ no meio do texto, $$...$$ destacadas;
   - **negrito**, *itálico*; parágrafos separados por linha em branco;
   - tabelas em Markdown (| a | b |);
@@ -30,11 +30,11 @@ class QuestaoIA(BaseModel):
     adaptada: bool = Field(description="true se o cabeçalho traz '(ADAPTADO)'")
     disciplina: str
     topico: str
+    assuntos: list[str] = Field(description="1 ou 2 assuntos do tópico, grafia exata da base")
     dificuldade: int = Field(ge=1, le=5)
     enunciado: str
     alternativas: list[Alternativa]
     gabarito: Letra
-    explicacao: str
     revisar: bool
     observacoes: str | None
 
@@ -52,12 +52,12 @@ class Questao(BaseModel):
     ano: int | None
     disciplina: str
     topico: str
+    assuntos: list[str] = []
     etapa: str | None
     dificuldade: int = Field(ge=1, le=5)
     enunciado: str
     alternativas: dict[str, str]
     gabarito: Letra
-    explicacao: str
     figuras: list[Figura] = []
     pagina: int
     imagem: str             # recorte da questão, para a revisão
@@ -69,9 +69,12 @@ class Lista(BaseModel):
     arquivo: str
     hash_pdf: str
     tipo: Literal["lista", "simulado"]
-    titulo: str
+    titulo: str              # nome da capa, ex.: "Movimento Circular Uniforme"
+    nome: str                # como aparece na plataforma: "Lista de Movimento Circular Uniforme"
+    descricao: str           # "Lista completa de Movimento Circular Uniforme"
     disciplina: str | None
     topico: str | None
+    tags: list[str] = []     # assuntos cobertos pela lista
     questoes: list[Questao]
 
 
@@ -98,6 +101,9 @@ def schema_json(modelo: type[BaseModel]) -> dict:
         return no
 
     return resolver(schema)
+
+
+DIFICULDADES = {1: "Muito Fácil", 2: "Fácil", 3: "Média", 4: "Difícil", 5: "Muito Difícil"}
 
 
 def titulo_padrao(tipo: str, titulo_lista: str, numero: int, instituicao: str | None,
