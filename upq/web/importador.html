@@ -11,9 +11,27 @@ window.MathJax = {
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" async></script>
 <script type="module">
+// pdf.js num Worker próprio (a leitura do PDF não trava a página). Se o navegador não deixar criar o
+// Worker, o pdf.js roda na própria página, como antes.
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/legacy/build/';
 import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/legacy/build/pdf.min.mjs';
-import * as pdfjsWorker from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/legacy/build/pdf.worker.min.mjs';
-globalThis.pdfjsWorker = pdfjsWorker;   // sem Worker separado: o pdf.js roda na própria página
+async function workerDoPdf() {
+  try {
+    const url = URL.createObjectURL(new Blob([`import '${PDFJS}pdf.worker.min.mjs';`], {type: 'text/javascript'}));
+    const w = new Worker(url, {type: 'module'});
+    const ok = await new Promise(res => {
+      const t = setTimeout(() => res(false), 8000);
+      w.addEventListener('message', () => { clearTimeout(t); res(true); }, {once: true});
+      w.addEventListener('error', () => { clearTimeout(t); res(false); }, {once: true});
+    });
+    if (ok) return w;
+    w.terminate();
+  } catch {}
+  return null;
+}
+const w = await workerDoPdf();
+if (w) { pdfjsLib.GlobalWorkerOptions.workerPort = w; window.pdfjsModo = 'worker'; }
+else { globalThis.pdfjsWorker = await import(PDFJS + 'pdf.worker.min.mjs'); window.pdfjsModo = 'página'; }
 window.pdfjsLib = pdfjsLib;
 window.dispatchEvent(new Event('pdfjs-pronto'));
 </script>
@@ -937,7 +955,7 @@ async function leitorFormulas() {
   if (formula.carregando) return formula.carregando;
   formula.estado = 'carregando';
   formula.carregando = UPQFormulas.carregar(urlLocal('formula/'))
-    .then(l => { formula.estado = 'pronto'; formula.erro = null; return l; })
+    .then(l => { formula.estado = 'pronto'; formula.modo = l.modo; formula.erro = null; return l; })
     .catch(e => { formula.estado = 'falhou'; formula.erro = e?.message || String(e); formula.carregando = null; throw e; });
   return formula.carregando;
 }
@@ -982,7 +1000,7 @@ async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}, repetir = true) 
   for (let i = 0; i < itens.length; i += porLote) {
     const lote = itens.slice(i, i + porLote);
     const r = await perguntar(promptLote(lote.map(x => comCorrecao(x.q, x.erros, ctx)), ctx), comImagens() ? {images: lote.map(x => x.imagem)} : {});
-    const lista = Array.isArray(r?.questoes) ? r.questoes : [];
+    const lista = (Array.isArray(r?.questoes) ? r.questoes : []).filter(x => x && typeof x === "object");
     lote.forEach((x, k) => {
       const achada = lista.find(y => +y.numero === x.q.numero) || (lista.length === lote.length ? lista[k] : null);
       if (!achada || !String(achada.enunciado || '').trim()) return sem.push(x);
@@ -1139,6 +1157,22 @@ function pararComErro(job, e) {
     images_unavailable: 'Esta visualização não consegue enviar imagens ao Claude. Abra o artefato no claude.ai pelo navegador.',
     sem_claude: 'O Claude não está disponível nesta visualização. Abra o artefato no claude.ai.',
   };
+  // Limite de uso ou falha passageira do Claude: retoma sozinho depois de uma pausa (até 6 vezes),
+  // para uma fila de várias listas não parar no meio esperando um clique.
+  const passageiro = ['rate_limited', 'upstream_error', 'empty_completion', 'invalid_json', 'timeout', 'overloaded'].includes(codigo);
+  job.retomadas = job.retomadas || 0;
+  if (passageiro && job.retomadas < 6 && estado.jobs.includes(job)) {
+    const espera = codigo === 'rate_limited' ? 90 : 20;
+    job.retomadas++;
+    let falta = espera;
+    atualizar(job, {estado: 'parado', mensagem: `${codigo === 'rate_limited' ? 'Limite de uso do Claude atingido' : 'O Claude não respondeu direito'}. Retomando sozinho em ${falta} s (tentativa ${job.retomadas} de 6)…`});
+    job.contagem = setInterval(() => {
+      if (job.estado !== 'parado' || !estado.jobs.includes(job)) { clearInterval(job.contagem); return; }
+      if (--falta > 0) return atualizar(job, {mensagem: job.mensagem.replace(/em \d+ s/, `em ${falta} s`)});
+      clearInterval(job.contagem); enfileirar(job);
+    }, 1000);
+    return;
+  }
   atualizar(job, {estado: 'parado', mensagem: msgs[codigo] || `Parou: ${e?.message || codigo || e}. Clique em Continuar para tentar de novo.`});
 }
 
@@ -1151,7 +1185,7 @@ async function transcreverPendentes(job) {
       const lote = job.pendentes.shift();
       try {
         const r = await perguntar(promptLote(lote.questoes, job.ctx), comImagens() ? {images: lote.questoes.map(q => q.imagem)} : {});
-        const lista = Array.isArray(r?.questoes) ? r.questoes : [];
+        const lista = (Array.isArray(r?.questoes) ? r.questoes : []).filter(x => x && typeof x === "object");
         lote.questoes.forEach((q, i) => {
           const achada = lista.find(x => +x.numero === q.numero) || (lista.length === lote.questoes.length ? lista[i] : null);
           if (achada && String(achada.enunciado || '').trim()) job.resultados.set(q.numero, normalizarIA(achada, q, job.ctx));
@@ -1220,6 +1254,14 @@ async function salvarNoBanco(job) {
   const erros = questoes.filter(q => q.erros.length).length, avisos = questoes.filter(q => q.avisos.length).length;
   atualizar(job, {estado: 'concluido', progresso: 1, lista: listaId,
     mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.` + (job.reprocessadas ? ` ${job.corrigidas} de ${job.reprocessadas} com erro foram corrigidas no reprocessamento automático.` : '')});
+  liberarJob(job);
+}
+// Lista já gravada: solta recortes, figuras e o PDF da memória (com várias listas seguidas, guardar
+// tudo de todas pesava a aba até travar). O cartão fica só com o resumo.
+function liberarJob(job) {
+  if (job.urlGabarito) { URL.revokeObjectURL(job.urlGabarito); job.urlGabarito = null; }
+  clearInterval(job.contagem);
+  job.m = null; job.file = null; job.resultados = new Map(); job.pendentes = [];
 }
 
 let pdfjsPronto = new Promise(r => window.pdfjsLib ? r() : window.addEventListener('pdfjs-pronto', r, {once: true}));
@@ -1273,7 +1315,8 @@ function telaEnviar() {
       <li>Teste real com imagem: ${!cap.sonda ? 'ainda não feito' : esc(cap.sonda.estado) + (cap.sonda.codigo ? ` · código ${esc(cap.sonda.codigo)}` : '') + (cap.sonda.mensagem ? ` · ${esc(cap.sonda.mensagem)}` : '')}</li>
       <li>Modo em uso: ${comImagens() ? 'leitura pela imagem' : 'só texto'}</li>
       <li>OCR de tabelas em imagem (usado no modo só texto): ${esc(ocr.estado)}${ocr.erro ? ` · ${esc(ocr.erro)}` : ''}</li>
-      <li>Leitor de fórmulas em imagem → LaTeX (modo só texto): ${esc(formula.estado)}${formula.erro ? ` · ${esc(formula.erro)}` : ''}</li>
+      <li>Leitor de fórmulas em imagem → LaTeX (modo só texto): ${esc(formula.estado)}${formula.modo ? ` (${esc(formula.modo)})` : ''}${formula.erro ? ` · ${esc(formula.erro)}` : ''}</li>
+      <li>Leitura do PDF: ${window.pdfjsModo === 'worker' ? 'em segundo plano (Worker)' : window.pdfjsModo === 'página' ? 'na própria página' : 'carregando'}</li>
       <li>Navegador: ${esc(navigator.userAgent)}</li></ul>
       <div class="form-linha"><button class="botao" id="testar-imagem" ${cap.sonda?.estado === 'testando' ? 'disabled' : ''}>Testar leitura de imagem agora</button>
       <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button>
@@ -1305,9 +1348,9 @@ function desenharEnvios() {
     const job = estado.jobs.find(j => j.id === b.dataset.job);
     const acao = b.dataset.acao;
     if (acao === 'abrir') ir('lista', {lista: job.lista});
-    else if (acao === 'continuar') enfileirar(job);
+    else if (acao === 'continuar') { clearInterval(job.contagem); enfileirar(job); }
     else if (acao === 'reprocessar') enfileirar(job, {reprocessar: true});
-    else if (acao === 'descartar') { estado.jobs.splice(estado.jobs.indexOf(job), 1); desenharEnvios(); }
+    else if (acao === 'descartar') { estado.jobs.splice(estado.jobs.indexOf(job), 1); liberarJob(job); desenharEnvios(); }
     else if (acao === 'ver-existente') { const l = [...estado.listas.entries()].find(([, x]) => x.origem === job.idImp); if (l) ir('lista', {lista: l[0]}); }
   }));
 }

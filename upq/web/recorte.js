@@ -42,8 +42,22 @@ const UPQRecorte = (() => {
     const teto = 2.5 * runs[Math.floor(runs.length / 2)], uteis = runs.filter(r => r <= teto);   // sem barras de "e", "t"
     return uteis.reduce((a, b) => a + b, 0) / uteis.length;
   }
+  // Pixels da página renderizada, lidos UMA vez por canvas: cada getImageData da página inteira são
+  // ~18 MB; ler de novo em cada etapa (negrito, barra, tabela, fórmula) enchia a memória e travava a aba.
+  function pixelsDe(canvas) {
+    if (!canvas.__px) canvas.__px = canvas.getContext('2d', {willReadFrequently: true}).getImageData(0, 0, canvas.width, canvas.height).data;
+    return canvas.__px;
+  }
+  // cópia de uma região (para quem trabalha em coordenadas locais), tirada do buffer já lido
+  function regiaoDe(canvas, X, Y, W, H) {
+    const px = pixelsDe(canvas), CW = canvas.width, out = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) out.set(px.subarray(((Y + y) * CW + X) * 4, ((Y + y) * CW + X + W) * 4), y * W * 4);
+    return out;
+  }
+  const folga = () => new Promise(r => setTimeout(r, 0));
+  function liberar(canvas) { if (canvas) { canvas.__px = null; canvas.width = canvas.height = 0; } }
   function negritoPorPalavra(canvas, ...listasDeLinhas) {
-    const W = canvas.width, H = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const W = canvas.width, H = canvas.height, px = pixelsDe(canvas);
     const medidas = [];   // {token, razao}
     const vistos = new Set();
     for (const linhas of listasDeLinhas) for (const l of linhas) for (const t of l.trechos || []) {
@@ -166,7 +180,7 @@ const UPQRecorte = (() => {
     const X = Math.max(0, Math.round(f.x0 * ESCALA)), Y = Math.max(0, Math.round(f.y0 * ESCALA));
     const W = Math.min(canvas.width - X, Math.round((f.x1 - f.x0) * ESCALA)), H = Math.min(canvas.height - Y, Math.round((f.y1 - f.y0) * ESCALA));
     if (W < 60 || H < 40) return null;
-    const px = canvas.getContext('2d').getImageData(X, Y, W, H).data;
+    const px = regiaoDe(canvas, X, Y, W, H);
     const at = (x, y) => (y * W + x) * 4;
     const fundo = [[2, 2], [W - 3, 2], [2, H - 3], [W - 3, H - 3]].map(([x, y]) => [px[at(x, y)], px[at(x, y) + 1], px[at(x, y) + 2]])
       .sort((a, b) => (b[0] + b[1] + b[2]) - (a[0] + a[1] + a[2]))[1];
@@ -261,7 +275,7 @@ const UPQRecorte = (() => {
     const Y0 = Math.max(0, Math.floor(cabecalho ? Math.max(regiao.y0, cabecalho.y1 + 2) : regiao.y0)), Y1 = Math.min(Math.floor(canvas.height / E), Math.ceil(regiao.y1));
     const W = X1 - X0, H = Y1 - Y0;
     if (W < 4 || H < 4) return [];
-    const px = canvas.getContext('2d').getImageData(X0 * E, Y0 * E, W * E, H * E).data, PW = W * E;
+    const px = pixelsDe(canvas), CW = canvas.width, OX = X0 * E, OY = Y0 * E;   // índices no buffer da página
     const trechos = linhas.flatMap(l => l.trechos?.length ? l.trechos : [{x0: l.x0, x1: l.x1, base: l.base, h: l.y1 - l.y0}]);
     const caixaDe = t => ({x0: t.x0 - 0.8, x1: t.x1 + 0.8, y0: t.base - 1.02 * t.h - 0.5, y1: t.base + 0.32 * t.h});
     const contemTexto = c => trechos.some(t => { const b = caixaDe(t); return b.x0 + 0.8 >= c.x0 - 1 && b.x1 - 0.8 <= c.x1 + 1 && t.base - 0.6 * t.h >= c.y0 - 1 && t.base <= c.y1 + 1; });
@@ -274,21 +288,28 @@ const UPQRecorte = (() => {
     // linha de texto de cada mancha (a da letra da alternativa): manchas de linhas diferentes não se juntam
     const linhaDe = c => { const y0 = Y0 + c.y0, y1 = Y0 + c.y1 + 1;
       const k = linhas.findIndex(l => Math.min(l.y1, y1) - Math.max(l.y0, y0) >= 0.5 * (l.y1 - l.y0)); return k; };
-    const escuro = new Uint8Array(W * H), cel = new Uint8Array(W * H);
+    const escuro = new Uint8Array(W * H), cel = new Uint8Array(W * H), fora = new Uint8Array(W * H);
+    // texto, figuras e imagens pequenas pintados de uma vez no mapa de células (em vez de testar
+    // cada caixa em cada célula)
+    const pintar = (b, folgaPt = 0) => {
+      const x0 = Math.max(0, Math.ceil(b.x0 - folgaPt - X0 - 0.5)), x1 = Math.min(W - 1, Math.floor(b.x1 + folgaPt - X0 - 0.5));
+      const y0 = Math.max(0, Math.ceil(b.y0 - folgaPt - Y0 - 0.5)), y1 = Math.min(H - 1, Math.floor(b.y1 + folgaPt - Y0 - 0.5));
+      for (let y = y0; y <= y1; y++) fora.fill(1, y * W + x0, y * W + x1 + 1);
+    };
+    apagar.forEach(b => pintar(b)); imgs.forEach(r => pintar(r, 1));
     for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
       let t = false;
       for (let y = cy * E; y < cy * E + E && !t; y++) for (let x = cx * E; x < cx * E + E; x++) {
-        const j = (y * PW + x) * 4;
+        const j = ((OY + y) * CW + OX + x) * 4;
         if (0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2] < 150) { t = true; break; }
       }
       if (!t) continue;
       escuro[cy * W + cx] = 1;
-      const ptx = X0 + cx + 0.5, pty = Y0 + cy + 0.5;
-      if (!apagar.some(a => ptx >= a.x0 && ptx <= a.x1 && pty >= a.y0 && pty <= a.y1)
-          && !imgs.some(r => ptx >= r.x0 - 1 && ptx <= r.x1 + 1 && pty >= r.y0 - 1 && pty <= r.y1 + 1)) cel[cy * W + cx] = 1;
+      if (!fora[cy * W + cx]) cel[cy * W + cx] = 1;
     }
     // componentes (8-vizinhança) da tinta que sobrou + uma mancha por imagem pequena
-    const rotulo = new Uint8Array(W * H), grupos = [];
+    const rotulo = new Uint8Array(W * H);
+    let grupos = [];
     for (let i = 0; i < W * H; i++) {
       if (!cel[i] || rotulo[i]) continue;
       const c = {x0: W, y0: H, x1: -1, y1: -1, celulas: [], imagem: false}, pilha = [i];
@@ -319,21 +340,30 @@ const UPQRecorte = (() => {
     // junta manchas próximas: na mesma faixa (vão ≤ 6 pt) ou empilhadas (vão ≤ 5 pt: numerador, traço,
     // denominador), nunca de linhas de texto diferentes (alternativas vizinhas)
     const perto = (a, b) => {
-      const la = linhaDe(a), lb = linhaDe(b);
+      const la = a.linha ?? linhaDe(a), lb = b.linha ?? linhaDe(b);
       if (la >= 0 && lb >= 0 && la !== lb) return false;
       const vx = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), vy = Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1);
       const sob = -vy / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0) + 1);
       return (vy <= 0 && vx <= 6) || (sob >= 0.4 && vx <= 12) || (vx <= 0 && vy <= 5) || (vx <= 1.5 && vy <= 1.5);
     };
+    // passadas de união com janela em x (só vizinhos até 12 pt à direita), até não juntar mais nada
     for (let mudou = true; mudou;) {
       mudou = false;
-      for (let a = 0; a < grupos.length && !mudou; a++) for (let b = a + 1; b < grupos.length; b++) {
-        if (!perto(grupos[a], grupos[b])) continue;
-        const A = grupos[a], B = grupos[b];
-        grupos[a] = {x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1),
-          celulas: A.celulas.concat(B.celulas), imagem: A.imagem || B.imagem};
-        grupos.splice(b, 1); mudou = true; break;
+      grupos.sort((a, b) => a.x0 - b.x0);
+      grupos.forEach(g => { g.linha = linhaDe(g); });
+      const vivo = grupos.map(() => true);
+      for (let a = 0; a < grupos.length; a++) {
+        if (!vivo[a]) continue;
+        for (let b = a + 1; b < grupos.length && grupos[b].x0 <= grupos[a].x1 + 12; b++) {
+          if (!vivo[b] || !perto(grupos[a], grupos[b])) continue;
+          const A = grupos[a], B = grupos[b];
+          grupos[a] = {x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1),
+            celulas: A.celulas.concat(B.celulas), imagem: A.imagem || B.imagem};
+          grupos[a].linha = linhaDe(grupos[a]);
+          vivo[b] = false; mudou = true;
+        }
       }
+      grupos = grupos.filter((g, k) => vivo[k]);
     }
     const saida = [];
     for (const g of grupos) {
@@ -354,7 +384,7 @@ const UPQRecorte = (() => {
         const cx = g.x0 - M + x, cy = g.y0 - M + y;
         if (cx < 0 || cy < 0 || cx >= W || cy >= H || !meu[cy * W + cx]) continue;
         for (let yy = 0; yy < E; yy++) for (let xx = 0; xx < E; xx++) {
-          const o = (((y * E + yy) * c.width) + x * E + xx) * 4, j = (((cy * E + yy) * PW) + cx * E + xx) * 4;
+          const o = (((y * E + yy) * c.width) + x * E + xx) * 4, j = ((OY + cy * E + yy) * CW + OX + cx * E + xx) * 4;
           im.data[o] = px[j]; im.data[o + 1] = px[j + 1]; im.data[o + 2] = px[j + 2];
         }
       }
@@ -368,7 +398,7 @@ const UPQRecorte = (() => {
     const vp = page.getViewport({scale: ESCALA});
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({canvasContext: ctx, viewport: vp}).promise;
     return canvas;
@@ -383,7 +413,24 @@ const UPQRecorte = (() => {
     c.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, c.width, c.height);
     return c;
   }
-  function juntarRecortes(recortes, {maxPx = MAX_PX_QUESTAO, qualidade = 0.86} = {}) {
+  // Recorte de cada parte guardado comprimido (JPEG) até juntar: 30 questões em canvas abertos
+  // somavam centenas de MB.
+  function parteComprimida(canvas) {
+    const fator = Math.min(1, Math.sqrt(MAX_PX_QUESTAO / (canvas.width * canvas.height)));
+    let c = canvas;
+    if (fator < 1) { c = document.createElement('canvas'); c.width = Math.round(canvas.width * fator); c.height = Math.round(canvas.height * fator);
+      c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height); }
+    return new Promise(res => c.toBlob(b => { const w = canvas.width, h = canvas.height; if (c !== canvas) c.width = c.height = 0; canvas.width = canvas.height = 0; res({blob: b, width: w, height: h}); }, 'image/jpeg', 0.94));
+  }
+  async function juntarRecortes(partes, opcoes = {}) {
+    const recortes = [];
+    for (const p of partes) {   // {blob, width, height}: o tamanho original da parte (a escala vem daí)
+      const bmp = await createImageBitmap(p.blob);
+      recortes.push({bmp, width: p.width, height: p.height});
+    }
+    try { return await juntarCanvas(recortes, opcoes); } finally { recortes.forEach(r => r.bmp.close()); }
+  }
+  function juntarCanvas(recortes, {maxPx = MAX_PX_QUESTAO, qualidade = 0.86} = {}) {
     const vao = recortes.length > 1 ? 6 * ESCALA : 0;
     const W = Math.max(...recortes.map(c => c.width)), H = recortes.reduce((s, c) => s + c.height, 0) + vao * (recortes.length - 1);
     const fator = Math.min(1, Math.sqrt(maxPx / (W * H)));
@@ -391,11 +438,11 @@ const UPQRecorte = (() => {
     const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
     let y = 0;
     for (const r of recortes) {
-      ctx.drawImage(r, 0, 0, r.width, r.height, 0, Math.round(y * fator), Math.round(r.width * fator), Math.round(r.height * fator));
+      ctx.drawImage(r.bmp, 0, 0, r.bmp.width, r.bmp.height, 0, Math.round(y * fator), Math.round(r.width * fator), Math.round(r.height * fator));
       y += r.height + vao;
       if (vao && y < H) { ctx.fillStyle = '#d0d0d0'; ctx.fillRect(0, Math.round((y - vao / 2) * fator), c.width, Math.max(1, Math.round(fator * 2))); ctx.fillStyle = '#fff'; }
     }
-    return new Promise(res => c.toBlob(res, 'image/jpeg', qualidade));
+    return new Promise(res => c.toBlob(b => { c.width = c.height = 0; res(b); }, 'image/jpeg', qualidade));
   }
 
   function recortar(canvas, r, {maxPx = Infinity, tipo = 'image/png', qualidade = 0.88} = {}) {
@@ -452,7 +499,7 @@ const UPQRecorte = (() => {
   // Devolve {pares: {"01": "C", ...}, motivo} — pares vazio quando não dá para ler com segurança.
   function componentes(canvas, limiar) {
     const W = canvas.width, H = canvas.height;
-    const px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const px = pixelsDe(canvas);
     const tinta = new Uint8Array(W * H);
     for (let i = 0, j = 0; i < tinta.length; i++, j += 4) {
       const mx = Math.max(px[j], px[j + 1], px[j + 2]), mn = Math.min(px[j], px[j + 1], px[j + 2]);
@@ -666,7 +713,8 @@ const UPQRecorte = (() => {
   async function segmentar(arquivo, progresso = () => {}) {
     const buffer = arquivo instanceof ArrayBuffer ? arquivo : await arquivo.arrayBuffer();
     const hashPdf = await hash(buffer.slice(0));
-    const doc = await pdfjsLib.getDocument({data: new Uint8Array(buffer), isEvalSupported: false}).promise;
+    const tarefa = pdfjsLib.getDocument({data: new Uint8Array(buffer), isEvalSupported: false});
+    const doc = await tarefa.promise;
     const paginas = [];
     let tituloLista = '';
     for (let pn = 1; pn <= doc.numPages; pn++) {
@@ -712,7 +760,7 @@ const UPQRecorte = (() => {
     function fimDaBarra(canvas, cab) {
       const y = Math.round(((cab.y + cab.base) / 2) * ESCALA);
       if (y < 0 || y >= canvas.height) return null;
-      const linha = canvas.getContext('2d').getImageData(0, y, canvas.width, 1).data;
+      const linha = pixelsDe(canvas).subarray(y * canvas.width * 4, (y + 1) * canvas.width * 4);
       const cor = x => [linha[x * 4], linha[x * 4 + 1], linha[x * 4 + 2]];
       const x0 = Math.max(0, Math.round((cab.x0 - 3) * ESCALA));
       const c0 = cor(x0);
@@ -813,7 +861,7 @@ const UPQRecorte = (() => {
       const ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1), ...formulas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
       return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob})),
-              recorte: recortarCanvas(canvas, util)};
+              recorte: await parteComprimida(recortarCanvas(canvas, util))};
     }
 
     const questoes = [];
@@ -859,6 +907,8 @@ const UPQRecorte = (() => {
         dono(l)?.foraDoRecorte.push(l.texto.trim().slice(0, 80));
       }
       for (const f of imagens) if (!dentroDe(f) && f.y0 >= MARGEM_TOPO && f.y0 < p.fundo) dono(f)?.foraDoRecorte.push('[imagem]');
+      liberar(canvas); p.page.cleanup();
+      await folga();   // devolve a vez à tela entre uma página e outra
     }
     // Junta as partes de cada questão: texto em ordem, figuras numeradas, imagem empilhada.
     for (const q of questoes) {
@@ -915,6 +965,7 @@ const UPQRecorte = (() => {
         paginaGabarito = paginaGabarito && !Object.keys(pares).length ? paginaGabarito
           : await recortar(c, {x0: 0, y0: 0, x1: pg.vp.width, y1: pg.vp.height}, {maxPx: MAX_PX_QUESTAO, tipo: 'image/jpeg'});
       Object.assign(gabaritoPdf, pares);
+      liberar(c); pg.page.cleanup();
       if (numeros.every(n => gabaritoPdf[String(n).padStart(2, '0')])) break;
     }
     const lidas = Object.keys(gabaritoPdf).length;
@@ -926,6 +977,8 @@ const UPQRecorte = (() => {
       for (const n of Object.keys(gabaritoRecortes)) delete gabaritoRecortes[n];
     }
     const nome = arquivo.name || 'lista.pdf';
+    // fecha o documento no pdf.js (senão cada lista fica na memória do Worker)
+    try { await tarefa.destroy(); } catch {}
     return {
       arquivo: nome, hash: hashPdf, titulo: tituloLista || nome.replace(/\.pdf$/i, '').replace(/_/g, ' '),
       tipo: /simulado/i.test(nome + ' ' + tituloLista) ? 'simulado' : 'lista',

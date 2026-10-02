@@ -6,10 +6,13 @@
  *   resizer / encoder / decoder .txt…   modelos (pesos em float16 + Cast; decoder em int8), base64
  *   tokenizer.json       vocabulário
  *
- *   const leitor = await UPQFormulas.carregar(urlBase, progresso)
- *   const {latex, confianca} = await leitor.ler(canvasOuBlob)
+ *   const leitor = await UPQFormulas.carregar(urlBase)
+ *   const {latex, votos, de} = await leitor.ler(blob)
+ *
+ * Roda num Worker (a conta não trava a página; a memória do modelo fica fora dela). Se o navegador
+ * não deixar criar o Worker, roda na página, cedendo a vez à tela entre os passos.
  */
-const UPQFormulas = (() => {
+function fabricaFormulas() {
   const MAX_W = 672, MAX_H = 192, MIN_W = 32, MIN_H = 32, BOS = 1, EOS = 2, MAX_TOKENS = 400;
   const MEDIA = 0.7931 * 255, DESVIO = 0.1738 * 255;
   let carregando = null;
@@ -59,7 +62,12 @@ const UPQFormulas = (() => {
   }
 
   // ---- pré-processamento (igual ao do pix2tex: cinza, recorte da tinta, múltiplos de 32, escala)
-  const novaTela = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h); return c; };
+  const novaTela = (w, h) => {
+    w = Math.max(1, w); h = Math.max(1, h);
+    if (typeof document === 'undefined') return new OffscreenCanvas(w, h);
+    const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
+  };
+  const folga = () => typeof document === 'undefined' ? null : new Promise(r => setTimeout(r, 0));
   function cinzaDe(c) {
     const d = c.getContext('2d', {willReadFrequently: true}).getImageData(0, 0, c.width, c.height).data, g = new Float32Array(c.width * c.height);
     for (let i = 0, k = 0; k < g.length; i += 4, k++) g[k] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;   // PIL "L"
@@ -113,7 +121,7 @@ const UPQFormulas = (() => {
   const argmax = (a, ini = 0, fim = a.length) => { let k = ini; for (let i = ini; i < fim; i++) if (a[i] > a[k]) k = i; return k - ini; };
 
   async function paraCanvas(img) {
-    if (img instanceof HTMLCanvasElement) return img;
+    if (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) return img;
     const bmp = await createImageBitmap(img);
     const c = novaTela(bmp.width, bmp.height), ctx = c.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0);
@@ -160,6 +168,7 @@ const UPQFormulas = (() => {
     const ids = [BOS];
     let minimo = 1, somaLog = 0;
     for (let passo = 0; passo < MAX_TOKENS; passo++) {
+      if (passo % 8 === 7) await folga();
       const x = new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
       const mascara = new ort.Tensor('bool', new Uint8Array(ids.length).fill(1), [1, ids.length]);
       const saida = (await m.decoder.run({x, mask: mascara, context: contexto}))[m.decoder.outputNames[0]];
@@ -219,4 +228,41 @@ const UPQFormulas = (() => {
   }
 
   return {carregar, posProcessar, enxugar};
+}
+
+const UPQFormulas = (() => {
+  const local = fabricaFormulas();
+  let carregando = null;
+  // Worker com uma cópia deste mesmo código (fabricaFormulas), falando por mensagens.
+  function noWorker(base) {
+    const fonte = `${fabricaFormulas.toString()}
+const F = fabricaFormulas(); let leitor = null;
+self.onmessage = async e => {
+  const {id, tipo, base, blob} = e.data;
+  try {
+    if (tipo === 'carregar') { leitor = await F.carregar(base); self.postMessage({id, ok: true}); }
+    else self.postMessage({id, ok: true, r: await leitor.ler(blob)});
+  } catch (err) { self.postMessage({id, ok: false, erro: String(err && err.message || err)}); }
+};`;
+    const w = new Worker(URL.createObjectURL(new Blob([fonte], {type: 'text/javascript'})));
+    let seq = 0;
+    const pendentes = new Map();
+    w.onmessage = e => { const p = pendentes.get(e.data.id); if (!p) return; pendentes.delete(e.data.id); e.data.ok ? p.ok(e.data.r) : p.falha(new Error(e.data.erro)); };
+    w.onerror = e => { for (const p of pendentes.values()) p.falha(new Error(e.message || 'o Worker do leitor de fórmulas parou')); pendentes.clear(); };
+    const pedir = msg => new Promise((ok, falha) => { const id = ++seq; pendentes.set(id, {ok, falha}); w.postMessage({...msg, id}); });
+    return pedir({tipo: 'carregar', base}).then(() => ({ler: blob => pedir({tipo: 'ler', blob}), modo: 'worker'}),
+      e => { w.terminate(); throw e; });
+  }
+  function carregar(base) {
+    if (carregando) return carregando;
+    carregando = (async () => {
+      try { if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined') return await noWorker(base); }
+      catch (e) { console.warn('leitor de fórmulas sem Worker:', e); }
+      const l = await local.carregar(base);
+      return {ler: l.ler, modo: 'página'};
+    })();
+    carregando.catch(() => { carregando = null; });
+    return carregando;
+  }
+  return {carregar, posProcessar: local.posProcessar, enxugar: local.enxugar};
 })();
