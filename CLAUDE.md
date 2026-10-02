@@ -27,6 +27,8 @@ Quando pedirem "transcreva a lista X", faça exatamente o que `upq/transcrever.p
    - `alternativas` é uma lista `[{"letra": "A", "texto": "..."}]`.
    - `assuntos`: 1 ou 2 assuntos do tópico, com a grafia de `dados/base_topicos.txt`.
    - Não gere resolução: o trabalho é só transcrição e classificação.
+   - Fórmula que no PDF é imagem (sem texto) vai em LaTeX, lida da imagem; nunca escreva um aviso
+     como "(expressão não legível)" no lugar dela (a validação recusa).
    - Formatação do PDF é obrigatória: todo trecho marcado `**...**` no `texto_pdf` sai em negrito;
      linhas marcadas `[centralizado]` (e figuras com `centralizada: true`) vão num bloco
      `::: centro` ... `:::` (o código converte em HTML centralizado). Nada pode faltar: todas as
@@ -43,6 +45,6 @@ Não invente gabarito, banca ou ano. Não altere `dados/base_topicos.txt` sem pe
 
 ## Importador no claude.ai
 
-`upq/web/importador.html` + `upq/web/recorte.js` + `upq/artefato.py` formam o artefato
+`upq/web/importador.html` + `upq/web/recorte.js` + `upq/web/formulas.js` + `upq/artefato.py` formam o artefato
 (`python -m upq.artefato` → `dist/importador-questoes.html`). Ao mudar `upq/prompt.py`,
 `upq/validar.py` ou `upq/segmentar.py`, mantenha a versão JS equivalente e remonte o artefato.

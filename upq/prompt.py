@@ -28,6 +28,13 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    trechos em fonte negrito já vêm entre ** — todos eles têm de sair em negrito.
 4. Parágrafos separados por uma linha em branco. Afirmativas I, II, III cada uma em seu
    parágrafo, começando por "I. ", "II. ". Listas de dados (π = 3; g = 10 m/s²) uma por linha.
+   FÓRMULA EM IMAGEM: no PDF, muitas fórmulas (frações, raízes, alternativas inteiras) são
+   imagem e não têm texto. No texto extraído elas aparecem no ponto exato como
+   ⟦FÓRMULA NOME = $LaTeX$⟧ (lida da imagem) ou ⟦FÓRMULA NOME⟧ (sem leitura: leia na imagem).
+   Transcreva cada uma em LaTeX nesse ponto (não copie a marca); a alternativa cujo texto é só
+   a marca tem como texto a fórmula. NUNCA escreva no lugar da fórmula um aviso como
+   "(expressão não legível)": se não houver como ler, deixe a alternativa vazia e marque
+   revisar = true.
 5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.
 6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)
    usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo

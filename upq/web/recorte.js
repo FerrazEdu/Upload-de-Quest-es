@@ -249,6 +249,121 @@ const UPQRecorte = (() => {
     return r;
   }
 
+  // Tinta sem texto numa parte: fórmula que o PDF traz como imagem pequena (ou desenho), sem camada de
+  // texto — sem isto ela some da transcrição (alternativas "em branco") e do recorte. Duas fontes:
+  // as imagens pequenas da página (que não são o círculo da letra) e, para desenhos vetoriais, a tinta
+  // que sobra no mapa da página (células de 1 pt) tirando o texto e as figuras. Manchas vizinhas se
+  // juntam (fração, expoente, "·", parênteses). Ficam de fora traços (linhas, réguas, barras), pingos
+  // e o que contém texto (círculo da letra, caixas, tabelas). Devolve as caixas (pt), cada uma com o
+  // recorte só da sua tinta (PNG).
+  async function tintaSemTexto(canvas, regiao, linhas, figuras, cabecalho, pequenas = []) {
+    const E = ESCALA, X0 = Math.max(0, Math.floor(regiao.x0)), X1 = Math.min(Math.floor(canvas.width / E), Math.ceil(regiao.x1));
+    const Y0 = Math.max(0, Math.floor(cabecalho ? Math.max(regiao.y0, cabecalho.y1 + 2) : regiao.y0)), Y1 = Math.min(Math.floor(canvas.height / E), Math.ceil(regiao.y1));
+    const W = X1 - X0, H = Y1 - Y0;
+    if (W < 4 || H < 4) return [];
+    const px = canvas.getContext('2d').getImageData(X0 * E, Y0 * E, W * E, H * E).data, PW = W * E;
+    const trechos = linhas.flatMap(l => l.trechos?.length ? l.trechos : [{x0: l.x0, x1: l.x1, base: l.base, h: l.y1 - l.y0}]);
+    const caixaDe = t => ({x0: t.x0 - 0.8, x1: t.x1 + 0.8, y0: t.base - 1.02 * t.h - 0.5, y1: t.base + 0.32 * t.h});
+    const contemTexto = c => trechos.some(t => { const b = caixaDe(t); return b.x0 + 0.8 >= c.x0 - 1 && b.x1 - 0.8 <= c.x1 + 1 && t.base - 0.6 * t.h >= c.y0 - 1 && t.base <= c.y1 + 1; });
+    // imagens pequenas dentro da parte que não envolvem texto (o círculo da letra envolve a letra)
+    const naParte = pequenas.filter(r => { const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2; return cx > X0 && cx < X1 && cy > Y0 && cy < Y1; });
+    const imgs = naParte.filter(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4 && !contemTexto(r));
+    const apagar = [...trechos.map(caixaDe), ...figuras.map(f => ({x0: f.x0 - 2, x1: f.x1 + 2, y0: f.y0 - 2, y1: f.y1 + 2})),
+      ...naParte.filter(r => !imgs.includes(r)).map(r => ({x0: r.x0 - 1, x1: r.x1 + 1, y0: r.y0 - 1, y1: r.y1 + 1}))];
+    const rotulos = trechos.filter(t => t.t && t.t.trim().length <= 2).map(t => ({x0: t.x0 - 4, x1: t.x1 + 4, y0: t.base - t.h - 4, y1: t.base + 0.4 * t.h + 4}));
+    // linha de texto de cada mancha (a da letra da alternativa): manchas de linhas diferentes não se juntam
+    const linhaDe = c => { const y0 = Y0 + c.y0, y1 = Y0 + c.y1 + 1;
+      const k = linhas.findIndex(l => Math.min(l.y1, y1) - Math.max(l.y0, y0) >= 0.5 * (l.y1 - l.y0)); return k; };
+    const escuro = new Uint8Array(W * H), cel = new Uint8Array(W * H);
+    for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
+      let t = false;
+      for (let y = cy * E; y < cy * E + E && !t; y++) for (let x = cx * E; x < cx * E + E; x++) {
+        const j = (y * PW + x) * 4;
+        if (0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2] < 150) { t = true; break; }
+      }
+      if (!t) continue;
+      escuro[cy * W + cx] = 1;
+      const ptx = X0 + cx + 0.5, pty = Y0 + cy + 0.5;
+      if (!apagar.some(a => ptx >= a.x0 && ptx <= a.x1 && pty >= a.y0 && pty <= a.y1)
+          && !imgs.some(r => ptx >= r.x0 - 1 && ptx <= r.x1 + 1 && pty >= r.y0 - 1 && pty <= r.y1 + 1)) cel[cy * W + cx] = 1;
+    }
+    // componentes (8-vizinhança) da tinta que sobrou + uma mancha por imagem pequena
+    const rotulo = new Uint8Array(W * H), grupos = [];
+    for (let i = 0; i < W * H; i++) {
+      if (!cel[i] || rotulo[i]) continue;
+      const c = {x0: W, y0: H, x1: -1, y1: -1, celulas: [], imagem: false}, pilha = [i];
+      rotulo[i] = 1;
+      while (pilha.length) {
+        const k = pilha.pop(), x = k % W, y = (k - x) / W;
+        c.celulas.push(k); c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.y0 = Math.min(c.y0, y); c.y1 = Math.max(c.y1, y);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy, n = ny * W + nx;
+          if (nx >= 0 && ny >= 0 && nx < W && ny < H && cel[n] && !rotulo[n]) { rotulo[n] = 1; pilha.push(n); }
+        }
+      }
+      // traço comprido e fino (régua, sublinhado, borda, barra): não é fórmula sozinho
+      const w = c.x1 - c.x0 + 1, h = c.y1 - c.y0 + 1;
+      if ((h <= 2 && w > 40) || (w <= 2 && h > 40) || (w > 20 * h && w > 60)) continue;
+      // o que envolve texto (anel do círculo da letra, caixa, tabela) sai antes de juntar com vizinhos,
+      // e também os restos do círculo em volta da letra da alternativa
+      const cx0 = X0 + c.x0, cy0 = Y0 + c.y0, cx1 = X0 + c.x1 + 1, cy1 = Y0 + c.y1 + 1;
+      if (contemTexto({x0: cx0, y0: cy0, x1: cx1, y1: cy1})) continue;
+      if (rotulos.some(b => cx0 >= b.x0 && cx1 <= b.x1 && cy0 >= b.y0 && cy1 <= b.y1)) continue;
+      grupos.push(c);
+    }
+    for (const r of imgs) {
+      const c = {x0: Math.max(0, Math.floor(r.x0 - X0)), y0: Math.max(0, Math.floor(r.y0 - Y0)), x1: Math.min(W - 1, Math.ceil(r.x1 - X0)), y1: Math.min(H - 1, Math.ceil(r.y1 - Y0)), celulas: [], imagem: true};
+      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (escuro[y * W + x]) c.celulas.push(y * W + x);
+      if (c.celulas.length) grupos.push(c);
+    }
+    // junta manchas próximas: na mesma faixa (vão ≤ 6 pt) ou empilhadas (vão ≤ 5 pt: numerador, traço,
+    // denominador), nunca de linhas de texto diferentes (alternativas vizinhas)
+    const perto = (a, b) => {
+      const la = linhaDe(a), lb = linhaDe(b);
+      if (la >= 0 && lb >= 0 && la !== lb) return false;
+      const vx = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), vy = Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1);
+      const sob = -vy / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0) + 1);
+      return (vy <= 0 && vx <= 6) || (sob >= 0.4 && vx <= 12) || (vx <= 0 && vy <= 5) || (vx <= 1.5 && vy <= 1.5);
+    };
+    for (let mudou = true; mudou;) {
+      mudou = false;
+      for (let a = 0; a < grupos.length && !mudou; a++) for (let b = a + 1; b < grupos.length; b++) {
+        if (!perto(grupos[a], grupos[b])) continue;
+        const A = grupos[a], B = grupos[b];
+        grupos[a] = {x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1),
+          celulas: A.celulas.concat(B.celulas), imagem: A.imagem || B.imagem};
+        grupos.splice(b, 1); mudou = true; break;
+      }
+    }
+    const saida = [];
+    for (const g of grupos) {
+      const w = g.x1 - g.x0 + 1, h = g.y1 - g.y0 + 1;
+      if (w < 3 || h < 3 || w * h < 30 || g.celulas.length < 12) continue;
+      if (w > 20 * h || h > 20 * w) continue;
+      const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
+      if (!g.imagem && contemTexto(caixa)) continue;
+      if (h > 60 && w > 30) continue;   // desenho grande sem texto: não é fórmula
+      // recorte só com a tinta do grupo (vizinhos apagados), com margem branca
+      const M = 4, c = document.createElement('canvas');
+      c.width = (w + 2 * M) * E; c.height = (h + 2 * M) * E;
+      const ctx = c.getContext('2d'), im = ctx.createImageData(c.width, c.height);
+      im.data.fill(255);
+      const meu = new Uint8Array(W * H);
+      for (const k of g.celulas) { const x = k % W, y = (k - x) / W; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < W && ny < H) meu[ny * W + nx] = 1; } }
+      for (let y = 0; y < h + 2 * M; y++) for (let x = 0; x < w + 2 * M; x++) {
+        const cx = g.x0 - M + x, cy = g.y0 - M + y;
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H || !meu[cy * W + cx]) continue;
+        for (let yy = 0; yy < E; yy++) for (let xx = 0; xx < E; xx++) {
+          const o = (((y * E + yy) * c.width) + x * E + xx) * 4, j = (((cy * E + yy) * PW) + cx * E + xx) * 4;
+          im.data[o] = px[j]; im.data[o + 1] = px[j + 1]; im.data[o + 2] = px[j + 2];
+        }
+      }
+      ctx.putImageData(im, 0, 0);
+      saida.push({...caixa, blob: await new Promise(res => c.toBlob(res, 'image/png'))});
+    }
+    return saida.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+  }
+
   async function renderizar(page) {
     const vp = page.getViewport({scale: ESCALA});
     const canvas = document.createElement('canvas');
@@ -628,26 +743,57 @@ const UPQRecorte = (() => {
       return partes;
     }
 
-    // Texto (com **negrito** e [centralizado]) e figuras de uma parte.
-    async function dadosDaParte(p, m, parte, canvas, imagens, comCabecalho) {
+    // Texto (com **negrito** e [centralizado]), fórmulas sem texto e figuras de uma parte.
+    async function dadosDaParte(p, m, parte, canvas, imagens, comCabecalho, pequenas = []) {
       const {regiao, col} = parte;
       const daParte = m.linhas.filter(l => (m.umaColuna || l.col === col) && (l.y0 + l.y1) / 2 > regiao.y0 && (l.y0 + l.y1) / 2 < regiao.y1)
         .sort((a, b) => a.base - b.base);
       const corpo = comCabecalho ? daParte.slice(1) : daParte;
       const esq = corpo.length ? Math.min(...corpo.map(l => l.x0)) : regiao.x0, dir = corpo.length ? Math.max(...corpo.map(l => l.x1)) : regiao.x1;
       const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
-      const texto = daParte.map((l, i) => {
-        if (comCabecalho && i === 0) return l.texto;
-        const centralizada = l.texto.trim().length >= 3 && l.x1 - l.x0 < 0.8 * largura && l.x0 - esq > 0.06 * largura
-          && (Math.abs((l.x0 + l.x1) / 2 - centro) < 0.04 * largura || Math.abs((l.x0 + l.x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-        return (centralizada ? '[centralizado] ' : '') + marcadoDe(l);
-      });
+      const centralizado = (x0, x1, n) => n >= 3 && x1 - x0 < 0.8 * largura && x0 - esq > 0.06 * largura
+        && (Math.abs((x0 + x1) / 2 - centro) < 0.04 * largura || Math.abs((x0 + x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
       const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
       ordemDeLeitura(dentro);
       // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
       const tabelas = new Set();
       const aparadas = dentro.map(f => aparar(f, m.linhas)).map((f, k) => { const g = gradeDaTabela(canvas, f); if (g) { tabelas.add(k); return g; } return f; });
+      // Fórmula sem texto (imagem pequena ou desenho): entra no texto como ⟦FÓRMULA #k⟧, no ponto em que
+      // aparece (na linha da letra da alternativa, ou numa linha própria), e o recorte vai junto.
+      const formulas = await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, aparadas, comCabecalho ? daParte[0] : null, pequenas);
+      const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
+      formulas.forEach((f, k) => {
+        f.k = k;
+        const alvo = entradas.filter(e => e.l && !(comCabecalho && e.i === 0)).map(e => ({e, sob: Math.min(e.l.y1, f.y1) - Math.max(e.l.y0, f.y0)}))
+          .filter(x => x.sob >= 0.5 * (x.e.l.y1 - x.e.l.y0) || (x.sob > 0 && x.e.y > f.y0 && x.e.y < f.y1)).sort((a, b) => b.sob - a.sob)[0];
+        if (alvo) alvo.e.formulas.push(f);
+        else entradas.push({y: (f.y0 + f.y1) / 2, l: null, formulas: [f]});
+      });
+      entradas.sort((a, b) => a.y - b.y);
+      const marca = f => `⟦FÓRMULA #${f.k}⟧`;
+      const texto = entradas.map(e => {
+        const {l} = e;
+        if (!l) {
+          const f = e.formulas[0];
+          return (centralizado(f.x0, f.x1, 3) ? '[centralizado] ' : '') + marca(f);
+        }
+        if (comCabecalho && e.i === 0) return l.texto;
+        const prefixo = centralizado(l.x0, l.x1, l.texto.trim().length) ? '[centralizado] ' : '';
+        if (!e.formulas.length) return prefixo + marcadoDe(l);
+        // fórmulas na linha: na posição x entre os trechos de texto
+        const itens = [...(l.trechos || []).map(t => ({x: (t.x0 + t.x1) / 2, t})), ...e.formulas.map(f => ({x: f.x0, f}))].sort((a, b) => a.x - b.x);
+        const pedacos = [];
+        let grupo = [];
+        for (const it of itens) {
+          if (it.t) { grupo.push(it.t); continue; }
+          if (grupo.length) pedacos.push(marcadoDe({trechos: grupo}).trim());
+          grupo = []; pedacos.push(marca(it.f));
+        }
+        if (grupo.length) pedacos.push(marcadoDe({trechos: grupo}).trim());
+        if (!l.trechos) pedacos.unshift(marcadoDe(l));
+        return prefixo + pedacos.filter(Boolean).join(' ');
+      });
       // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
       const noCentro = (a, b) => b - a >= 0.85 * largura || (
         Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
@@ -661,11 +807,13 @@ const UPQRecorte = (() => {
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++)
         figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k),
-          linha: daParte.filter(l => (l.y0 + l.y1) / 2 < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
-      // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
-      const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
+          linha: entradas.filter(e => e.y < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
+      // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna); fórmulas contam
+      const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0), ...formulas.map(f => f.y0)];
+      const ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1), ...formulas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
-      return {texto, figuras, recorte: recortarCanvas(canvas, util)};
+      return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob})),
+              recorte: recortarCanvas(canvas, util)};
     }
 
     const questoes = [];
@@ -681,8 +829,9 @@ const UPQRecorte = (() => {
       progresso({etapa: 'recortando', pagina: p.pn, total: doc.numPages});
       const canvas = await renderizar(p.page);
       negritoPorPalavra(canvas, p.uma.linhas, p.duas.linhas);
-      const imagens = (await imagensDaPagina(p.page, p.vp)).filter(r =>
-        r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
+      const todas = await imagensDaPagina(p.page, p.vp);
+      const imagens = todas.filter(r => r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
+      const pequenas = todas.filter(r => !(r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN) && r.y0 > MARGEM_TOPO);
       // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
       // continuação segue o modelo da anterior
       const fins = p.uma.cabecalhos.map(c => fimDaBarra(canvas, c)).filter(x => x !== null);
@@ -697,7 +846,7 @@ const UPQRecorte = (() => {
           aberta = {numero: parte.numero, pagina: p.pn, coluna: parte.col + 1, regiao: parte.regiao, partes: [], foraDoRecorte: []};
           questoes.push(aberta);
         } else if (!aberta) continue;   // texto antes da 1ª questão da lista (capa, instruções)
-        const d = await dadosDaParte(p, m, parte, canvas, imagens, parte.tipo === 'nova');
+        const d = await dadosDaParte(p, m, parte, canvas, imagens, parte.tipo === 'nova', pequenas);
         aberta.partes.push({pagina: p.pn, col: parte.col, regiao: parte.regiao, ...d});
         parte.dono = aberta;
       }
@@ -714,10 +863,16 @@ const UPQRecorte = (() => {
     // Junta as partes de cada questão: texto em ordem, figuras numeradas, imagem empilhada.
     for (const q of questoes) {
       const nn = String(q.numero).padStart(2, '0');
-      q.textoPdf = q.partes.flatMap(pt => pt.texto).join('\n');
       let base = 0;
       q.figuras = q.partes.flatMap(pt => { const fs = pt.figuras.map(f => ({...f, linha: base + f.linha})); base += pt.texto.length; return fs; })
         .map((f, k) => ({nome: `Q${nn}_fig${k + 1}`, ...f}));
+      // fórmulas: #k de cada parte → nome da questão (Q35_f1, Q35_f2…), na ordem do texto
+      q.formulas = [];
+      q.textoPdf = q.partes.map(pt => pt.texto.join('\n').replace(/⟦FÓRMULA #(\d+)⟧/g, (m0, k) => {
+        const nome = `Q${nn}_f${q.formulas.length + 1}`;
+        q.formulas.push({nome, ...pt.formulas[+k]});
+        return `⟦FÓRMULA ${nome}⟧`;
+      })).join('\n');
       q.regioes = q.partes.map(pt => ({pagina: pt.pagina, ...pt.regiao}));
       q.imagem = await juntarRecortes(q.partes.map(pt => pt.recorte));
       delete q.partes;

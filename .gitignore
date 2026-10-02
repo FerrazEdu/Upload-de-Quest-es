@@ -4,3 +4,4 @@ saida/
 .env
 dist/semente/
 dist/ocr/
+dist/formula/

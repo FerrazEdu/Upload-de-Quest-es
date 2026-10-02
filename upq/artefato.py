@@ -1,5 +1,6 @@
-"""Monta o artefato do claude.ai (arquivo único): upq/web/importador.html + upq/web/recorte.js
-+ o prompt de upq/prompt.py e a base de tópicos, embutidos como dados.
+"""Monta o artefato do claude.ai: upq/web/importador.html + upq/web/recorte.js + upq/web/formulas.js
++ o prompt de upq/prompt.py e a base de tópicos, embutidos como dados. Publicados junto com a
+página: dist/ocr/ (scripts/preparar_ocr.sh) e dist/formula/ (scripts/preparar_formulas.py).
 
 O artefato faz o fluxo inteiro sem servidor e sem chave de API: recorta o PDF no navegador
 (pdf.js), transcreve com o Claude do próprio claude.ai (capacidade "sample", no plano de quem
@@ -23,6 +24,7 @@ CAPACIDADES = {"db": {}, "assets": {}, "sample": {}, "downloads": True, "user": 
 def montar(destino: Path = DESTINO) -> Path:
     pagina = (RAIZ / "web" / "importador.html").read_text(encoding="utf-8")
     recorte = (RAIZ / "web" / "recorte.js").read_text(encoding="utf-8")
+    formulas = (RAIZ / "web" / "formulas.js").read_text(encoding="utf-8")
     dados = {
         "sistema": prompt.SISTEMA_LOTE,
         "gabarito": prompt.GABARITO,
@@ -30,10 +32,11 @@ def montar(destino: Path = DESTINO) -> Path:
         "base": [[d, t, assuntos] for (d, t), assuntos in topicos.carregar().items()],
     }
     texto = json.dumps(dados, ensure_ascii=False).replace("</", "<\\/")
-    for marca in ("/*__RECORTE__*/", "/*__UPQ_DADOS__*/null"):
+    for marca in ("/*__RECORTE__*/", "/*__FORMULAS__*/", "/*__UPQ_DADOS__*/null"):
         if pagina.count(marca) != 1:
             raise ValueError(f"marcador {marca} ausente ou repetido em importador.html")
-    pagina = pagina.replace("/*__RECORTE__*/", recorte).replace("/*__UPQ_DADOS__*/null", texto)
+    pagina = (pagina.replace("/*__RECORTE__*/", recorte).replace("/*__FORMULAS__*/", formulas)
+              .replace("/*__UPQ_DADOS__*/null", texto))
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(pagina, encoding="utf-8")
     return destino

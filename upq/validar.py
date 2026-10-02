@@ -19,6 +19,9 @@ RE_MATH = re.compile(r"\$\$.+?\$\$|\$.+?\$", re.S)
 RE_FIGURA = re.compile(r'(?:!\[[^\]]*\]\(|src=")figura:([A-Za-z0-9_]+)')
 PROIBIDOS = [r"\ce{", r"\SI{", r"\usepackage", r"\begin{document}"]
 UNICODE_MAT = "²³¹⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉√≤≥≠±×÷∞∫∑πΔ≈"
+# aviso que a IA às vezes escreve no lugar de um trecho que não leu (fórmula em imagem, por exemplo)
+RE_NAO_LIDO = re.compile(r"n[ãa]o\s+(?:[ée]\s+)?leg[ií]ve|ileg[ií]ve|n[ãa]o\s+(?:foi\s+)?(?:capturad|extra[ií]d|identificad)"
+                         r"|n[ãa]o\s+dispon[ií]vel\s+no\s+texto|\((?:express[ãa]o|f[óo]rmula)[^)]*\)", re.I)
 
 
 def sem_math(texto: str) -> str:
@@ -152,6 +155,10 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
             erros.append(f"alternativas fora de ordem ou insuficientes: {letras}")
         if q.gabarito not in q.alternativas:
             erros.append(f"gabarito {q.gabarito} não está entre as alternativas")
+        for nome, texto in [("enunciado", q.enunciado), *((f"alternativa {k}", v) for k, v in q.alternativas.items())]:
+            achado = RE_NAO_LIDO.search(texto or "")
+            if achado:
+                erros.append(f"{nome}: trecho não transcrito (a IA escreveu «{achado.group(0)}»)")
         for letra, texto in q.alternativas.items():
             if not texto.strip():
                 erros.append(f"alternativa {letra} vazia")

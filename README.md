@@ -44,7 +44,13 @@ claude.ai (capacidades `db`, `assets`, `sample`, `downloads`, `user`). Tudo roda
 
 Quando a visualização não envia imagens ao Claude, tabelas coladas como imagem são lidas por OCR
 (Tesseract) no navegador, célula a célula. Os arquivos do OCR vão publicados junto com a página, em
-`ocr/`: `scripts/preparar_ocr.sh` monta `dist/ocr/`. Negrito: lido pela fonte e, nas fontes Type3
+`ocr/`: `scripts/preparar_ocr.sh` monta `dist/ocr/`. Fórmulas que o PDF traz como imagem ou desenho (sem texto: frações, raízes, alternativas inteiras)
+são achadas no recorte (tinta sem texto) e entram no texto como `⟦FÓRMULA NOME⟧`, com o recorte guardado;
+no modo só texto, o próprio navegador as lê em LaTeX (pix2tex/RapidLaTeXOCR em onnxruntime-web, lido
+em várias escalas, por maioria). Os arquivos vão em `formula/`: `python scripts/preparar_formulas.py`
+monta `dist/formula/`. A validação barra fórmula não lida, fórmula ausente da transcrição e aviso no
+lugar do texto ("expressão não legível").
+Negrito: lido pela fonte e, nas fontes Type3
 (sem nome), pela espessura do traço de cada palavra na página renderizada.
 
 Banco do artefato: `importacoes/<hash16>`, `partes/<hash16>-<k>` (até 20 questões cada) e

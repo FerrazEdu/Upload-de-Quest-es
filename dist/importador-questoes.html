@@ -462,6 +462,121 @@ const UPQRecorte = (() => {
     return r;
   }
 
+  // Tinta sem texto numa parte: fórmula que o PDF traz como imagem pequena (ou desenho), sem camada de
+  // texto — sem isto ela some da transcrição (alternativas "em branco") e do recorte. Duas fontes:
+  // as imagens pequenas da página (que não são o círculo da letra) e, para desenhos vetoriais, a tinta
+  // que sobra no mapa da página (células de 1 pt) tirando o texto e as figuras. Manchas vizinhas se
+  // juntam (fração, expoente, "·", parênteses). Ficam de fora traços (linhas, réguas, barras), pingos
+  // e o que contém texto (círculo da letra, caixas, tabelas). Devolve as caixas (pt), cada uma com o
+  // recorte só da sua tinta (PNG).
+  async function tintaSemTexto(canvas, regiao, linhas, figuras, cabecalho, pequenas = []) {
+    const E = ESCALA, X0 = Math.max(0, Math.floor(regiao.x0)), X1 = Math.min(Math.floor(canvas.width / E), Math.ceil(regiao.x1));
+    const Y0 = Math.max(0, Math.floor(cabecalho ? Math.max(regiao.y0, cabecalho.y1 + 2) : regiao.y0)), Y1 = Math.min(Math.floor(canvas.height / E), Math.ceil(regiao.y1));
+    const W = X1 - X0, H = Y1 - Y0;
+    if (W < 4 || H < 4) return [];
+    const px = canvas.getContext('2d').getImageData(X0 * E, Y0 * E, W * E, H * E).data, PW = W * E;
+    const trechos = linhas.flatMap(l => l.trechos?.length ? l.trechos : [{x0: l.x0, x1: l.x1, base: l.base, h: l.y1 - l.y0}]);
+    const caixaDe = t => ({x0: t.x0 - 0.8, x1: t.x1 + 0.8, y0: t.base - 1.02 * t.h - 0.5, y1: t.base + 0.32 * t.h});
+    const contemTexto = c => trechos.some(t => { const b = caixaDe(t); return b.x0 + 0.8 >= c.x0 - 1 && b.x1 - 0.8 <= c.x1 + 1 && t.base - 0.6 * t.h >= c.y0 - 1 && t.base <= c.y1 + 1; });
+    // imagens pequenas dentro da parte que não envolvem texto (o círculo da letra envolve a letra)
+    const naParte = pequenas.filter(r => { const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2; return cx > X0 && cx < X1 && cy > Y0 && cy < Y1; });
+    const imgs = naParte.filter(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4 && !contemTexto(r));
+    const apagar = [...trechos.map(caixaDe), ...figuras.map(f => ({x0: f.x0 - 2, x1: f.x1 + 2, y0: f.y0 - 2, y1: f.y1 + 2})),
+      ...naParte.filter(r => !imgs.includes(r)).map(r => ({x0: r.x0 - 1, x1: r.x1 + 1, y0: r.y0 - 1, y1: r.y1 + 1}))];
+    const rotulos = trechos.filter(t => t.t && t.t.trim().length <= 2).map(t => ({x0: t.x0 - 4, x1: t.x1 + 4, y0: t.base - t.h - 4, y1: t.base + 0.4 * t.h + 4}));
+    // linha de texto de cada mancha (a da letra da alternativa): manchas de linhas diferentes não se juntam
+    const linhaDe = c => { const y0 = Y0 + c.y0, y1 = Y0 + c.y1 + 1;
+      const k = linhas.findIndex(l => Math.min(l.y1, y1) - Math.max(l.y0, y0) >= 0.5 * (l.y1 - l.y0)); return k; };
+    const escuro = new Uint8Array(W * H), cel = new Uint8Array(W * H);
+    for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
+      let t = false;
+      for (let y = cy * E; y < cy * E + E && !t; y++) for (let x = cx * E; x < cx * E + E; x++) {
+        const j = (y * PW + x) * 4;
+        if (0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2] < 150) { t = true; break; }
+      }
+      if (!t) continue;
+      escuro[cy * W + cx] = 1;
+      const ptx = X0 + cx + 0.5, pty = Y0 + cy + 0.5;
+      if (!apagar.some(a => ptx >= a.x0 && ptx <= a.x1 && pty >= a.y0 && pty <= a.y1)
+          && !imgs.some(r => ptx >= r.x0 - 1 && ptx <= r.x1 + 1 && pty >= r.y0 - 1 && pty <= r.y1 + 1)) cel[cy * W + cx] = 1;
+    }
+    // componentes (8-vizinhança) da tinta que sobrou + uma mancha por imagem pequena
+    const rotulo = new Uint8Array(W * H), grupos = [];
+    for (let i = 0; i < W * H; i++) {
+      if (!cel[i] || rotulo[i]) continue;
+      const c = {x0: W, y0: H, x1: -1, y1: -1, celulas: [], imagem: false}, pilha = [i];
+      rotulo[i] = 1;
+      while (pilha.length) {
+        const k = pilha.pop(), x = k % W, y = (k - x) / W;
+        c.celulas.push(k); c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.y0 = Math.min(c.y0, y); c.y1 = Math.max(c.y1, y);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy, n = ny * W + nx;
+          if (nx >= 0 && ny >= 0 && nx < W && ny < H && cel[n] && !rotulo[n]) { rotulo[n] = 1; pilha.push(n); }
+        }
+      }
+      // traço comprido e fino (régua, sublinhado, borda, barra): não é fórmula sozinho
+      const w = c.x1 - c.x0 + 1, h = c.y1 - c.y0 + 1;
+      if ((h <= 2 && w > 40) || (w <= 2 && h > 40) || (w > 20 * h && w > 60)) continue;
+      // o que envolve texto (anel do círculo da letra, caixa, tabela) sai antes de juntar com vizinhos,
+      // e também os restos do círculo em volta da letra da alternativa
+      const cx0 = X0 + c.x0, cy0 = Y0 + c.y0, cx1 = X0 + c.x1 + 1, cy1 = Y0 + c.y1 + 1;
+      if (contemTexto({x0: cx0, y0: cy0, x1: cx1, y1: cy1})) continue;
+      if (rotulos.some(b => cx0 >= b.x0 && cx1 <= b.x1 && cy0 >= b.y0 && cy1 <= b.y1)) continue;
+      grupos.push(c);
+    }
+    for (const r of imgs) {
+      const c = {x0: Math.max(0, Math.floor(r.x0 - X0)), y0: Math.max(0, Math.floor(r.y0 - Y0)), x1: Math.min(W - 1, Math.ceil(r.x1 - X0)), y1: Math.min(H - 1, Math.ceil(r.y1 - Y0)), celulas: [], imagem: true};
+      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (escuro[y * W + x]) c.celulas.push(y * W + x);
+      if (c.celulas.length) grupos.push(c);
+    }
+    // junta manchas próximas: na mesma faixa (vão ≤ 6 pt) ou empilhadas (vão ≤ 5 pt: numerador, traço,
+    // denominador), nunca de linhas de texto diferentes (alternativas vizinhas)
+    const perto = (a, b) => {
+      const la = linhaDe(a), lb = linhaDe(b);
+      if (la >= 0 && lb >= 0 && la !== lb) return false;
+      const vx = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), vy = Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1);
+      const sob = -vy / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0) + 1);
+      return (vy <= 0 && vx <= 6) || (sob >= 0.4 && vx <= 12) || (vx <= 0 && vy <= 5) || (vx <= 1.5 && vy <= 1.5);
+    };
+    for (let mudou = true; mudou;) {
+      mudou = false;
+      for (let a = 0; a < grupos.length && !mudou; a++) for (let b = a + 1; b < grupos.length; b++) {
+        if (!perto(grupos[a], grupos[b])) continue;
+        const A = grupos[a], B = grupos[b];
+        grupos[a] = {x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1),
+          celulas: A.celulas.concat(B.celulas), imagem: A.imagem || B.imagem};
+        grupos.splice(b, 1); mudou = true; break;
+      }
+    }
+    const saida = [];
+    for (const g of grupos) {
+      const w = g.x1 - g.x0 + 1, h = g.y1 - g.y0 + 1;
+      if (w < 3 || h < 3 || w * h < 30 || g.celulas.length < 12) continue;
+      if (w > 20 * h || h > 20 * w) continue;
+      const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
+      if (!g.imagem && contemTexto(caixa)) continue;
+      if (h > 60 && w > 30) continue;   // desenho grande sem texto: não é fórmula
+      // recorte só com a tinta do grupo (vizinhos apagados), com margem branca
+      const M = 4, c = document.createElement('canvas');
+      c.width = (w + 2 * M) * E; c.height = (h + 2 * M) * E;
+      const ctx = c.getContext('2d'), im = ctx.createImageData(c.width, c.height);
+      im.data.fill(255);
+      const meu = new Uint8Array(W * H);
+      for (const k of g.celulas) { const x = k % W, y = (k - x) / W; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < W && ny < H) meu[ny * W + nx] = 1; } }
+      for (let y = 0; y < h + 2 * M; y++) for (let x = 0; x < w + 2 * M; x++) {
+        const cx = g.x0 - M + x, cy = g.y0 - M + y;
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H || !meu[cy * W + cx]) continue;
+        for (let yy = 0; yy < E; yy++) for (let xx = 0; xx < E; xx++) {
+          const o = (((y * E + yy) * c.width) + x * E + xx) * 4, j = (((cy * E + yy) * PW) + cx * E + xx) * 4;
+          im.data[o] = px[j]; im.data[o + 1] = px[j + 1]; im.data[o + 2] = px[j + 2];
+        }
+      }
+      ctx.putImageData(im, 0, 0);
+      saida.push({...caixa, blob: await new Promise(res => c.toBlob(res, 'image/png'))});
+    }
+    return saida.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+  }
+
   async function renderizar(page) {
     const vp = page.getViewport({scale: ESCALA});
     const canvas = document.createElement('canvas');
@@ -841,26 +956,57 @@ const UPQRecorte = (() => {
       return partes;
     }
 
-    // Texto (com **negrito** e [centralizado]) e figuras de uma parte.
-    async function dadosDaParte(p, m, parte, canvas, imagens, comCabecalho) {
+    // Texto (com **negrito** e [centralizado]), fórmulas sem texto e figuras de uma parte.
+    async function dadosDaParte(p, m, parte, canvas, imagens, comCabecalho, pequenas = []) {
       const {regiao, col} = parte;
       const daParte = m.linhas.filter(l => (m.umaColuna || l.col === col) && (l.y0 + l.y1) / 2 > regiao.y0 && (l.y0 + l.y1) / 2 < regiao.y1)
         .sort((a, b) => a.base - b.base);
       const corpo = comCabecalho ? daParte.slice(1) : daParte;
       const esq = corpo.length ? Math.min(...corpo.map(l => l.x0)) : regiao.x0, dir = corpo.length ? Math.max(...corpo.map(l => l.x1)) : regiao.x1;
       const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
-      const texto = daParte.map((l, i) => {
-        if (comCabecalho && i === 0) return l.texto;
-        const centralizada = l.texto.trim().length >= 3 && l.x1 - l.x0 < 0.8 * largura && l.x0 - esq > 0.06 * largura
-          && (Math.abs((l.x0 + l.x1) / 2 - centro) < 0.04 * largura || Math.abs((l.x0 + l.x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-        return (centralizada ? '[centralizado] ' : '') + marcadoDe(l);
-      });
+      const centralizado = (x0, x1, n) => n >= 3 && x1 - x0 < 0.8 * largura && x0 - esq > 0.06 * largura
+        && (Math.abs((x0 + x1) / 2 - centro) < 0.04 * largura || Math.abs((x0 + x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
       const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
       ordemDeLeitura(dentro);
       // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
       const tabelas = new Set();
       const aparadas = dentro.map(f => aparar(f, m.linhas)).map((f, k) => { const g = gradeDaTabela(canvas, f); if (g) { tabelas.add(k); return g; } return f; });
+      // Fórmula sem texto (imagem pequena ou desenho): entra no texto como ⟦FÓRMULA #k⟧, no ponto em que
+      // aparece (na linha da letra da alternativa, ou numa linha própria), e o recorte vai junto.
+      const formulas = await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, aparadas, comCabecalho ? daParte[0] : null, pequenas);
+      const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
+      formulas.forEach((f, k) => {
+        f.k = k;
+        const alvo = entradas.filter(e => e.l && !(comCabecalho && e.i === 0)).map(e => ({e, sob: Math.min(e.l.y1, f.y1) - Math.max(e.l.y0, f.y0)}))
+          .filter(x => x.sob >= 0.5 * (x.e.l.y1 - x.e.l.y0) || (x.sob > 0 && x.e.y > f.y0 && x.e.y < f.y1)).sort((a, b) => b.sob - a.sob)[0];
+        if (alvo) alvo.e.formulas.push(f);
+        else entradas.push({y: (f.y0 + f.y1) / 2, l: null, formulas: [f]});
+      });
+      entradas.sort((a, b) => a.y - b.y);
+      const marca = f => `⟦FÓRMULA #${f.k}⟧`;
+      const texto = entradas.map(e => {
+        const {l} = e;
+        if (!l) {
+          const f = e.formulas[0];
+          return (centralizado(f.x0, f.x1, 3) ? '[centralizado] ' : '') + marca(f);
+        }
+        if (comCabecalho && e.i === 0) return l.texto;
+        const prefixo = centralizado(l.x0, l.x1, l.texto.trim().length) ? '[centralizado] ' : '';
+        if (!e.formulas.length) return prefixo + marcadoDe(l);
+        // fórmulas na linha: na posição x entre os trechos de texto
+        const itens = [...(l.trechos || []).map(t => ({x: (t.x0 + t.x1) / 2, t})), ...e.formulas.map(f => ({x: f.x0, f}))].sort((a, b) => a.x - b.x);
+        const pedacos = [];
+        let grupo = [];
+        for (const it of itens) {
+          if (it.t) { grupo.push(it.t); continue; }
+          if (grupo.length) pedacos.push(marcadoDe({trechos: grupo}).trim());
+          grupo = []; pedacos.push(marca(it.f));
+        }
+        if (grupo.length) pedacos.push(marcadoDe({trechos: grupo}).trim());
+        if (!l.trechos) pedacos.unshift(marcadoDe(l));
+        return prefixo + pedacos.filter(Boolean).join(' ');
+      });
       // Centralização por faixa: figuras lado a lado contam como um grupo (o par é que está no centro).
       const noCentro = (a, b) => b - a >= 0.85 * largura || (
         Math.abs((a + b) / 2 - centro) < 0.05 * largura || Math.abs((a + b) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.05 * largura);
@@ -874,11 +1020,13 @@ const UPQRecorte = (() => {
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++)
         figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k), tabela: tabelas.has(k),
-          linha: daParte.filter(l => (l.y0 + l.y1) / 2 < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
-      // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna)
-      const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0)], ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1)];
+          linha: entradas.filter(e => e.y < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
+      // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna); fórmulas contam
+      const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0), ...formulas.map(f => f.y0)];
+      const ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1), ...formulas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
-      return {texto, figuras, recorte: recortarCanvas(canvas, util)};
+      return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob})),
+              recorte: recortarCanvas(canvas, util)};
     }
 
     const questoes = [];
@@ -894,8 +1042,9 @@ const UPQRecorte = (() => {
       progresso({etapa: 'recortando', pagina: p.pn, total: doc.numPages});
       const canvas = await renderizar(p.page);
       negritoPorPalavra(canvas, p.uma.linhas, p.duas.linhas);
-      const imagens = (await imagensDaPagina(p.page, p.vp)).filter(r =>
-        r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
+      const todas = await imagensDaPagina(p.page, p.vp);
+      const imagens = todas.filter(r => r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
+      const pequenas = todas.filter(r => !(r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN) && r.y0 > MARGEM_TOPO);
       // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
       // continuação segue o modelo da anterior
       const fins = p.uma.cabecalhos.map(c => fimDaBarra(canvas, c)).filter(x => x !== null);
@@ -910,7 +1059,7 @@ const UPQRecorte = (() => {
           aberta = {numero: parte.numero, pagina: p.pn, coluna: parte.col + 1, regiao: parte.regiao, partes: [], foraDoRecorte: []};
           questoes.push(aberta);
         } else if (!aberta) continue;   // texto antes da 1ª questão da lista (capa, instruções)
-        const d = await dadosDaParte(p, m, parte, canvas, imagens, parte.tipo === 'nova');
+        const d = await dadosDaParte(p, m, parte, canvas, imagens, parte.tipo === 'nova', pequenas);
         aberta.partes.push({pagina: p.pn, col: parte.col, regiao: parte.regiao, ...d});
         parte.dono = aberta;
       }
@@ -927,10 +1076,16 @@ const UPQRecorte = (() => {
     // Junta as partes de cada questão: texto em ordem, figuras numeradas, imagem empilhada.
     for (const q of questoes) {
       const nn = String(q.numero).padStart(2, '0');
-      q.textoPdf = q.partes.flatMap(pt => pt.texto).join('\n');
       let base = 0;
       q.figuras = q.partes.flatMap(pt => { const fs = pt.figuras.map(f => ({...f, linha: base + f.linha})); base += pt.texto.length; return fs; })
         .map((f, k) => ({nome: `Q${nn}_fig${k + 1}`, ...f}));
+      // fórmulas: #k de cada parte → nome da questão (Q35_f1, Q35_f2…), na ordem do texto
+      q.formulas = [];
+      q.textoPdf = q.partes.map(pt => pt.texto.join('\n').replace(/⟦FÓRMULA #(\d+)⟧/g, (m0, k) => {
+        const nome = `Q${nn}_f${q.formulas.length + 1}`;
+        q.formulas.push({nome, ...pt.formulas[+k]});
+        return `⟦FÓRMULA ${nome}⟧`;
+      })).join('\n');
       q.regioes = q.partes.map(pt => ({pagina: pt.pagina, ...pt.regiao}));
       q.imagem = await juntarRecortes(q.partes.map(pt => pt.recorte));
       delete q.partes;
@@ -995,9 +1150,232 @@ const UPQRecorte = (() => {
 };
 })();
 
+/* Leitura de fórmula em imagem → LaTeX no navegador (pix2tex / LaTeX-OCR, versão ONNX do RapidLaTeXOCR).
+ * Usada quando o Claude desta visualização não recebe imagens: as fórmulas que o PDF traz como imagem
+ * (sem texto) seriam perdidas. Arquivos publicados com a página, em formula/ (scripts/preparar_formulas.sh):
+ *   ort.bundle.js        onnxruntime-web (só wasm, sem threads)
+ *   ort.wasm.txt…        runtime wasm, em base64 e em pedaços (o artefato só serve tipos web comuns)
+ *   resizer / encoder / decoder .txt…   modelos (pesos em float16 + Cast; decoder em int8), base64
+ *   tokenizer.json       vocabulário
+ *
+ *   const leitor = await UPQFormulas.carregar(urlBase, progresso)
+ *   const {latex, confianca} = await leitor.ler(canvasOuBlob)
+ */
+const UPQFormulas = (() => {
+  const MAX_W = 672, MAX_H = 192, MIN_W = 32, MIN_H = 32, BOS = 1, EOS = 2, MAX_TOKENS = 400;
+  const MEDIA = 0.7931 * 255, DESVIO = 0.1738 * 255;
+  let carregando = null;
+
+  async function baixarBase64(url, partes) {
+    const pedacos = [];
+    for (let k = 1; k <= partes; k++) {
+      const r = await fetch(`${url}.${k}.txt`);
+      if (!r.ok) throw new Error(`não carregou ${url}.${k}.txt (${r.status})`);
+      pedacos.push(await r.text());
+    }
+    const bin = atob(pedacos.join('').replace(/\s+/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function carregar(base, progresso = () => {}) {
+    if (carregando) return carregando;
+    carregando = (async () => {
+      const man = await (await fetch(base + 'manifesto.json')).json();
+      progresso('runtime');
+      // módulo ES do onnxruntime; se a página não aceitar import() do arquivo, tenta por blob
+      let ort;
+      try { ort = await import(base + 'ort.bundle.js'); }
+      catch (e) {
+        const codigo = await (await fetch(base + 'ort.bundle.js')).text();
+        ort = await import(URL.createObjectURL(new Blob([codigo], {type: 'text/javascript'})));
+      }
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.proxy = false;
+      ort.env.wasm.wasmBinary = (await baixarBase64(base + 'ort.wasm', man['ort.wasm'])).buffer;
+      const sessao = async nome => {
+        progresso(nome);
+        const bytes = await baixarBase64(base + nome, man[nome]);
+        return ort.InferenceSession.create(bytes, {executionProviders: ['wasm'], graphOptimizationLevel: 'all'});
+      };
+      const resizer = await sessao('resizer'), encoder = await sessao('encoder'), decoder = await sessao('decoder');
+      const tok = await (await fetch(base + 'tokenizer.json')).json();
+      const vocab = [];
+      for (const [t, id] of Object.entries(tok.model.vocab)) vocab[id] = t;
+      for (const t of tok.added_tokens || []) vocab[t.id] = t.content;
+      return {ler: img => ler({ort, resizer, encoder, decoder, vocab}, img)};
+    })();
+    carregando.catch(() => { carregando = null; });
+    return carregando;
+  }
+
+  // ---- pré-processamento (igual ao do pix2tex: cinza, recorte da tinta, múltiplos de 32, escala)
+  const novaTela = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h); return c; };
+  function cinzaDe(c) {
+    const d = c.getContext('2d', {willReadFrequently: true}).getImageData(0, 0, c.width, c.height).data, g = new Float32Array(c.width * c.height);
+    for (let i = 0, k = 0; k < g.length; i += 4, k++) g[k] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;   // PIL "L"
+    return g;
+  }
+  function deCinza(g, w, h) {
+    const c = novaTela(w, h), ctx = c.getContext('2d'), im = ctx.createImageData(w, h);
+    for (let k = 0; k < g.length; k++) { const v = Math.max(0, Math.min(255, Math.floor(g[k]))); im.data[4 * k] = im.data[4 * k + 1] = im.data[4 * k + 2] = v; im.data[4 * k + 3] = 255; }
+    ctx.putImageData(im, 0, 0);
+    return c;
+  }
+  // tinta escura sobre fundo claro, recortada à caixa da tinta e completada com branco até múltiplos de 32
+  function pad(c) {
+    const W = c.width, H = c.height;
+    let g = cinzaDe(c), mn = 255, mx = 0;
+    for (const v of g) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const amp = mx - mn || 1;
+    let soma = 0;
+    for (let k = 0; k < g.length; k++) { g[k] = (g[k] - mn) / amp * 255; soma += g[k]; }
+    const claro = soma / g.length > 128;
+    if (!claro) for (let k = 0; k < g.length; k++) g[k] = 255 - g[k];
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y * W + x] < 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) { x0 = 0; y0 = 0; x1 = W - 1; y1 = H - 1; }
+    const w = x1 - x0 + 1, h = y1 - y0 + 1, PW = Math.ceil(w / 32) * 32, PH = Math.ceil(h / 32) * 32;
+    const out = new Float32Array(PW * PH).fill(255);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * PW + x] = Math.floor(g[(y0 + y) * W + x0 + x]);
+    return deCinza(out, PW, PH);
+  }
+  function redimensionar(c, w, h) {
+    const o = novaTela(w, h), ctx = o.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(c, 0, 0, c.width, c.height, 0, 0, w, h);
+    return o;
+  }
+  function minmax(c) {
+    const r = Math.max(c.width / MAX_W, c.height / MAX_H);
+    if (r > 1) c = redimensionar(c, Math.max(1, Math.floor(c.width / r)), Math.max(1, Math.floor(c.height / r)));
+    if (c.width < MIN_W || c.height < MIN_H) {
+      const o = novaTela(Math.max(c.width, MIN_W), Math.max(c.height, MIN_H)), ctx = o.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, o.width, o.height); ctx.drawImage(c, 0, 0); c = o;
+    }
+    return c;
+  }
+  function tensor(ort, c) {
+    const g = cinzaDe(c), t = new Float32Array(g.length);
+    for (let k = 0; k < g.length; k++) t[k] = (Math.round(g[k]) - MEDIA) / DESVIO;
+    return new ort.Tensor('float32', t, [1, 1, c.height, c.width]);
+  }
+  const argmax = (a, ini = 0, fim = a.length) => { let k = ini; for (let i = ini; i < fim; i++) if (a[i] > a[k]) k = i; return k - ini; };
+
+  async function paraCanvas(img) {
+    if (img instanceof HTMLCanvasElement) return img;
+    const bmp = await createImageBitmap(img);
+    const c = novaTela(bmp.width, bmp.height), ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0);
+    return c;
+  }
+
+  // Lê em três escalas e fica com a leitura em que a maioria concorda (fórmula pequena às vezes troca
+  // um símbolo numa escala só); sem maioria, lê em mais duas. Desempate: leitura sem símbolo raro
+  // (\aleph no lugar de 8…), depois a de maior confiança. `votos`/`de` dizem quanto concordaram.
+  const ESCALAS = [1, 0.75, 1.5], EXTRAS = [0.6, 1.25];
+  const RARO = /\\(aleph|beth|gimel|daleth|mho|wp|Re|Im|mathbf|mathfrak|propto|natural|flat|sharp|clubsuit|spadesuit|heartsuit|diamondsuit|bigstar|maltese|S|P)\b/;
+  const chave = t => t.replace(/\\[,;:! ]|\s|[{}]/g, '').replace(/\\left|\\right/g, '');
+  async function ler(m, img) {
+    const base = await paraCanvas(img), leituras = [];
+    const em = e => e === 1 ? base : redimensionar(base, Math.max(8, Math.round(base.width * e)), Math.max(8, Math.round(base.height * e)));
+    const votar = () => {
+      const grupos = new Map();
+      for (const l of leituras) { const k = chave(l.latex); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); }
+      return [...grupos.values()].sort((a, b) => b.length - a.length || RARO.test(a[0].latex) - RARO.test(b[0].latex)
+        || Math.max(...b.map(x => x.media)) - Math.max(...a.map(x => x.media)))[0];
+    };
+    for (const e of ESCALAS) leituras.push(await lerUma(m, em(e)));
+    let melhor = votar();
+    if (melhor.length < 2) { for (const e of EXTRAS) leituras.push(await lerUma(m, em(e))); melhor = votar(); }
+    const escolhida = [...melhor].sort((a, b) => b.media - a.media)[0];
+    return {...escolhida, votos: melhor.length, de: leituras.length, leituras: leituras.map(l => l.latex)};
+  }
+
+  async function lerUma(m, img) {
+    const {ort} = m;
+    const entrada = minmax(pad(img));
+    // o "resizer" escolhe a largura em que a fórmula fica na escala do treino
+    let r = 1, w = entrada.width, h = entrada.height, final = null;
+    for (let i = 0; i < 10; i++) {
+      h = Math.floor(h * r);
+      const p = pad(minmax(redimensionar(entrada, w, h)));
+      final = tensor(ort, p);
+      const out = (await m.resizer.run({[m.resizer.inputNames[0]]: final}))[m.resizer.outputNames[0]];
+      w = (argmax(out.data) + 1) * 32;
+      if (w === p.width) break;
+      r = w / p.width;
+    }
+    const contexto = (await m.encoder.run({[m.encoder.inputNames[0]]: final}))[m.encoder.outputNames[0]];
+    const ids = [BOS];
+    let minimo = 1, somaLog = 0;
+    for (let passo = 0; passo < MAX_TOKENS; passo++) {
+      const x = new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
+      const mascara = new ort.Tensor('bool', new Uint8Array(ids.length).fill(1), [1, ids.length]);
+      const saida = (await m.decoder.run({x, mask: mascara, context: contexto}))[m.decoder.outputNames[0]];
+      const V = saida.dims[2], base = (ids.length - 1) * V, d = saida.data;
+      const k = argmax(d, base, base + V);
+      let mx = -Infinity, soma = 0;
+      for (let i = base; i < base + V; i++) if (d[i] > mx) mx = d[i];
+      for (let i = base; i < base + V; i++) soma += Math.exp(d[i] - mx);
+      const p = 1 / soma;   // probabilidade do token escolhido
+      minimo = Math.min(minimo, p); somaLog += Math.log(p);
+      ids.push(k);
+      if (k === EOS) break;
+    }
+    const tokens = ids.slice(1).filter(i => i > 2).map(i => m.vocab[i] ?? '');
+    const latex = enxugar(posProcessar(tokens.join('').replace(/Ġ/g, ' ').trim())).replace(/(\\[,;:!]|\\ )+$/, '').trim();
+    return {latex, confianca: minimo, media: Math.exp(somaLog / Math.max(1, ids.length - 1))};
+  }
+
+  // mesmo pós-processamento do pix2tex: tira espaços que não separam comandos
+  function posProcessar(s) {
+    const reTexto = /(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})/g;
+    s = s.replace(reTexto, m0 => m0.replace(/ /g, ''));
+    const letra = '[a-zA-Z]', naoLetra = '[\\W_^\\d]';
+    for (;;) {
+      let n = s.replace(new RegExp(`(?!\\\\ )(${naoLetra})\\s+?(${naoLetra})`, 'g'), '$1$2');
+      n = n.replace(new RegExp(`(?!\\\\ )(${naoLetra})\\s+?(${letra})`, 'g'), '$1$2');
+      n = n.replace(new RegExp(`(${letra})\\s+?(${naoLetra})`, 'g'), '$1$2');
+      if (n === s) break;
+      s = n;
+    }
+    return s;
+  }
+
+  // Chaves redundantes em volta de um comando inteiro ("k{\\frac{q}{a}}" → "k\\frac{q}{a}"); ficam as que
+  // são argumento (depois de comando que recebe argumento, de "}", "^" ou "_").
+  function enxugar(s) {
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] !== '{' || s[i + 1] !== '\\') continue;
+      const antes = s.slice(0, i);
+      if (/[\^_}]$|\\(frac|dfrac|tfrac|sqrt|text|mathrm|mathbf|mathit|mathcal|boldsymbol|vec|hat|bar|dot|ddot|tilde|overline|underline|overrightarrow|operatorname|binom)\s*$/.test(antes)) continue;
+      let prof = 0, j = i;
+      for (; j < s.length; j++) { if (s[j] === '{') prof++; else if (s[j] === '}' && --prof === 0) break; }
+      if (j >= s.length) break;
+      const dentro = s.slice(i + 1, j), cmd = dentro.match(/^\\[a-zA-Z]+/);
+      if (!cmd) continue;
+      // o miolo tem de ser só o comando com seus argumentos {…}{…}
+      let k = cmd[0].length, ok = true;
+      while (k < dentro.length) {
+        if (dentro[k] !== '{') { ok = false; break; }
+        let pr = 0, t = k;
+        for (; t < dentro.length; t++) { if (dentro[t] === '{') pr++; else if (dentro[t] === '}' && --pr === 0) break; }
+        k = t + 1;
+      }
+      if (ok) { s = antes + dentro + s.slice(j + 1); i--; }
+    }
+    return s;
+  }
+
+  return {carregar, posProcessar, enxugar};
+})();
+
 </script>
 <script>
-const DADOS = {"sistema": "Você transcreve questões de listas de exercícios em PDF para o banco de questões\nde uma plataforma de ensino pré-vestibular. Cada mensagem traz VÁRIAS questões: uma imagem\nrecortada do PDF por questão (as figuras aparecem dentro dela), os NOMES das figuras de cada\nquestão, o texto extraído do PDF e o gabarito oficial. Devolva só o JSON pedido, com uma\nentrada por questão, na ordem das imagens.\n\nFONTE DA VERDADE\n- A IMAGEM é a fonte da verdade. O \"texto extraído do PDF\" ajuda com a ordem das palavras\n  e nomes próprios, mas tem erros conhecidos: símbolos trocados (π aparece como \"À\",\n  ≈ como \"H\"), expoentes e índices achatados (\"10 8\" ou \"108\" = 10⁸, \"N1\" = N₁), palavras\n  partidas e trechos repetidos. Sempre confira com a imagem.\n- Transcrição literal: não resuma, não parafraseie, não corrija nem atualize o conteúdo.\n  Preserve palavras, acentos, pontuação, números e unidades. O texto-base inteiro entra no\n  enunciado (contexto, textos de apoio, afirmativas, referências e o comando).\n- Reconstrua a questão inteira: nenhum trecho de uma alternativa pode vazar para outra.\n  Questão de A a D tem 4 alternativas — nunca invente a E.\n\nFORMATAÇÃO DO TEXTO (enunciado e alternativas)\nO texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (MathJax).\n\n1. Fórmulas, números com unidade, potências, índices, símbolos e variáveis vão em LaTeX:\n   - no meio da frase: $...$ · destacada/centralizada no PDF: $$...$$ em parágrafo próprio.\n   - vírgula decimal: $3{,}5$ (as chaves evitam espaço depois da vírgula).\n   - milhar com ponto: $3.600$ · notação científica: $4{,}0 \\times 10^{8}\\ \\text{m}$.\n   - unidades em \\text{}: $35\\ \\text{m/s}$, $9{,}8\\ \\text{m/s}^2$, $60\\ \\text{cm}$, $3000\\ \\text{rpm}$.\n   - aproximação e constantes: $\\pi \\approx 3$, $g = 10\\ \\text{m/s}^2$.\n   - vetores: $\\vec{F}$, $m\\vec{g}$ · índices: $N_1$, $x_2$, $v_{\\text{máx}}$ · graus: $45^\\circ$.\n   - frações: $\\frac{a}{b}$ · raízes: $\\sqrt{2}$ · trigonometria: $\\sin 45^\\circ$, $\\cos\\theta$.\n   - química: $\\mathrm{H_2O}$, $\\mathrm{Ca^{2+}}$, setas \\rightarrow e \\rightleftharpoons.\n   - comandos permitidos: os do MathJax padrão. Nada de \\ce, \\SI, \\usepackage ou pacotes.\n   - Valores numéricos isolados em alternativas também vão em LaTeX: $110$, $\\frac{\\pi}{2}$.\n   - Ano, data, número de questão e quantidades contadas no texto corrido ficam como texto\n     (\"em 2023\", \"Questão 05\", \"quatro posições (1, 2, 3 e 4)\").\n2. Cifrão de dinheiro sempre escapado: R\\$ 25,00. Todo $ sem barra abre ou fecha fórmula.\n3. NEGRITO É OBRIGATÓRIO: todo trecho em negrito no PDF vai em **negrito** (títulos, cabeçalhos\n   de tabela, \"TEXTO I\", palavras destacadas como **CORRETA**, **INCORRETA**, **EXCETO**).\n   *Itálico* como no PDF (títulos de obras, termos estrangeiros). No texto extraído, os\n   trechos em fonte negrito já vêm entre ** — todos eles têm de sair em negrito.\n4. Parágrafos separados por uma linha em branco. Afirmativas I, II, III cada uma em seu\n   parágrafo, começando por \"I. \", \"II. \". Listas de dados (π = 3; g = 10 m/s²) uma por linha.\n5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.\n6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)\n   usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo\n   (o que a figura mostra, em até 15 palavras). Créditos da figura (\"Fonte: UNICAMP, 2023.\")\n   são transcritos logo abaixo dela, como referência (regra 8) — exceto quando já aparecem\n   DENTRO da imagem recortada da figura (confira na imagem da questão): aí não repita. Não\n   descreva a figura no enunciado nem invente dados que só ela mostra.\n   ALTERNATIVAS EM IMAGEM: quando as alternativas são figuras (gráficos, esquemas, fórmulas\n   estruturais), o texto de cada alternativa é a sua figura: ![Alternativa A: descrição\n   curta](figura:NOME), com texto antes ou depois se houver. As figuras estão nomeadas na ordem\n   de leitura (de cima para baixo; lado a lado, da esquerda para a direita), então as últimas\n   figuras da questão costumam ser as alternativas, na ordem A, B, C... Se uma única figura\n   reúne todas as alternativas, coloque-a no fim do enunciado, transcreva em cada alternativa o\n   que estiver legível dela e marque revisar = true.\n7. Não transcreva: número da questão, cabeçalho com banca/ano, letras das alternativas,\n   cabeçalho/rodapé da página, marcas d'água.\n8. Referências (créditos de figura e fontes de texto: \"Fonte: ...\", \"Disponível em: ...\n   Acesso em: ...\", \"Adaptado de ...\") ficam num parágrafo próprio, no ponto onde aparecem,\n   com o texto literal (parênteses inclusive, URL como texto simples), neste formato exato:\n   <p style=\"text-align: right;\"><sub>Fonte: UNICAMP, 2014.<\/sub><\/p>\n9. ALINHAMENTO COMO NO PDF: tudo o que está centralizado no PDF (títulos, tabelas, figuras,\n   fórmulas e dados destacados, \"TEXTO I\") fica centralizado. Envolva cada trecho centralizado\n   num bloco próprio, com as marcas sozinhas na linha:\n   ::: centro\n   **Título centralizado**\n   :::\n   Dentro do bloco vale o Markdown normal (tabela, ![...](figura:NOME), $LaTeX$, **negrito**).\n   No texto extraído, as linhas centralizadas vêm com \"[centralizado]\" (não copie a marca).\n   Texto justificado ou à esquerda fica fora do bloco. Referências seguem a regra 8 (à direita).\n10. COMPLETUDE E NADA A MAIS: nenhuma coluna ou linha de tabela, figura ou trecho do PDF pode\n   faltar, e nenhum trecho pode aparecer mais vezes do que no PDF. Use TODAS as figuras\n   informadas. No texto extraído, cada linha de tabela vem numa linha só (o cabeçalho em negrito,\n   ex.: \"**Nutriente I II III**\"): ela entra SÓ dentro da tabela, nunca também como título ou\n   parágrafo. O título de uma tabela é a linha acima dela (ex.: \"Tabela 1: ...\"). Se algo não\n   estiver legível, marque revisar = true.\n\nCABEÇALHO\n- instituicao e ano vêm da barra vermelha \"Questão NN ... BANCA ANO\". Ex.: \"UFMG 2025\" →\n  instituicao \"UFMG\", ano 2025. \"CESMAC MEDICINA 2022/1\" → instituicao \"CESMAC MEDICINA\",\n  ano 2022. \"(ADAPTADO)\" → adaptada true e não entra na instituição. Sem banca → null; sem\n  ano → null. Não confunda com datas citadas no enunciado.\n\nDISCIPLINA, TÓPICO E ASSUNTOS\n- Somente pares que existem no ANEXO — BASE DE TÓPICOS, copiados com a grafia exata.\n  O campo topico recebe o nome do TÓPICO, nunca o do assunto.\n- Em lista de exercícios a mensagem informa a disciplina e o tópico da lista: use-os.\n- assuntos: 1 ou 2 assuntos do tópico escolhido (os que aparecem depois de \"Tópico:\" no\n  anexo), com a grafia exata, pelo conteúdo que a questão cobra. Tópico sem assuntos listados\n  → assuntos = [nome do tópico].\n\nDIFICULDADE (inteiro de 1 a 5, obrigatório)\n1 = Muito Fácil · 2 = Fácil · 3 = Média · 4 = Difícil · 5 = Muito Difícil\n- Referência: aluno de pré-vestibular/ENEM que já estudou o tópico.\n- Pese: quantos conceitos ou etapas a questão encadeia; carga de interpretação; uso de\n  gráfico, tabela ou figura; volume de cálculo; proximidade entre as alternativas; conteúdo\n  além do tópico.\n- Guia: aplicação direta de um conceito ou fórmula → 2 · mais de uma etapa ou interpretação\n  de dados → 3 · integração de conceitos, várias etapas ou interpretação exigente → 4.\n  1 e 5 são raros; na dúvida entre um extremo e o vizinho, fique no vizinho.\n- A etapa da lista é o ponto de partida: Fixação → 1 a 2 (predomina 2) · Treinamento → 2 a 3\n  · Aprofundamento → 3 a 4 · Desafios → 4 a 5 (predomina 4). Fora da faixa só quando a\n  questão claramente não corresponde à etapa; nesse caso explique em observacoes.\n- A banca não define a dificuldade: classifique a questão.\n\nGABARITO\n- gabarito = a letra do gabarito oficial informada na mensagem. Nunca troque e não resolva\n  a questão: este trabalho é só de transcrição e classificação.\n\nREVISAR\nrevisar = true sempre que houver: trecho ilegível ou cortado no recorte, figura com\ninformação essencial que você não conseguiu ler, gabarito oficial ausente, dificuldade\nfora da faixa da etapa, ou qualquer dúvida de transcrição. Explique em observacoes\n(curto e objetivo). Caso contrário revisar = false e observacoes = null.\n\nANEXO — BASE DE TÓPICOS DA PLATAFORMA\nFormato: Tópico: assuntos que ele abrange. Os assuntos servem só para localizar o tópico.\n\nDISCIPLINA: História\n- Idade Antiga: Egito; Grécia; Primeiras civilizações; Roma\n- Idade Média: Cruzadas; Feudalismo; Império Bizantino\n- Idade Moderna: Estados Nacionais; Expansão marítima; História da América; Mercantilismo; Reforma e contrarreforma; Renascimento; Revolução industrial\n- Idade Contemporânea: Entreguerras; Guerra Fria; Imperialismo; Nazifascismo; Primaveira Árabe; Primeira Guerra Mundial; Revolução Francesa; Segunda Guerra Mundial\n- Brasil Colônia: Catequização; Ciclos econõmicos; Escravidão; Independência; Revoltas brasileiras\n- Brasil Império: Abolição da escravidão; Guerra do Paraguai; Período Regencial; Primeiro Reinado; Revoltas brasileiras; Segundo Reinado\n- Brasil República: Constituição Federal; Direitos Sociais; Ditadura militar; Era Vargas; Governo JK; Proclamação da República; Redemocratização; República Oligárquica; República Velha; Revoltas brasileiras\n\nDISCIPLINA: Geografia\n- Geografia Econômica: Blocos econômicos; Comércio; Conceitos geográficos; Desigualdade socioeconômica; DIT; Doutrinas econômicas; Fontes de energia; Globalização; Modais; Modelos de produção; Neoliberalismo; Setores da economia; Sistemas econômicos\n- Geografia Urbana e Demografia: Densidade demográfica; Fenômenos urbanos e problemas sociais; Indicadores demográficos; Migrações; Pirâmides etárias; Teorias demográficas; Transição demográfica\n- Geografia Agrária: Conflitos no campo; Estrutura fundiária; Modelos de produção agrícola; Reforma agrária; Revolução verde\n- Geopolítica: Blocos econômicos; Colonialismo e neocolonialismo; Conflitos geopolíticos; Imperialismo; Ordens mundiais; Sustentabilidade\n- Geografia Física: Cartografia; Ciclo das rochas; Eras geológicas; Geologia; Relevos; Tectonismo\n- Hidrografia\n- Climatologia: Climas do Brasil; El Nino e La Nina; Fatores do clima; Fenômenos climáticos\n- Impactos ambientais: Degradação dos solos; Desmatamento; Escassez hídrica; Mudanças climáticas; Poluição\n\nDISCIPLINA: Filosofia\n- Fundamentos da Filosofia: A Passagem do Mito ao Logos; Mito e Religião; O Que é Filosofia\n- Filosofia Clássica: Aristóteles; Platão; Pré-Socráticos; Sócrates\n- Filosofia Moderna: Contratualismo; Idealismo; Iluminismo; Kant; Racionalismo e empirismo\n- Filosofia Contemporânea: Educação; Escola de Frankfurt; Guerra Fria; Michel Foucault; Nietzche; Sartre\n- Filosofia Religiosa: Santo Agostinho; São Tomás de Aquino\n- Filosofia da Ciência\n- Ética e Moral\n- Política\n\nDISCIPLINA: Sociologia\n- Fundamentos da Sociologia: O Que é Sociologia; Sociologia e suas Áreas\n- Sociólogos Clássicos: Auguste Comte; Émile Durkheim; Marx e Engels; Max Weber\n- Cultura e Identidade\n- Instituições Sociais\n- Sociologia do Trabalho\n- Política\n- Movimentos Sociais: Abolição, racismo e antirracismo; Movimento feminista; Movimento LGBT; Movimento operário\n- Sociologia Brasileira\n- Tecnologia\n- Religião\n- Indústria Cultural, Consumo, Comunicação e Influência\n- Consciência Coletiva\n\nDISCIPLINA: Biologia\n- Fundamentos da Biologia: Introdução à Célula; Níveis de Organização Biológica; Noções de Metabolismo e Energia; O que é Vida\n- Método Científico\n- Bioquímica: Enzimas; Macromoléculas; Vitaminas\n- Citologia e Moléculas da Vida: Células; Divisão celular; Membrana Plasmática; Organelas; Transportes de membrana\n- Metabolismo Energético I: Fermentação; Respiração celular\n- Metabolismo Energético II: Fotossíntese; Quimiossíntese\n- Biologia Molecular: Bases nitrogenadas; DNA e RNA; Proteínas\n- Evolução e Classificação dos Seres Vivos: Cladogramas; Especiação; Origem da vida; Teorias evolutivas\n- Ecologia: Biomas e diversidade; Cadeia alimentar; Ciclos biogeoquímicos; Dinâmica de populações; Ecossistemas; Fluxos de energia e de matéria; Gráficos de relações ecológicas; Impactos antrópicos; Preservação e conservação ambiental; Problemas ambientais; Relações ecológicas; Sucessão ecológica\n- Impactos e Problemas Ambientais\n- Genética: 1° Lei de Mendel; 2° Lei de Mendel; Biotecnologia; Doenças genéticas; Engenharia genética; Fator Rh e Sistema ABO; Fundamentos da genética; Heredogramas; Interações gênicas\n- Histologia: Tecido Muscular\n- Fisiologia Humana: Sistema cardiorrespiratório; Sistema digestório; Sistema endócrino; Sistema excretor; Sistema hematopoietico; Sistema imunológico; Sistema nervoso; Sistema reprodutor\n- Botânica: Fisiologia vegetal; Fitormônios; Grupos vegetais; Histologia vegetal; Reprodução\n- Zoologia: Artrópodes e Equinodermos; Cordados; Primeiros filos\n- Doenças: Bacterioses; Protozooses e verminoses; Vírus e viroses\n- Microbiologia\n- Reprodução e Embriologia\n\nDISCIPLINA: Física\n- Energia e suas Transformações: Fontes de energia; Impactos Ambientais e Contexto Energético\n- Ferramental Matemático: Conversão de unidades; Potência de 10 e notação científica; Proporção entre grandezas físicas; Triângulo retângulo na Física\n- Grandezas Físicas\n- Termologia I: Calorimetria; Dilatação; Termometria\n- Cinemática I: Fundamentos da cinemática; Movimento uniforme; Movimento uniformemente variado; Queda livre e lançamento vertical\n- Ondulatória I: Espectro eletromagnético; Fenômenos ondulatórios; Propriedades das ondas\n- Dinâmica I: Força de atrito; Força elástica e lei de Hooke; Forças particulares; Leis de Newton; Polias fixas e móveis\n- Vetores\n- Eletrostática: Campo e potencial elétrico; Eletrização; Força elétrica\n- Eletrodinâmica I: 1º Lei de Ohm; 2º Lei de Ohm; Amperímetro e voltímetro; Circuitos elétricos; Potência elétrica; Tensão e corrente\n- Potência e Eficiência\n- Cinemática II: Acoplamento no MCU; Cinemática vetorial; Lançamento horizontal; Lançamento oblíquo; Movimento circular\n- Termologia II: Gases; Termodinâmica\n- Dinâmica II: Dinâmica do MCU; Plano inclinado\n- Dinâmica III: Colisões; Energia cinética e mecânica; Energia potencial elástica; Energia potencial gravitacional; Força elástica; Impulso e quantidade de movimento; Movimento Harmônico Simples\n- Estática: Equilíbrio de corpos\n- Hidrostática: Densidade; Empuxo; Pressão\n- Eletrodinâmica II: Associação de pilhas e baterias; Geradores, receptores e capacitores; Ponte de Wheatstone\n- Magnetismo e Eletromagnetismo\n- Óptica: Espelhos; Fenômenos ópticos; Lentes\n- Ondulatória II: Acústica\n- Gravitação\n- Física Moderna: Física nuclear; Mecânica quântica; Radiação de corpo negro; Relatividade\n\nDISCIPLINA: Química\n- Propriedades da Matéria\n- Processos de Separação de Misturas\n- Atomística: Alotropia; Efeitos luminosos; Leis ponderais; Modelo atômico atual; Modelos atômicos; Propriedades atômicas\n- Estequiometria: Cálculos estequiométricos; Variáveis no cálculo estequiométrico\n- Tabela Periódica e suas Propriedades: Elementos químicos; Famílias e períodos; Propriedades periódicas\n- Química Orgânica: Compostos orgânicos; Funções orgânicas; Isomeria; Reações orgânicas\n- Ligações Químicas, Propriedades dos Compostos e Polaridade: Forças intermoleculares; Ligações químicas; Polaridade\n- Geometria Molecular: Arranjos geométricos espaciais; Teoria da Repulsão dos Pares de Elétrons\n- Radioatividade: Decaimento radioativo; Partículas; Reações nucleares\n- Propriedades Coligativas: Crioscopia; Osmoscopia; Tonoscopia\n- Eletroquímica: Eletrólise; Oxirredução; Pilhas; Reações\n- Química Ambiental\n- Química Inorgânica: Ácidos; Bases; Funções inorgânicas; Ionização e dissociação iônica; NOX; Óxidos; Reações inorgânicas; Sais\n- Termoquímica: Equações termoquímicas; Lei de Hess\n- Soluções: Concentração; Diluição e mistura de soluções; Dispersões\n- Equilíbrio Químico\n- Cinética Química\n- Reações Químicas\n- Gases e suas Transformações\n- Polímeros\n\nDISCIPLINA: Linguagens e Códigos\n- Funções da Linguagem\n- Figuras de Linguagem\n- Tipologias Textuais\n- Gêneros Textuais\n- Campanhas Publicitárias, Anúncios e Influência\n- Crítica Social, Cultural e Artística\n- Variações Linguísticas: Normas linguísticas; Patrimônio linguístico\n- Poemas e Poesias\n- Expressividade e Lirismo\n- Progressão Textual e Temática\n- Mecanismos de Coesão e Coerência\n- Intertextualidade\n- Charges e HQs\n- Literatura: Arcadismo; Barroco; Classicismo; Contemporânea; Leituras obrigatórias; Modernismo; Naturalismo; Parnasianismo; Quinhentismo; Realismo; Romantismo; Simbolismo; Trovadorismo\n- Artes: Cubismo; Dadaísmo; Expressionismo; Futurismo; Surrealismo\n- Movimentos Artísticos\n- Recursos Argumentativos\n- Estratégias Argumentativas\n- Gramática: Colocação Pronominal; Concordância; Fonética e Fonologia; Morfologia; Ortografia e Acentuação; Pontuação; Regência; Semântica e Lexicologia; Sintaxe\n- Tecnologias\n- Interpretação de Texto\n- Educação Física\n- Linguagem Corporal\n\nDISCIPLINA: Espanhol\n- Interpretação de Texto\n- Charges e HQ's\n- Campanhas Publicitárias\n- Vocabulário e Semântica\n\nDISCIPLINA: Inglês\n- Vocabulário e Semântica\n- Interpretação de Texto\n- Charges e HQs\n- Campanhas Publicitárias\n\nDISCIPLINA: Matemática\n- Fundamentos da Matemática: Divisão; Frações; Multiplicação; Potenciação; Radiciação; Soma; Subtração\n- Razão, Proporção e Regra de Três: Divisão diretamente proporcional; Divisão inversamente proporcional; Regra de 3 composta; Regra de 3 simples\n- Razão e Proporção Avançada: Regra de 3 simples\n- Porcentagem: Aumento percentual; Redução percentual; Taxa percentual\n- Unidades de Medida e Conversões\n- Notação Cientifica\n- Escalas: Escalas lineares; Escalas superficiais; Escalas volumétricas\n- Vazão\n- Matemática Financeira: Aumentos; Descontos; Juros compostos; Juros Simples; Taxa percentual\n- Gráficos e Tabelas: Gráficos; Tabelas\n- Estatística: Desvio padrão e variância; Medidas de tendência central\n- Conjuntos\n- Álgebra: Números complexos; Polinômios\n- Inequações\n- Sistemas e Equações: Escalonamento; Primeiro grau; Segundo grau\n- Função do Primeiro Grau\n- Progressão Aritmética: Soma dos termos; Termo geral\n- Sequências Lógicas\n- Progressão Geométrica\n- Função do Segundo Grau\n- Geometria Plana: Ângulos; Área e perímetro; Circunferências e arcos; Polígonos e semelhança; Razões trigonométricas\n- Trigonometria\n- Geometria Espacial: Poliedros; Projeção ortogonal\n- Geometria Analítica: Circunferência; Plano cartesiano; Reta\n- Análise Combinatória: Arranjo; Combinação; Permutação; PFC\n- Probabilidade\n- Função Exponencial e Logarítmica\n- Função Trigonométrica\n- Logaritmo\n- Matrizes\n- Lógica\n- MMC e MDC\n- Conjuntos Numéricos\n- Função Racional\n\nDISCIPLINA: Redação\n- Cadernos de Aprimoramento Textual\n\nDISCIPLINA: Intensivo Revisional\n- Matemática\n- Biologia\n- Química\n- Física\n", "gabarito": "Esta é a página de gabarito de uma lista de exercícios. Leia o quadro e devolva\ntodos os pares número → letra, exatamente como impressos. Não deduza nada que não esteja\nlegível; se algum item estiver ilegível, deixe-o de fora.", "classificacao": "Classifique esta lista de exercícios em UM par disciplina + tópico da BASE DE\nTÓPICOS (copiado com a grafia exata). Use o título da capa e o conteúdo das questões. Se mais\nde um tópico couber, escolha o de assunto mais específico e cite o descartado. Se nenhum\ncouber com segurança, devolva confiante = false e explique.\n\nTítulo da lista: {titulo}\n\nInício de cada questão (texto extraído do PDF, pode ter símbolos trocados):\n{amostras}\n", "base": [["História", "Idade Antiga", ["Egito", "Grécia", "Primeiras civilizações", "Roma"]], ["História", "Idade Média", ["Cruzadas", "Feudalismo", "Império Bizantino"]], ["História", "Idade Moderna", ["Estados Nacionais", "Expansão marítima", "História da América", "Mercantilismo", "Reforma e contrarreforma", "Renascimento", "Revolução industrial"]], ["História", "Idade Contemporânea", ["Entreguerras", "Guerra Fria", "Imperialismo", "Nazifascismo", "Primaveira Árabe", "Primeira Guerra Mundial", "Revolução Francesa", "Segunda Guerra Mundial"]], ["História", "Brasil Colônia", ["Catequização", "Ciclos econõmicos", "Escravidão", "Independência", "Revoltas brasileiras"]], ["História", "Brasil Império", ["Abolição da escravidão", "Guerra do Paraguai", "Período Regencial", "Primeiro Reinado", "Revoltas brasileiras", "Segundo Reinado"]], ["História", "Brasil República", ["Constituição Federal", "Direitos Sociais", "Ditadura militar", "Era Vargas", "Governo JK", "Proclamação da República", "Redemocratização", "República Oligárquica", "República Velha", "Revoltas brasileiras"]], ["Geografia", "Geografia Econômica", ["Blocos econômicos", "Comércio", "Conceitos geográficos", "Desigualdade socioeconômica", "DIT", "Doutrinas econômicas", "Fontes de energia", "Globalização", "Modais", "Modelos de produção", "Neoliberalismo", "Setores da economia", "Sistemas econômicos"]], ["Geografia", "Geografia Urbana e Demografia", ["Densidade demográfica", "Fenômenos urbanos e problemas sociais", "Indicadores demográficos", "Migrações", "Pirâmides etárias", "Teorias demográficas", "Transição demográfica"]], ["Geografia", "Geografia Agrária", ["Conflitos no campo", "Estrutura fundiária", "Modelos de produção agrícola", "Reforma agrária", "Revolução verde"]], ["Geografia", "Geopolítica", ["Blocos econômicos", "Colonialismo e neocolonialismo", "Conflitos geopolíticos", "Imperialismo", "Ordens mundiais", "Sustentabilidade"]], ["Geografia", "Geografia Física", ["Cartografia", "Ciclo das rochas", "Eras geológicas", "Geologia", "Relevos", "Tectonismo"]], ["Geografia", "Hidrografia", []], ["Geografia", "Climatologia", ["Climas do Brasil", "El Nino e La Nina", "Fatores do clima", "Fenômenos climáticos"]], ["Geografia", "Impactos ambientais", ["Degradação dos solos", "Desmatamento", "Escassez hídrica", "Mudanças climáticas", "Poluição"]], ["Filosofia", "Fundamentos da Filosofia", ["A Passagem do Mito ao Logos", "Mito e Religião", "O Que é Filosofia"]], ["Filosofia", "Filosofia Clássica", ["Aristóteles", "Platão", "Pré-Socráticos", "Sócrates"]], ["Filosofia", "Filosofia Moderna", ["Contratualismo", "Idealismo", "Iluminismo", "Kant", "Racionalismo e empirismo"]], ["Filosofia", "Filosofia Contemporânea", ["Educação", "Escola de Frankfurt", "Guerra Fria", "Michel Foucault", "Nietzche", "Sartre"]], ["Filosofia", "Filosofia Religiosa", ["Santo Agostinho", "São Tomás de Aquino"]], ["Filosofia", "Filosofia da Ciência", []], ["Filosofia", "Ética e Moral", []], ["Filosofia", "Política", []], ["Sociologia", "Fundamentos da Sociologia", ["O Que é Sociologia", "Sociologia e suas Áreas"]], ["Sociologia", "Sociólogos Clássicos", ["Auguste Comte", "Émile Durkheim", "Marx e Engels", "Max Weber"]], ["Sociologia", "Cultura e Identidade", []], ["Sociologia", "Instituições Sociais", []], ["Sociologia", "Sociologia do Trabalho", []], ["Sociologia", "Política", []], ["Sociologia", "Movimentos Sociais", ["Abolição, racismo e antirracismo", "Movimento feminista", "Movimento LGBT", "Movimento operário"]], ["Sociologia", "Sociologia Brasileira", []], ["Sociologia", "Tecnologia", []], ["Sociologia", "Religião", []], ["Sociologia", "Indústria Cultural, Consumo, Comunicação e Influência", []], ["Sociologia", "Consciência Coletiva", []], ["Biologia", "Fundamentos da Biologia", ["Introdução à Célula", "Níveis de Organização Biológica", "Noções de Metabolismo e Energia", "O que é Vida"]], ["Biologia", "Método Científico", []], ["Biologia", "Bioquímica", ["Enzimas", "Macromoléculas", "Vitaminas"]], ["Biologia", "Citologia e Moléculas da Vida", ["Células", "Divisão celular", "Membrana Plasmática", "Organelas", "Transportes de membrana"]], ["Biologia", "Metabolismo Energético I", ["Fermentação", "Respiração celular"]], ["Biologia", "Metabolismo Energético II", ["Fotossíntese", "Quimiossíntese"]], ["Biologia", "Biologia Molecular", ["Bases nitrogenadas", "DNA e RNA", "Proteínas"]], ["Biologia", "Evolução e Classificação dos Seres Vivos", ["Cladogramas", "Especiação", "Origem da vida", "Teorias evolutivas"]], ["Biologia", "Ecologia", ["Biomas e diversidade", "Cadeia alimentar", "Ciclos biogeoquímicos", "Dinâmica de populações", "Ecossistemas", "Fluxos de energia e de matéria", "Gráficos de relações ecológicas", "Impactos antrópicos", "Preservação e conservação ambiental", "Problemas ambientais", "Relações ecológicas", "Sucessão ecológica"]], ["Biologia", "Impactos e Problemas Ambientais", []], ["Biologia", "Genética", ["1° Lei de Mendel", "2° Lei de Mendel", "Biotecnologia", "Doenças genéticas", "Engenharia genética", "Fator Rh e Sistema ABO", "Fundamentos da genética", "Heredogramas", "Interações gênicas"]], ["Biologia", "Histologia", ["Tecido Muscular"]], ["Biologia", "Fisiologia Humana", ["Sistema cardiorrespiratório", "Sistema digestório", "Sistema endócrino", "Sistema excretor", "Sistema hematopoietico", "Sistema imunológico", "Sistema nervoso", "Sistema reprodutor"]], ["Biologia", "Botânica", ["Fisiologia vegetal", "Fitormônios", "Grupos vegetais", "Histologia vegetal", "Reprodução"]], ["Biologia", "Zoologia", ["Artrópodes e Equinodermos", "Cordados", "Primeiros filos"]], ["Biologia", "Doenças", ["Bacterioses", "Protozooses e verminoses", "Vírus e viroses"]], ["Biologia", "Microbiologia", []], ["Biologia", "Reprodução e Embriologia", []], ["Física", "Energia e suas Transformações", ["Fontes de energia", "Impactos Ambientais e Contexto Energético"]], ["Física", "Ferramental Matemático", ["Conversão de unidades", "Potência de 10 e notação científica", "Proporção entre grandezas físicas", "Triângulo retângulo na Física"]], ["Física", "Grandezas Físicas", []], ["Física", "Termologia I", ["Calorimetria", "Dilatação", "Termometria"]], ["Física", "Cinemática I", ["Fundamentos da cinemática", "Movimento uniforme", "Movimento uniformemente variado", "Queda livre e lançamento vertical"]], ["Física", "Ondulatória I", ["Espectro eletromagnético", "Fenômenos ondulatórios", "Propriedades das ondas"]], ["Física", "Dinâmica I", ["Força de atrito", "Força elástica e lei de Hooke", "Forças particulares", "Leis de Newton", "Polias fixas e móveis"]], ["Física", "Vetores", []], ["Física", "Eletrostática", ["Campo e potencial elétrico", "Eletrização", "Força elétrica"]], ["Física", "Eletrodinâmica I", ["1º Lei de Ohm", "2º Lei de Ohm", "Amperímetro e voltímetro", "Circuitos elétricos", "Potência elétrica", "Tensão e corrente"]], ["Física", "Potência e Eficiência", []], ["Física", "Cinemática II", ["Acoplamento no MCU", "Cinemática vetorial", "Lançamento horizontal", "Lançamento oblíquo", "Movimento circular"]], ["Física", "Termologia II", ["Gases", "Termodinâmica"]], ["Física", "Dinâmica II", ["Dinâmica do MCU", "Plano inclinado"]], ["Física", "Dinâmica III", ["Colisões", "Energia cinética e mecânica", "Energia potencial elástica", "Energia potencial gravitacional", "Força elástica", "Impulso e quantidade de movimento", "Movimento Harmônico Simples"]], ["Física", "Estática", ["Equilíbrio de corpos"]], ["Física", "Hidrostática", ["Densidade", "Empuxo", "Pressão"]], ["Física", "Eletrodinâmica II", ["Associação de pilhas e baterias", "Geradores, receptores e capacitores", "Ponte de Wheatstone"]], ["Física", "Magnetismo e Eletromagnetismo", []], ["Física", "Óptica", ["Espelhos", "Fenômenos ópticos", "Lentes"]], ["Física", "Ondulatória II", ["Acústica"]], ["Física", "Gravitação", []], ["Física", "Física Moderna", ["Física nuclear", "Mecânica quântica", "Radiação de corpo negro", "Relatividade"]], ["Química", "Propriedades da Matéria", []], ["Química", "Processos de Separação de Misturas", []], ["Química", "Atomística", ["Alotropia", "Efeitos luminosos", "Leis ponderais", "Modelo atômico atual", "Modelos atômicos", "Propriedades atômicas"]], ["Química", "Estequiometria", ["Cálculos estequiométricos", "Variáveis no cálculo estequiométrico"]], ["Química", "Tabela Periódica e suas Propriedades", ["Elementos químicos", "Famílias e períodos", "Propriedades periódicas"]], ["Química", "Química Orgânica", ["Compostos orgânicos", "Funções orgânicas", "Isomeria", "Reações orgânicas"]], ["Química", "Ligações Químicas, Propriedades dos Compostos e Polaridade", ["Forças intermoleculares", "Ligações químicas", "Polaridade"]], ["Química", "Geometria Molecular", ["Arranjos geométricos espaciais", "Teoria da Repulsão dos Pares de Elétrons"]], ["Química", "Radioatividade", ["Decaimento radioativo", "Partículas", "Reações nucleares"]], ["Química", "Propriedades Coligativas", ["Crioscopia", "Osmoscopia", "Tonoscopia"]], ["Química", "Eletroquímica", ["Eletrólise", "Oxirredução", "Pilhas", "Reações"]], ["Química", "Química Ambiental", []], ["Química", "Química Inorgânica", ["Ácidos", "Bases", "Funções inorgânicas", "Ionização e dissociação iônica", "NOX", "Óxidos", "Reações inorgânicas", "Sais"]], ["Química", "Termoquímica", ["Equações termoquímicas", "Lei de Hess"]], ["Química", "Soluções", ["Concentração", "Diluição e mistura de soluções", "Dispersões"]], ["Química", "Equilíbrio Químico", []], ["Química", "Cinética Química", []], ["Química", "Reações Químicas", []], ["Química", "Gases e suas Transformações", []], ["Química", "Polímeros", []], ["Linguagens e Códigos", "Funções da Linguagem", []], ["Linguagens e Códigos", "Figuras de Linguagem", []], ["Linguagens e Códigos", "Tipologias Textuais", []], ["Linguagens e Códigos", "Gêneros Textuais", []], ["Linguagens e Códigos", "Campanhas Publicitárias, Anúncios e Influência", []], ["Linguagens e Códigos", "Crítica Social, Cultural e Artística", []], ["Linguagens e Códigos", "Variações Linguísticas", ["Normas linguísticas", "Patrimônio linguístico"]], ["Linguagens e Códigos", "Poemas e Poesias", []], ["Linguagens e Códigos", "Expressividade e Lirismo", []], ["Linguagens e Códigos", "Progressão Textual e Temática", []], ["Linguagens e Códigos", "Mecanismos de Coesão e Coerência", []], ["Linguagens e Códigos", "Intertextualidade", []], ["Linguagens e Códigos", "Charges e HQs", []], ["Linguagens e Códigos", "Literatura", ["Arcadismo", "Barroco", "Classicismo", "Contemporânea", "Leituras obrigatórias", "Modernismo", "Naturalismo", "Parnasianismo", "Quinhentismo", "Realismo", "Romantismo", "Simbolismo", "Trovadorismo"]], ["Linguagens e Códigos", "Artes", ["Cubismo", "Dadaísmo", "Expressionismo", "Futurismo", "Surrealismo"]], ["Linguagens e Códigos", "Movimentos Artísticos", []], ["Linguagens e Códigos", "Recursos Argumentativos", []], ["Linguagens e Códigos", "Estratégias Argumentativas", []], ["Linguagens e Códigos", "Gramática", ["Colocação Pronominal", "Concordância", "Fonética e Fonologia", "Morfologia", "Ortografia e Acentuação", "Pontuação", "Regência", "Semântica e Lexicologia", "Sintaxe"]], ["Linguagens e Códigos", "Tecnologias", []], ["Linguagens e Códigos", "Interpretação de Texto", []], ["Linguagens e Códigos", "Educação Física", []], ["Linguagens e Códigos", "Linguagem Corporal", []], ["Espanhol", "Interpretação de Texto", []], ["Espanhol", "Charges e HQ's", []], ["Espanhol", "Campanhas Publicitárias", []], ["Espanhol", "Vocabulário e Semântica", []], ["Inglês", "Vocabulário e Semântica", []], ["Inglês", "Interpretação de Texto", []], ["Inglês", "Charges e HQs", []], ["Inglês", "Campanhas Publicitárias", []], ["Matemática", "Fundamentos da Matemática", ["Divisão", "Frações", "Multiplicação", "Potenciação", "Radiciação", "Soma", "Subtração"]], ["Matemática", "Razão, Proporção e Regra de Três", ["Divisão diretamente proporcional", "Divisão inversamente proporcional", "Regra de 3 composta", "Regra de 3 simples"]], ["Matemática", "Razão e Proporção Avançada", ["Regra de 3 simples"]], ["Matemática", "Porcentagem", ["Aumento percentual", "Redução percentual", "Taxa percentual"]], ["Matemática", "Unidades de Medida e Conversões", []], ["Matemática", "Notação Cientifica", []], ["Matemática", "Escalas", ["Escalas lineares", "Escalas superficiais", "Escalas volumétricas"]], ["Matemática", "Vazão", []], ["Matemática", "Matemática Financeira", ["Aumentos", "Descontos", "Juros compostos", "Juros Simples", "Taxa percentual"]], ["Matemática", "Gráficos e Tabelas", ["Gráficos", "Tabelas"]], ["Matemática", "Estatística", ["Desvio padrão e variância", "Medidas de tendência central"]], ["Matemática", "Conjuntos", []], ["Matemática", "Álgebra", ["Números complexos", "Polinômios"]], ["Matemática", "Inequações", []], ["Matemática", "Sistemas e Equações", ["Escalonamento", "Primeiro grau", "Segundo grau"]], ["Matemática", "Função do Primeiro Grau", []], ["Matemática", "Progressão Aritmética", ["Soma dos termos", "Termo geral"]], ["Matemática", "Sequências Lógicas", []], ["Matemática", "Progressão Geométrica", []], ["Matemática", "Função do Segundo Grau", []], ["Matemática", "Geometria Plana", ["Ângulos", "Área e perímetro", "Circunferências e arcos", "Polígonos e semelhança", "Razões trigonométricas"]], ["Matemática", "Trigonometria", []], ["Matemática", "Geometria Espacial", ["Poliedros", "Projeção ortogonal"]], ["Matemática", "Geometria Analítica", ["Circunferência", "Plano cartesiano", "Reta"]], ["Matemática", "Análise Combinatória", ["Arranjo", "Combinação", "Permutação", "PFC"]], ["Matemática", "Probabilidade", []], ["Matemática", "Função Exponencial e Logarítmica", []], ["Matemática", "Função Trigonométrica", []], ["Matemática", "Logaritmo", []], ["Matemática", "Matrizes", []], ["Matemática", "Lógica", []], ["Matemática", "MMC e MDC", []], ["Matemática", "Conjuntos Numéricos", []], ["Matemática", "Função Racional", []], ["Redação", "Cadernos de Aprimoramento Textual", []], ["Intensivo Revisional", "Matemática", []], ["Intensivo Revisional", "Biologia", []], ["Intensivo Revisional", "Química", []], ["Intensivo Revisional", "Física", []]]};   // prompt e base de tópicos, gerados por upq/artefato.py
+const DADOS = {"sistema": "Você transcreve questões de listas de exercícios em PDF para o banco de questões\nde uma plataforma de ensino pré-vestibular. Cada mensagem traz VÁRIAS questões: uma imagem\nrecortada do PDF por questão (as figuras aparecem dentro dela), os NOMES das figuras de cada\nquestão, o texto extraído do PDF e o gabarito oficial. Devolva só o JSON pedido, com uma\nentrada por questão, na ordem das imagens.\n\nFONTE DA VERDADE\n- A IMAGEM é a fonte da verdade. O \"texto extraído do PDF\" ajuda com a ordem das palavras\n  e nomes próprios, mas tem erros conhecidos: símbolos trocados (π aparece como \"À\",\n  ≈ como \"H\"), expoentes e índices achatados (\"10 8\" ou \"108\" = 10⁸, \"N1\" = N₁), palavras\n  partidas e trechos repetidos. Sempre confira com a imagem.\n- Transcrição literal: não resuma, não parafraseie, não corrija nem atualize o conteúdo.\n  Preserve palavras, acentos, pontuação, números e unidades. O texto-base inteiro entra no\n  enunciado (contexto, textos de apoio, afirmativas, referências e o comando).\n- Reconstrua a questão inteira: nenhum trecho de uma alternativa pode vazar para outra.\n  Questão de A a D tem 4 alternativas — nunca invente a E.\n\nFORMATAÇÃO DO TEXTO (enunciado e alternativas)\nO texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (MathJax).\n\n1. Fórmulas, números com unidade, potências, índices, símbolos e variáveis vão em LaTeX:\n   - no meio da frase: $...$ · destacada/centralizada no PDF: $$...$$ em parágrafo próprio.\n   - vírgula decimal: $3{,}5$ (as chaves evitam espaço depois da vírgula).\n   - milhar com ponto: $3.600$ · notação científica: $4{,}0 \\times 10^{8}\\ \\text{m}$.\n   - unidades em \\text{}: $35\\ \\text{m/s}$, $9{,}8\\ \\text{m/s}^2$, $60\\ \\text{cm}$, $3000\\ \\text{rpm}$.\n   - aproximação e constantes: $\\pi \\approx 3$, $g = 10\\ \\text{m/s}^2$.\n   - vetores: $\\vec{F}$, $m\\vec{g}$ · índices: $N_1$, $x_2$, $v_{\\text{máx}}$ · graus: $45^\\circ$.\n   - frações: $\\frac{a}{b}$ · raízes: $\\sqrt{2}$ · trigonometria: $\\sin 45^\\circ$, $\\cos\\theta$.\n   - química: $\\mathrm{H_2O}$, $\\mathrm{Ca^{2+}}$, setas \\rightarrow e \\rightleftharpoons.\n   - comandos permitidos: os do MathJax padrão. Nada de \\ce, \\SI, \\usepackage ou pacotes.\n   - Valores numéricos isolados em alternativas também vão em LaTeX: $110$, $\\frac{\\pi}{2}$.\n   - Ano, data, número de questão e quantidades contadas no texto corrido ficam como texto\n     (\"em 2023\", \"Questão 05\", \"quatro posições (1, 2, 3 e 4)\").\n2. Cifrão de dinheiro sempre escapado: R\\$ 25,00. Todo $ sem barra abre ou fecha fórmula.\n3. NEGRITO É OBRIGATÓRIO: todo trecho em negrito no PDF vai em **negrito** (títulos, cabeçalhos\n   de tabela, \"TEXTO I\", palavras destacadas como **CORRETA**, **INCORRETA**, **EXCETO**).\n   *Itálico* como no PDF (títulos de obras, termos estrangeiros). No texto extraído, os\n   trechos em fonte negrito já vêm entre ** — todos eles têm de sair em negrito.\n4. Parágrafos separados por uma linha em branco. Afirmativas I, II, III cada uma em seu\n   parágrafo, começando por \"I. \", \"II. \". Listas de dados (π = 3; g = 10 m/s²) uma por linha.\n   FÓRMULA EM IMAGEM: no PDF, muitas fórmulas (frações, raízes, alternativas inteiras) são\n   imagem e não têm texto. No texto extraído elas aparecem no ponto exato como\n   ⟦FÓRMULA NOME = $LaTeX$⟧ (lida da imagem) ou ⟦FÓRMULA NOME⟧ (sem leitura: leia na imagem).\n   Transcreva cada uma em LaTeX nesse ponto (não copie a marca); a alternativa cujo texto é só\n   a marca tem como texto a fórmula. NUNCA escreva no lugar da fórmula um aviso como\n   \"(expressão não legível)\": se não houver como ler, deixe a alternativa vazia e marque\n   revisar = true.\n5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.\n6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)\n   usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo\n   (o que a figura mostra, em até 15 palavras). Créditos da figura (\"Fonte: UNICAMP, 2023.\")\n   são transcritos logo abaixo dela, como referência (regra 8) — exceto quando já aparecem\n   DENTRO da imagem recortada da figura (confira na imagem da questão): aí não repita. Não\n   descreva a figura no enunciado nem invente dados que só ela mostra.\n   ALTERNATIVAS EM IMAGEM: quando as alternativas são figuras (gráficos, esquemas, fórmulas\n   estruturais), o texto de cada alternativa é a sua figura: ![Alternativa A: descrição\n   curta](figura:NOME), com texto antes ou depois se houver. As figuras estão nomeadas na ordem\n   de leitura (de cima para baixo; lado a lado, da esquerda para a direita), então as últimas\n   figuras da questão costumam ser as alternativas, na ordem A, B, C... Se uma única figura\n   reúne todas as alternativas, coloque-a no fim do enunciado, transcreva em cada alternativa o\n   que estiver legível dela e marque revisar = true.\n7. Não transcreva: número da questão, cabeçalho com banca/ano, letras das alternativas,\n   cabeçalho/rodapé da página, marcas d'água.\n8. Referências (créditos de figura e fontes de texto: \"Fonte: ...\", \"Disponível em: ...\n   Acesso em: ...\", \"Adaptado de ...\") ficam num parágrafo próprio, no ponto onde aparecem,\n   com o texto literal (parênteses inclusive, URL como texto simples), neste formato exato:\n   <p style=\"text-align: right;\"><sub>Fonte: UNICAMP, 2014.<\/sub><\/p>\n9. ALINHAMENTO COMO NO PDF: tudo o que está centralizado no PDF (títulos, tabelas, figuras,\n   fórmulas e dados destacados, \"TEXTO I\") fica centralizado. Envolva cada trecho centralizado\n   num bloco próprio, com as marcas sozinhas na linha:\n   ::: centro\n   **Título centralizado**\n   :::\n   Dentro do bloco vale o Markdown normal (tabela, ![...](figura:NOME), $LaTeX$, **negrito**).\n   No texto extraído, as linhas centralizadas vêm com \"[centralizado]\" (não copie a marca).\n   Texto justificado ou à esquerda fica fora do bloco. Referências seguem a regra 8 (à direita).\n10. COMPLETUDE E NADA A MAIS: nenhuma coluna ou linha de tabela, figura ou trecho do PDF pode\n   faltar, e nenhum trecho pode aparecer mais vezes do que no PDF. Use TODAS as figuras\n   informadas. No texto extraído, cada linha de tabela vem numa linha só (o cabeçalho em negrito,\n   ex.: \"**Nutriente I II III**\"): ela entra SÓ dentro da tabela, nunca também como título ou\n   parágrafo. O título de uma tabela é a linha acima dela (ex.: \"Tabela 1: ...\"). Se algo não\n   estiver legível, marque revisar = true.\n\nCABEÇALHO\n- instituicao e ano vêm da barra vermelha \"Questão NN ... BANCA ANO\". Ex.: \"UFMG 2025\" →\n  instituicao \"UFMG\", ano 2025. \"CESMAC MEDICINA 2022/1\" → instituicao \"CESMAC MEDICINA\",\n  ano 2022. \"(ADAPTADO)\" → adaptada true e não entra na instituição. Sem banca → null; sem\n  ano → null. Não confunda com datas citadas no enunciado.\n\nDISCIPLINA, TÓPICO E ASSUNTOS\n- Somente pares que existem no ANEXO — BASE DE TÓPICOS, copiados com a grafia exata.\n  O campo topico recebe o nome do TÓPICO, nunca o do assunto.\n- Em lista de exercícios a mensagem informa a disciplina e o tópico da lista: use-os.\n- assuntos: 1 ou 2 assuntos do tópico escolhido (os que aparecem depois de \"Tópico:\" no\n  anexo), com a grafia exata, pelo conteúdo que a questão cobra. Tópico sem assuntos listados\n  → assuntos = [nome do tópico].\n\nDIFICULDADE (inteiro de 1 a 5, obrigatório)\n1 = Muito Fácil · 2 = Fácil · 3 = Média · 4 = Difícil · 5 = Muito Difícil\n- Referência: aluno de pré-vestibular/ENEM que já estudou o tópico.\n- Pese: quantos conceitos ou etapas a questão encadeia; carga de interpretação; uso de\n  gráfico, tabela ou figura; volume de cálculo; proximidade entre as alternativas; conteúdo\n  além do tópico.\n- Guia: aplicação direta de um conceito ou fórmula → 2 · mais de uma etapa ou interpretação\n  de dados → 3 · integração de conceitos, várias etapas ou interpretação exigente → 4.\n  1 e 5 são raros; na dúvida entre um extremo e o vizinho, fique no vizinho.\n- A etapa da lista é o ponto de partida: Fixação → 1 a 2 (predomina 2) · Treinamento → 2 a 3\n  · Aprofundamento → 3 a 4 · Desafios → 4 a 5 (predomina 4). Fora da faixa só quando a\n  questão claramente não corresponde à etapa; nesse caso explique em observacoes.\n- A banca não define a dificuldade: classifique a questão.\n\nGABARITO\n- gabarito = a letra do gabarito oficial informada na mensagem. Nunca troque e não resolva\n  a questão: este trabalho é só de transcrição e classificação.\n\nREVISAR\nrevisar = true sempre que houver: trecho ilegível ou cortado no recorte, figura com\ninformação essencial que você não conseguiu ler, gabarito oficial ausente, dificuldade\nfora da faixa da etapa, ou qualquer dúvida de transcrição. Explique em observacoes\n(curto e objetivo). Caso contrário revisar = false e observacoes = null.\n\nANEXO — BASE DE TÓPICOS DA PLATAFORMA\nFormato: Tópico: assuntos que ele abrange. Os assuntos servem só para localizar o tópico.\n\nDISCIPLINA: História\n- Idade Antiga: Egito; Grécia; Primeiras civilizações; Roma\n- Idade Média: Cruzadas; Feudalismo; Império Bizantino\n- Idade Moderna: Estados Nacionais; Expansão marítima; História da América; Mercantilismo; Reforma e contrarreforma; Renascimento; Revolução industrial\n- Idade Contemporânea: Entreguerras; Guerra Fria; Imperialismo; Nazifascismo; Primaveira Árabe; Primeira Guerra Mundial; Revolução Francesa; Segunda Guerra Mundial\n- Brasil Colônia: Catequização; Ciclos econõmicos; Escravidão; Independência; Revoltas brasileiras\n- Brasil Império: Abolição da escravidão; Guerra do Paraguai; Período Regencial; Primeiro Reinado; Revoltas brasileiras; Segundo Reinado\n- Brasil República: Constituição Federal; Direitos Sociais; Ditadura militar; Era Vargas; Governo JK; Proclamação da República; Redemocratização; República Oligárquica; República Velha; Revoltas brasileiras\n\nDISCIPLINA: Geografia\n- Geografia Econômica: Blocos econômicos; Comércio; Conceitos geográficos; Desigualdade socioeconômica; DIT; Doutrinas econômicas; Fontes de energia; Globalização; Modais; Modelos de produção; Neoliberalismo; Setores da economia; Sistemas econômicos\n- Geografia Urbana e Demografia: Densidade demográfica; Fenômenos urbanos e problemas sociais; Indicadores demográficos; Migrações; Pirâmides etárias; Teorias demográficas; Transição demográfica\n- Geografia Agrária: Conflitos no campo; Estrutura fundiária; Modelos de produção agrícola; Reforma agrária; Revolução verde\n- Geopolítica: Blocos econômicos; Colonialismo e neocolonialismo; Conflitos geopolíticos; Imperialismo; Ordens mundiais; Sustentabilidade\n- Geografia Física: Cartografia; Ciclo das rochas; Eras geológicas; Geologia; Relevos; Tectonismo\n- Hidrografia\n- Climatologia: Climas do Brasil; El Nino e La Nina; Fatores do clima; Fenômenos climáticos\n- Impactos ambientais: Degradação dos solos; Desmatamento; Escassez hídrica; Mudanças climáticas; Poluição\n\nDISCIPLINA: Filosofia\n- Fundamentos da Filosofia: A Passagem do Mito ao Logos; Mito e Religião; O Que é Filosofia\n- Filosofia Clássica: Aristóteles; Platão; Pré-Socráticos; Sócrates\n- Filosofia Moderna: Contratualismo; Idealismo; Iluminismo; Kant; Racionalismo e empirismo\n- Filosofia Contemporânea: Educação; Escola de Frankfurt; Guerra Fria; Michel Foucault; Nietzche; Sartre\n- Filosofia Religiosa: Santo Agostinho; São Tomás de Aquino\n- Filosofia da Ciência\n- Ética e Moral\n- Política\n\nDISCIPLINA: Sociologia\n- Fundamentos da Sociologia: O Que é Sociologia; Sociologia e suas Áreas\n- Sociólogos Clássicos: Auguste Comte; Émile Durkheim; Marx e Engels; Max Weber\n- Cultura e Identidade\n- Instituições Sociais\n- Sociologia do Trabalho\n- Política\n- Movimentos Sociais: Abolição, racismo e antirracismo; Movimento feminista; Movimento LGBT; Movimento operário\n- Sociologia Brasileira\n- Tecnologia\n- Religião\n- Indústria Cultural, Consumo, Comunicação e Influência\n- Consciência Coletiva\n\nDISCIPLINA: Biologia\n- Fundamentos da Biologia: Introdução à Célula; Níveis de Organização Biológica; Noções de Metabolismo e Energia; O que é Vida\n- Método Científico\n- Bioquímica: Enzimas; Macromoléculas; Vitaminas\n- Citologia e Moléculas da Vida: Células; Divisão celular; Membrana Plasmática; Organelas; Transportes de membrana\n- Metabolismo Energético I: Fermentação; Respiração celular\n- Metabolismo Energético II: Fotossíntese; Quimiossíntese\n- Biologia Molecular: Bases nitrogenadas; DNA e RNA; Proteínas\n- Evolução e Classificação dos Seres Vivos: Cladogramas; Especiação; Origem da vida; Teorias evolutivas\n- Ecologia: Biomas e diversidade; Cadeia alimentar; Ciclos biogeoquímicos; Dinâmica de populações; Ecossistemas; Fluxos de energia e de matéria; Gráficos de relações ecológicas; Impactos antrópicos; Preservação e conservação ambiental; Problemas ambientais; Relações ecológicas; Sucessão ecológica\n- Impactos e Problemas Ambientais\n- Genética: 1° Lei de Mendel; 2° Lei de Mendel; Biotecnologia; Doenças genéticas; Engenharia genética; Fator Rh e Sistema ABO; Fundamentos da genética; Heredogramas; Interações gênicas\n- Histologia: Tecido Muscular\n- Fisiologia Humana: Sistema cardiorrespiratório; Sistema digestório; Sistema endócrino; Sistema excretor; Sistema hematopoietico; Sistema imunológico; Sistema nervoso; Sistema reprodutor\n- Botânica: Fisiologia vegetal; Fitormônios; Grupos vegetais; Histologia vegetal; Reprodução\n- Zoologia: Artrópodes e Equinodermos; Cordados; Primeiros filos\n- Doenças: Bacterioses; Protozooses e verminoses; Vírus e viroses\n- Microbiologia\n- Reprodução e Embriologia\n\nDISCIPLINA: Física\n- Energia e suas Transformações: Fontes de energia; Impactos Ambientais e Contexto Energético\n- Ferramental Matemático: Conversão de unidades; Potência de 10 e notação científica; Proporção entre grandezas físicas; Triângulo retângulo na Física\n- Grandezas Físicas\n- Termologia I: Calorimetria; Dilatação; Termometria\n- Cinemática I: Fundamentos da cinemática; Movimento uniforme; Movimento uniformemente variado; Queda livre e lançamento vertical\n- Ondulatória I: Espectro eletromagnético; Fenômenos ondulatórios; Propriedades das ondas\n- Dinâmica I: Força de atrito; Força elástica e lei de Hooke; Forças particulares; Leis de Newton; Polias fixas e móveis\n- Vetores\n- Eletrostática: Campo e potencial elétrico; Eletrização; Força elétrica\n- Eletrodinâmica I: 1º Lei de Ohm; 2º Lei de Ohm; Amperímetro e voltímetro; Circuitos elétricos; Potência elétrica; Tensão e corrente\n- Potência e Eficiência\n- Cinemática II: Acoplamento no MCU; Cinemática vetorial; Lançamento horizontal; Lançamento oblíquo; Movimento circular\n- Termologia II: Gases; Termodinâmica\n- Dinâmica II: Dinâmica do MCU; Plano inclinado\n- Dinâmica III: Colisões; Energia cinética e mecânica; Energia potencial elástica; Energia potencial gravitacional; Força elástica; Impulso e quantidade de movimento; Movimento Harmônico Simples\n- Estática: Equilíbrio de corpos\n- Hidrostática: Densidade; Empuxo; Pressão\n- Eletrodinâmica II: Associação de pilhas e baterias; Geradores, receptores e capacitores; Ponte de Wheatstone\n- Magnetismo e Eletromagnetismo\n- Óptica: Espelhos; Fenômenos ópticos; Lentes\n- Ondulatória II: Acústica\n- Gravitação\n- Física Moderna: Física nuclear; Mecânica quântica; Radiação de corpo negro; Relatividade\n\nDISCIPLINA: Química\n- Propriedades da Matéria\n- Processos de Separação de Misturas\n- Atomística: Alotropia; Efeitos luminosos; Leis ponderais; Modelo atômico atual; Modelos atômicos; Propriedades atômicas\n- Estequiometria: Cálculos estequiométricos; Variáveis no cálculo estequiométrico\n- Tabela Periódica e suas Propriedades: Elementos químicos; Famílias e períodos; Propriedades periódicas\n- Química Orgânica: Compostos orgânicos; Funções orgânicas; Isomeria; Reações orgânicas\n- Ligações Químicas, Propriedades dos Compostos e Polaridade: Forças intermoleculares; Ligações químicas; Polaridade\n- Geometria Molecular: Arranjos geométricos espaciais; Teoria da Repulsão dos Pares de Elétrons\n- Radioatividade: Decaimento radioativo; Partículas; Reações nucleares\n- Propriedades Coligativas: Crioscopia; Osmoscopia; Tonoscopia\n- Eletroquímica: Eletrólise; Oxirredução; Pilhas; Reações\n- Química Ambiental\n- Química Inorgânica: Ácidos; Bases; Funções inorgânicas; Ionização e dissociação iônica; NOX; Óxidos; Reações inorgânicas; Sais\n- Termoquímica: Equações termoquímicas; Lei de Hess\n- Soluções: Concentração; Diluição e mistura de soluções; Dispersões\n- Equilíbrio Químico\n- Cinética Química\n- Reações Químicas\n- Gases e suas Transformações\n- Polímeros\n\nDISCIPLINA: Linguagens e Códigos\n- Funções da Linguagem\n- Figuras de Linguagem\n- Tipologias Textuais\n- Gêneros Textuais\n- Campanhas Publicitárias, Anúncios e Influência\n- Crítica Social, Cultural e Artística\n- Variações Linguísticas: Normas linguísticas; Patrimônio linguístico\n- Poemas e Poesias\n- Expressividade e Lirismo\n- Progressão Textual e Temática\n- Mecanismos de Coesão e Coerência\n- Intertextualidade\n- Charges e HQs\n- Literatura: Arcadismo; Barroco; Classicismo; Contemporânea; Leituras obrigatórias; Modernismo; Naturalismo; Parnasianismo; Quinhentismo; Realismo; Romantismo; Simbolismo; Trovadorismo\n- Artes: Cubismo; Dadaísmo; Expressionismo; Futurismo; Surrealismo\n- Movimentos Artísticos\n- Recursos Argumentativos\n- Estratégias Argumentativas\n- Gramática: Colocação Pronominal; Concordância; Fonética e Fonologia; Morfologia; Ortografia e Acentuação; Pontuação; Regência; Semântica e Lexicologia; Sintaxe\n- Tecnologias\n- Interpretação de Texto\n- Educação Física\n- Linguagem Corporal\n\nDISCIPLINA: Espanhol\n- Interpretação de Texto\n- Charges e HQ's\n- Campanhas Publicitárias\n- Vocabulário e Semântica\n\nDISCIPLINA: Inglês\n- Vocabulário e Semântica\n- Interpretação de Texto\n- Charges e HQs\n- Campanhas Publicitárias\n\nDISCIPLINA: Matemática\n- Fundamentos da Matemática: Divisão; Frações; Multiplicação; Potenciação; Radiciação; Soma; Subtração\n- Razão, Proporção e Regra de Três: Divisão diretamente proporcional; Divisão inversamente proporcional; Regra de 3 composta; Regra de 3 simples\n- Razão e Proporção Avançada: Regra de 3 simples\n- Porcentagem: Aumento percentual; Redução percentual; Taxa percentual\n- Unidades de Medida e Conversões\n- Notação Cientifica\n- Escalas: Escalas lineares; Escalas superficiais; Escalas volumétricas\n- Vazão\n- Matemática Financeira: Aumentos; Descontos; Juros compostos; Juros Simples; Taxa percentual\n- Gráficos e Tabelas: Gráficos; Tabelas\n- Estatística: Desvio padrão e variância; Medidas de tendência central\n- Conjuntos\n- Álgebra: Números complexos; Polinômios\n- Inequações\n- Sistemas e Equações: Escalonamento; Primeiro grau; Segundo grau\n- Função do Primeiro Grau\n- Progressão Aritmética: Soma dos termos; Termo geral\n- Sequências Lógicas\n- Progressão Geométrica\n- Função do Segundo Grau\n- Geometria Plana: Ângulos; Área e perímetro; Circunferências e arcos; Polígonos e semelhança; Razões trigonométricas\n- Trigonometria\n- Geometria Espacial: Poliedros; Projeção ortogonal\n- Geometria Analítica: Circunferência; Plano cartesiano; Reta\n- Análise Combinatória: Arranjo; Combinação; Permutação; PFC\n- Probabilidade\n- Função Exponencial e Logarítmica\n- Função Trigonométrica\n- Logaritmo\n- Matrizes\n- Lógica\n- MMC e MDC\n- Conjuntos Numéricos\n- Função Racional\n\nDISCIPLINA: Redação\n- Cadernos de Aprimoramento Textual\n\nDISCIPLINA: Intensivo Revisional\n- Matemática\n- Biologia\n- Química\n- Física\n", "gabarito": "Esta é a página de gabarito de uma lista de exercícios. Leia o quadro e devolva\ntodos os pares número → letra, exatamente como impressos. Não deduza nada que não esteja\nlegível; se algum item estiver ilegível, deixe-o de fora.", "classificacao": "Classifique esta lista de exercícios em UM par disciplina + tópico da BASE DE\nTÓPICOS (copiado com a grafia exata). Use o título da capa e o conteúdo das questões. Se mais\nde um tópico couber, escolha o de assunto mais específico e cite o descartado. Se nenhum\ncouber com segurança, devolva confiante = false e explique.\n\nTítulo da lista: {titulo}\n\nInício de cada questão (texto extraído do PDF, pode ter símbolos trocados):\n{amostras}\n", "base": [["História", "Idade Antiga", ["Egito", "Grécia", "Primeiras civilizações", "Roma"]], ["História", "Idade Média", ["Cruzadas", "Feudalismo", "Império Bizantino"]], ["História", "Idade Moderna", ["Estados Nacionais", "Expansão marítima", "História da América", "Mercantilismo", "Reforma e contrarreforma", "Renascimento", "Revolução industrial"]], ["História", "Idade Contemporânea", ["Entreguerras", "Guerra Fria", "Imperialismo", "Nazifascismo", "Primaveira Árabe", "Primeira Guerra Mundial", "Revolução Francesa", "Segunda Guerra Mundial"]], ["História", "Brasil Colônia", ["Catequização", "Ciclos econõmicos", "Escravidão", "Independência", "Revoltas brasileiras"]], ["História", "Brasil Império", ["Abolição da escravidão", "Guerra do Paraguai", "Período Regencial", "Primeiro Reinado", "Revoltas brasileiras", "Segundo Reinado"]], ["História", "Brasil República", ["Constituição Federal", "Direitos Sociais", "Ditadura militar", "Era Vargas", "Governo JK", "Proclamação da República", "Redemocratização", "República Oligárquica", "República Velha", "Revoltas brasileiras"]], ["Geografia", "Geografia Econômica", ["Blocos econômicos", "Comércio", "Conceitos geográficos", "Desigualdade socioeconômica", "DIT", "Doutrinas econômicas", "Fontes de energia", "Globalização", "Modais", "Modelos de produção", "Neoliberalismo", "Setores da economia", "Sistemas econômicos"]], ["Geografia", "Geografia Urbana e Demografia", ["Densidade demográfica", "Fenômenos urbanos e problemas sociais", "Indicadores demográficos", "Migrações", "Pirâmides etárias", "Teorias demográficas", "Transição demográfica"]], ["Geografia", "Geografia Agrária", ["Conflitos no campo", "Estrutura fundiária", "Modelos de produção agrícola", "Reforma agrária", "Revolução verde"]], ["Geografia", "Geopolítica", ["Blocos econômicos", "Colonialismo e neocolonialismo", "Conflitos geopolíticos", "Imperialismo", "Ordens mundiais", "Sustentabilidade"]], ["Geografia", "Geografia Física", ["Cartografia", "Ciclo das rochas", "Eras geológicas", "Geologia", "Relevos", "Tectonismo"]], ["Geografia", "Hidrografia", []], ["Geografia", "Climatologia", ["Climas do Brasil", "El Nino e La Nina", "Fatores do clima", "Fenômenos climáticos"]], ["Geografia", "Impactos ambientais", ["Degradação dos solos", "Desmatamento", "Escassez hídrica", "Mudanças climáticas", "Poluição"]], ["Filosofia", "Fundamentos da Filosofia", ["A Passagem do Mito ao Logos", "Mito e Religião", "O Que é Filosofia"]], ["Filosofia", "Filosofia Clássica", ["Aristóteles", "Platão", "Pré-Socráticos", "Sócrates"]], ["Filosofia", "Filosofia Moderna", ["Contratualismo", "Idealismo", "Iluminismo", "Kant", "Racionalismo e empirismo"]], ["Filosofia", "Filosofia Contemporânea", ["Educação", "Escola de Frankfurt", "Guerra Fria", "Michel Foucault", "Nietzche", "Sartre"]], ["Filosofia", "Filosofia Religiosa", ["Santo Agostinho", "São Tomás de Aquino"]], ["Filosofia", "Filosofia da Ciência", []], ["Filosofia", "Ética e Moral", []], ["Filosofia", "Política", []], ["Sociologia", "Fundamentos da Sociologia", ["O Que é Sociologia", "Sociologia e suas Áreas"]], ["Sociologia", "Sociólogos Clássicos", ["Auguste Comte", "Émile Durkheim", "Marx e Engels", "Max Weber"]], ["Sociologia", "Cultura e Identidade", []], ["Sociologia", "Instituições Sociais", []], ["Sociologia", "Sociologia do Trabalho", []], ["Sociologia", "Política", []], ["Sociologia", "Movimentos Sociais", ["Abolição, racismo e antirracismo", "Movimento feminista", "Movimento LGBT", "Movimento operário"]], ["Sociologia", "Sociologia Brasileira", []], ["Sociologia", "Tecnologia", []], ["Sociologia", "Religião", []], ["Sociologia", "Indústria Cultural, Consumo, Comunicação e Influência", []], ["Sociologia", "Consciência Coletiva", []], ["Biologia", "Fundamentos da Biologia", ["Introdução à Célula", "Níveis de Organização Biológica", "Noções de Metabolismo e Energia", "O que é Vida"]], ["Biologia", "Método Científico", []], ["Biologia", "Bioquímica", ["Enzimas", "Macromoléculas", "Vitaminas"]], ["Biologia", "Citologia e Moléculas da Vida", ["Células", "Divisão celular", "Membrana Plasmática", "Organelas", "Transportes de membrana"]], ["Biologia", "Metabolismo Energético I", ["Fermentação", "Respiração celular"]], ["Biologia", "Metabolismo Energético II", ["Fotossíntese", "Quimiossíntese"]], ["Biologia", "Biologia Molecular", ["Bases nitrogenadas", "DNA e RNA", "Proteínas"]], ["Biologia", "Evolução e Classificação dos Seres Vivos", ["Cladogramas", "Especiação", "Origem da vida", "Teorias evolutivas"]], ["Biologia", "Ecologia", ["Biomas e diversidade", "Cadeia alimentar", "Ciclos biogeoquímicos", "Dinâmica de populações", "Ecossistemas", "Fluxos de energia e de matéria", "Gráficos de relações ecológicas", "Impactos antrópicos", "Preservação e conservação ambiental", "Problemas ambientais", "Relações ecológicas", "Sucessão ecológica"]], ["Biologia", "Impactos e Problemas Ambientais", []], ["Biologia", "Genética", ["1° Lei de Mendel", "2° Lei de Mendel", "Biotecnologia", "Doenças genéticas", "Engenharia genética", "Fator Rh e Sistema ABO", "Fundamentos da genética", "Heredogramas", "Interações gênicas"]], ["Biologia", "Histologia", ["Tecido Muscular"]], ["Biologia", "Fisiologia Humana", ["Sistema cardiorrespiratório", "Sistema digestório", "Sistema endócrino", "Sistema excretor", "Sistema hematopoietico", "Sistema imunológico", "Sistema nervoso", "Sistema reprodutor"]], ["Biologia", "Botânica", ["Fisiologia vegetal", "Fitormônios", "Grupos vegetais", "Histologia vegetal", "Reprodução"]], ["Biologia", "Zoologia", ["Artrópodes e Equinodermos", "Cordados", "Primeiros filos"]], ["Biologia", "Doenças", ["Bacterioses", "Protozooses e verminoses", "Vírus e viroses"]], ["Biologia", "Microbiologia", []], ["Biologia", "Reprodução e Embriologia", []], ["Física", "Energia e suas Transformações", ["Fontes de energia", "Impactos Ambientais e Contexto Energético"]], ["Física", "Ferramental Matemático", ["Conversão de unidades", "Potência de 10 e notação científica", "Proporção entre grandezas físicas", "Triângulo retângulo na Física"]], ["Física", "Grandezas Físicas", []], ["Física", "Termologia I", ["Calorimetria", "Dilatação", "Termometria"]], ["Física", "Cinemática I", ["Fundamentos da cinemática", "Movimento uniforme", "Movimento uniformemente variado", "Queda livre e lançamento vertical"]], ["Física", "Ondulatória I", ["Espectro eletromagnético", "Fenômenos ondulatórios", "Propriedades das ondas"]], ["Física", "Dinâmica I", ["Força de atrito", "Força elástica e lei de Hooke", "Forças particulares", "Leis de Newton", "Polias fixas e móveis"]], ["Física", "Vetores", []], ["Física", "Eletrostática", ["Campo e potencial elétrico", "Eletrização", "Força elétrica"]], ["Física", "Eletrodinâmica I", ["1º Lei de Ohm", "2º Lei de Ohm", "Amperímetro e voltímetro", "Circuitos elétricos", "Potência elétrica", "Tensão e corrente"]], ["Física", "Potência e Eficiência", []], ["Física", "Cinemática II", ["Acoplamento no MCU", "Cinemática vetorial", "Lançamento horizontal", "Lançamento oblíquo", "Movimento circular"]], ["Física", "Termologia II", ["Gases", "Termodinâmica"]], ["Física", "Dinâmica II", ["Dinâmica do MCU", "Plano inclinado"]], ["Física", "Dinâmica III", ["Colisões", "Energia cinética e mecânica", "Energia potencial elástica", "Energia potencial gravitacional", "Força elástica", "Impulso e quantidade de movimento", "Movimento Harmônico Simples"]], ["Física", "Estática", ["Equilíbrio de corpos"]], ["Física", "Hidrostática", ["Densidade", "Empuxo", "Pressão"]], ["Física", "Eletrodinâmica II", ["Associação de pilhas e baterias", "Geradores, receptores e capacitores", "Ponte de Wheatstone"]], ["Física", "Magnetismo e Eletromagnetismo", []], ["Física", "Óptica", ["Espelhos", "Fenômenos ópticos", "Lentes"]], ["Física", "Ondulatória II", ["Acústica"]], ["Física", "Gravitação", []], ["Física", "Física Moderna", ["Física nuclear", "Mecânica quântica", "Radiação de corpo negro", "Relatividade"]], ["Química", "Propriedades da Matéria", []], ["Química", "Processos de Separação de Misturas", []], ["Química", "Atomística", ["Alotropia", "Efeitos luminosos", "Leis ponderais", "Modelo atômico atual", "Modelos atômicos", "Propriedades atômicas"]], ["Química", "Estequiometria", ["Cálculos estequiométricos", "Variáveis no cálculo estequiométrico"]], ["Química", "Tabela Periódica e suas Propriedades", ["Elementos químicos", "Famílias e períodos", "Propriedades periódicas"]], ["Química", "Química Orgânica", ["Compostos orgânicos", "Funções orgânicas", "Isomeria", "Reações orgânicas"]], ["Química", "Ligações Químicas, Propriedades dos Compostos e Polaridade", ["Forças intermoleculares", "Ligações químicas", "Polaridade"]], ["Química", "Geometria Molecular", ["Arranjos geométricos espaciais", "Teoria da Repulsão dos Pares de Elétrons"]], ["Química", "Radioatividade", ["Decaimento radioativo", "Partículas", "Reações nucleares"]], ["Química", "Propriedades Coligativas", ["Crioscopia", "Osmoscopia", "Tonoscopia"]], ["Química", "Eletroquímica", ["Eletrólise", "Oxirredução", "Pilhas", "Reações"]], ["Química", "Química Ambiental", []], ["Química", "Química Inorgânica", ["Ácidos", "Bases", "Funções inorgânicas", "Ionização e dissociação iônica", "NOX", "Óxidos", "Reações inorgânicas", "Sais"]], ["Química", "Termoquímica", ["Equações termoquímicas", "Lei de Hess"]], ["Química", "Soluções", ["Concentração", "Diluição e mistura de soluções", "Dispersões"]], ["Química", "Equilíbrio Químico", []], ["Química", "Cinética Química", []], ["Química", "Reações Químicas", []], ["Química", "Gases e suas Transformações", []], ["Química", "Polímeros", []], ["Linguagens e Códigos", "Funções da Linguagem", []], ["Linguagens e Códigos", "Figuras de Linguagem", []], ["Linguagens e Códigos", "Tipologias Textuais", []], ["Linguagens e Códigos", "Gêneros Textuais", []], ["Linguagens e Códigos", "Campanhas Publicitárias, Anúncios e Influência", []], ["Linguagens e Códigos", "Crítica Social, Cultural e Artística", []], ["Linguagens e Códigos", "Variações Linguísticas", ["Normas linguísticas", "Patrimônio linguístico"]], ["Linguagens e Códigos", "Poemas e Poesias", []], ["Linguagens e Códigos", "Expressividade e Lirismo", []], ["Linguagens e Códigos", "Progressão Textual e Temática", []], ["Linguagens e Códigos", "Mecanismos de Coesão e Coerência", []], ["Linguagens e Códigos", "Intertextualidade", []], ["Linguagens e Códigos", "Charges e HQs", []], ["Linguagens e Códigos", "Literatura", ["Arcadismo", "Barroco", "Classicismo", "Contemporânea", "Leituras obrigatórias", "Modernismo", "Naturalismo", "Parnasianismo", "Quinhentismo", "Realismo", "Romantismo", "Simbolismo", "Trovadorismo"]], ["Linguagens e Códigos", "Artes", ["Cubismo", "Dadaísmo", "Expressionismo", "Futurismo", "Surrealismo"]], ["Linguagens e Códigos", "Movimentos Artísticos", []], ["Linguagens e Códigos", "Recursos Argumentativos", []], ["Linguagens e Códigos", "Estratégias Argumentativas", []], ["Linguagens e Códigos", "Gramática", ["Colocação Pronominal", "Concordância", "Fonética e Fonologia", "Morfologia", "Ortografia e Acentuação", "Pontuação", "Regência", "Semântica e Lexicologia", "Sintaxe"]], ["Linguagens e Códigos", "Tecnologias", []], ["Linguagens e Códigos", "Interpretação de Texto", []], ["Linguagens e Códigos", "Educação Física", []], ["Linguagens e Códigos", "Linguagem Corporal", []], ["Espanhol", "Interpretação de Texto", []], ["Espanhol", "Charges e HQ's", []], ["Espanhol", "Campanhas Publicitárias", []], ["Espanhol", "Vocabulário e Semântica", []], ["Inglês", "Vocabulário e Semântica", []], ["Inglês", "Interpretação de Texto", []], ["Inglês", "Charges e HQs", []], ["Inglês", "Campanhas Publicitárias", []], ["Matemática", "Fundamentos da Matemática", ["Divisão", "Frações", "Multiplicação", "Potenciação", "Radiciação", "Soma", "Subtração"]], ["Matemática", "Razão, Proporção e Regra de Três", ["Divisão diretamente proporcional", "Divisão inversamente proporcional", "Regra de 3 composta", "Regra de 3 simples"]], ["Matemática", "Razão e Proporção Avançada", ["Regra de 3 simples"]], ["Matemática", "Porcentagem", ["Aumento percentual", "Redução percentual", "Taxa percentual"]], ["Matemática", "Unidades de Medida e Conversões", []], ["Matemática", "Notação Cientifica", []], ["Matemática", "Escalas", ["Escalas lineares", "Escalas superficiais", "Escalas volumétricas"]], ["Matemática", "Vazão", []], ["Matemática", "Matemática Financeira", ["Aumentos", "Descontos", "Juros compostos", "Juros Simples", "Taxa percentual"]], ["Matemática", "Gráficos e Tabelas", ["Gráficos", "Tabelas"]], ["Matemática", "Estatística", ["Desvio padrão e variância", "Medidas de tendência central"]], ["Matemática", "Conjuntos", []], ["Matemática", "Álgebra", ["Números complexos", "Polinômios"]], ["Matemática", "Inequações", []], ["Matemática", "Sistemas e Equações", ["Escalonamento", "Primeiro grau", "Segundo grau"]], ["Matemática", "Função do Primeiro Grau", []], ["Matemática", "Progressão Aritmética", ["Soma dos termos", "Termo geral"]], ["Matemática", "Sequências Lógicas", []], ["Matemática", "Progressão Geométrica", []], ["Matemática", "Função do Segundo Grau", []], ["Matemática", "Geometria Plana", ["Ângulos", "Área e perímetro", "Circunferências e arcos", "Polígonos e semelhança", "Razões trigonométricas"]], ["Matemática", "Trigonometria", []], ["Matemática", "Geometria Espacial", ["Poliedros", "Projeção ortogonal"]], ["Matemática", "Geometria Analítica", ["Circunferência", "Plano cartesiano", "Reta"]], ["Matemática", "Análise Combinatória", ["Arranjo", "Combinação", "Permutação", "PFC"]], ["Matemática", "Probabilidade", []], ["Matemática", "Função Exponencial e Logarítmica", []], ["Matemática", "Função Trigonométrica", []], ["Matemática", "Logaritmo", []], ["Matemática", "Matrizes", []], ["Matemática", "Lógica", []], ["Matemática", "MMC e MDC", []], ["Matemática", "Conjuntos Numéricos", []], ["Matemática", "Função Racional", []], ["Redação", "Cadernos de Aprimoramento Textual", []], ["Intensivo Revisional", "Matemática", []], ["Intensivo Revisional", "Biologia", []], ["Intensivo Revisional", "Química", []], ["Intensivo Revisional", "Física", []]]};   // prompt e base de tópicos, gerados por upq/artefato.py
 const BASE = new Map(DADOS.base.map(([d, t, a]) => [d + '\u0000' + t, a]));
 const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'No banco'];
 const DIFICULDADE = {1: 'Muito Fácil', 2: 'Fácil', 3: 'Média', 4: 'Difícil', 5: 'Muito Difícil'};
@@ -1110,6 +1488,8 @@ function checarLatex(campo, texto, erros, avisos) {
 }
 // Negrito e centralização do PDF (marcados no texto extraído) têm de estar na transcrição
 // (igual a conferir_formatacao em upq/validar.py).
+// aviso que a IA às vezes escreve no lugar de um trecho que não leu (igual a upq/validar.py)
+const RE_NAO_LIDO = /n[ãa]o\s+(?:[ée]\s+)?leg[ií]ve|ileg[ií]ve|n[ãa]o\s+(?:foi\s+)?(?:capturad|extra[ií]d|identificad)|n[ãa]o\s+dispon[ií]vel\s+no\s+texto|\((?:express[ãa]o|f[óo]rmula)[^)]*\)/i;
 const soAlnum = t => semAcento(String(t).replace(/\\[a-zA-Z]+|<[^>]+>/g, ' ')).replace(/[^a-z0-9]/g, '');
 function trechosNegrito(t) {
   const partes = [...t.matchAll(/\*\*([\s\S]+?)\*\*/g), ...t.matchAll(/<strong>([\s\S]+?)<\/strong>/g), ...t.matchAll(/<thead>([\s\S]*?)<\/thead>/g)].map(m => m[1]);
@@ -1174,6 +1554,10 @@ function validarQuestao(q, lista) {
   if (letras.join('') !== 'ABCDE'.slice(0, letras.length) || letras.length < 2) erros.push(`alternativas fora de ordem ou insuficientes: ${letras.join(', ')}`);
   if (!q.gabarito) erros.push('sem gabarito: a tabela do fim da lista não foi lida (preencha na edição)');
   else if (!letras.includes(q.gabarito)) erros.push(`gabarito ${q.gabarito} não está entre as alternativas`);
+  for (const [nome, t] of [['enunciado', q.enunciado], ...Object.entries(q.alternativas || {}).map(([l, t]) => [`alternativa ${l}`, t])]) {
+    const achado = String(t || '').match(RE_NAO_LIDO);
+    if (achado) erros.push(`${nome}: trecho não transcrito (a IA escreveu «${achado[0]}»)`);
+  }
   for (const [l, t] of Object.entries(q.alternativas || {})) {
     if (!String(t).trim()) erros.push(`alternativa ${l} vazia`);
     else if (/^\(?[a-eA-E][).]\s/.test(t)) avisos.push(`alternativa ${l} parece começar com a letra`);
@@ -1198,9 +1582,24 @@ function validarQuestao(q, lista) {
   if (q.lidaSemImagem && porOcr.size && !comoImagem.length && temTabela) avisos.push(`tabela lida por OCR do print (${[...porOcr].join(', ')}): confira os valores com o original`);
   const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
-  erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
-  erros.push(...conferirFormatacao(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
-  erros.push(...conferirRepeticoes(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
+  // Fórmula em imagem no PDF: tem de estar na transcrição (a lida por OCR, com o mesmo conteúdo)
+  const transcrito = [q.enunciado, ...Object.values(q.alternativas || {})].join('\n');
+  const marcas = marcasFormula(q.textoPdf);
+  if (marcas.length) {
+    const tr = soAlnum(transcrito), info = new Map((q.formulas || []).map(f => [f.nome, f]));
+    const naoLidas = marcas.filter(f => !f.latex).map(f => f.nome);
+    if (naoLidas.length && q.lidaSemImagem)
+      erros.push(`fórmula em imagem não lida (${naoLidas.join(', ')}): o PDF traz a fórmula só como imagem e esta leitura foi feita sem imagem nem leitor de fórmulas. Clique em Reprocessar.`);
+    const faltam = marcas.filter(f => f.latex && soAlnum(f.latex) && !tr.includes(soAlnum(f.latex)));
+    if (faltam.length) erros.push(`fórmula do PDF ausente na transcrição: ${faltam.slice(0, 3).map(f => `${f.nome} ($${f.latex}$)`).join('; ')}`);
+    const lidas = marcas.filter(f => f.latex), incertas = lidas.filter(f => (info.get(f.nome)?.votos ?? 2) < 2);
+    if (incertas.length) avisos.push(`fórmula lida da imagem com incerteza (${incertas.map(f => f.nome).join(', ')}): confira com o original`);
+    else if (lidas.length && q.lidaSemImagem) avisos.push(`fórmula lida da imagem por OCR (${lidas.map(f => f.nome).join(', ')}): confira com o original`);
+  }
+  const pdfSemMarcas = semMarcasFormula(q.textoPdf);
+  erros.push(...conferirComPdf(pdfSemMarcas, transcrito));
+  erros.push(...conferirFormatacao(pdfSemMarcas, transcrito));
+  erros.push(...conferirRepeticoes(pdfSemMarcas, transcrito));
   if (q.revisar && !q.revisada) avisos.unshift(`IA pediu revisão: ${q.observacoes || '(sem motivo)'}`);
   if (q.revisada) return {erros, avisos: []};
   return {erros, avisos};
@@ -1250,6 +1649,9 @@ informados no ponto em que o texto se refere a elas). Figura marcada como TABELA
 marca [TABELA DA FIGURA NOME — lida por OCR], transcreva essas linhas como tabela nesse ponto (só
 corrija erros óbvios de OCR) e não use a figura; sem essa marca, não invente nada: não use a figura,
 não escreva a tabela e marque revisar = true.
+Fórmula que no PDF é imagem vem como ⟦FÓRMULA NOME = $LaTeX$⟧ (lida da imagem por OCR de fórmula):
+use esse LaTeX nesse ponto (só corrija erro evidente de leitura). ⟦FÓRMULA NOME⟧ sem LaTeX: não houve
+leitura; não invente nem escreva aviso no lugar: deixe vazio e marque revisar = true.
 Marque revisar = true sempre que uma fórmula,
 expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
 function porChamada() { return comImagens() ? (cap.limites?.images ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 2) : 5; }
@@ -1436,7 +1838,8 @@ function normalizarIA(r, q, ctx) {
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), tabelasOcr: Object.keys(q.ocr || {}), revisar: !!r.revisar || !oficial,
+    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), tabelasOcr: Object.keys(q.ocr || {}),
+    formulas: (q.formulas || []).map(f => ({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, ...(f.asset ? {asset: f.asset} : {})})), revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -1685,11 +2088,50 @@ async function lerTabelasPorOcr(job) {
   for (const q of job.m.questoes) if (q.ocr && !q.ocrNoTexto) { q.textoPdf = comTabelasOcr(q.textoPdf, q.figuras, q.ocr); q.ocrNoTexto = true; }
 }
 
+// ============================================================ fórmula em imagem → LaTeX
+// Fórmulas que o PDF traz como imagem (sem texto) chegam do recorte como ⟦FÓRMULA NOME⟧ no texto da
+// questão, com o recorte da fórmula. Sem imagem para o Claude, o próprio app lê cada uma (pix2tex,
+// arquivos publicados com a página em formula/) e o texto passa a ⟦FÓRMULA NOME = $LaTeX$⟧.
+const formula = {estado: 'não usado', erro: null, carregando: null};
+async function leitorFormulas() {
+  if (formula.carregando) return formula.carregando;
+  formula.estado = 'carregando';
+  formula.carregando = UPQFormulas.carregar(urlLocal('formula/'))
+    .then(l => { formula.estado = 'pronto'; formula.erro = null; return l; })
+    .catch(e => { formula.estado = 'falhou'; formula.erro = e?.message || String(e); formula.carregando = null; throw e; });
+  return formula.carregando;
+}
+const RE_MARCA_FORMULA = /⟦FÓRMULA ([A-Za-z0-9_]+)(?: = \$([^⟧]*?)\$)?⟧/g;
+const marcasFormula = t => [...String(t || '').matchAll(RE_MARCA_FORMULA)].map(m => ({nome: m[1], latex: m[2] || null}));
+// texto do PDF para conferências: a marca vira o conteúdo da fórmula (sem os comandos LaTeX)
+const semMarcasFormula = t => String(t || '').replace(RE_MARCA_FORMULA, (m0, n, lx) => lx ? ' ' + lx.replace(/\\[a-zA-Z]+/g, ' ') + ' ' : ' ');
+function comFormulas(texto, formulas) {
+  const por = new Map((formulas || []).filter(f => f.latex).map(f => [f.nome, f.latex]));
+  return String(texto || '').replace(RE_MARCA_FORMULA, (m0, nome, lx) => por.has(nome) ? `⟦FÓRMULA ${nome} = $${por.get(nome)}$⟧` : m0);
+}
+async function lerFormula(f) {
+  const leitor = await leitorFormulas();
+  const r = await leitor.ler(f.blob);
+  return r.latex ? {latex: r.latex, votos: r.votos, de: r.de} : null;
+}
+async function lerFormulasPorOcr(job) {
+  const alvos = job.m.questoes.flatMap(q => (q.formulas || []).filter(f => !f.latex && f.blob).map(f => [q, f]));
+  if (alvos.length && formula.estado !== 'pronto') atualizar(job, {mensagem: `${alvos.length} fórmula(s) em imagem no PDF. Carregando o leitor de fórmulas (≈85 MB na primeira vez)…`});
+  let feitas = 0;
+  for (const [q, f] of alvos) {
+    atualizar(job, {mensagem: `Lendo fórmulas que estão como imagem no PDF: ${++feitas} de ${alvos.length}…`});
+    try { Object.assign(f, await lerFormula(f) || {}); } catch (e) { console.warn('leitor de fórmulas indisponível', e); break; }
+  }
+  for (const q of job.m.questoes) if (q.formulas?.length) q.textoPdf = comFormulas(q.textoPdf, q.formulas);
+}
+
 // ============================================================ reprocessamento de questões com erro
 // Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
 // corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
 // "sem gabarito" e "recorte incompleto" não se resolvem reprocessando; tabela em imagem só com leitura por imagem
-const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e) && !(/os dados só existem na imagem/.test(e) && !comImagens() && ocr.estado === 'falhou'));
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e)
+  && !(/os dados só existem na imagem/.test(e) && !comImagens() && ocr.estado === 'falhou')
+  && !(/^fórmula em imagem não lida/.test(e) && !comImagens() && formula.estado === 'falhou'));
 function comCorrecao(q, erros, ctx) {
   const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
   return {...q, correcao: erros, assuntosValidos, anterior: q.enunciado || null};
@@ -1763,8 +2205,16 @@ async function reprocessarQuestoes(qs) {
           for (const f of q.figuras.filter(f => f.tabela)) { try { const l = await ocrDaFigura(await baixarImagem(f.asset)); if (l) lidas[f.nome] = l; } catch (e) { console.warn('OCR', e); } }
           if (Object.keys(lidas).length) q = {...q, ocr: lidas, textoPdf: comTabelasOcr(q.textoPdf, q.figuras, lidas)};
         }
+        if (!comImagens() && (q.formulas || []).some(f => !f.latex && f.asset)) {   // sem imagem: lê as fórmulas guardadas
+          const formulas = [];
+          for (const f of q.formulas) {
+            if (f.latex || !f.asset) { formulas.push(f); continue; }
+            try { formulas.push({...f, ...(await lerFormula({blob: await baixarImagem(f.asset)}) || {})}); } catch (e) { console.warn('fórmula', e); formulas.push(f); }
+          }
+          q = {...q, formulas, textoPdf: comFormulas(q.textoPdf, formulas)};
+        }
         itens.push({q, erros: errosReprocessaveis(q0), imagem: comImagens() ? await baixarImagem(q.imagem) : null,
-        manter: {imagem: q.imagem, figuras: q.figuras, gabaritoRecorte: q.gabaritoRecorte || null}});
+        manter: {imagem: q.imagem, figuras: q.figuras, formulas: q.formulas || [], gabaritoRecorte: q.gabaritoRecorte || null}});
       }
       const melhores = await rodadaCorrecao(itens, ctx, (f) => toast(`Reprocessando: ${feitas + f} de ${qs.length}…`));
       feitas += grupo.length;
@@ -1806,7 +2256,7 @@ async function processar(job, {reprocessar = false} = {}) {
     const m = job.m;
     if (!job.ctx) {
       if (!comImagens()) { atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: 'Testando se o Claude recebe imagens nesta visualização…'}); await sondarImagens(); }
-      if (!comImagens()) await lerTabelasPorOcr(job);
+      if (!comImagens()) { await lerTabelasPorOcr(job); await lerFormulasPorOcr(job); }
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).
@@ -1902,9 +2352,11 @@ async function salvarNoBanco(job) {
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
     for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    const formulas = [];
+    for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const recGab = m.gabaritoRecortes?.[nn(q.numero)];
     const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
-    const final = {...base, imagem: up.id, figuras, gabaritoRecorte};
+    const final = {...base, imagem: up.id, figuras, formulas, gabaritoRecorte};
     Object.assign(final, validarQuestao(final, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
     questoes.push(final);
     atualizar(job, {progresso: ++feitas / m.questoes.length});
@@ -1918,7 +2370,7 @@ async function salvarNoBanco(job) {
   for (const [pid, parte] of estado.partes)   // reprocessamento com menos questões: some com as partes que sobraram
     if (parte.importacao === id && parte.parte >= nPartes) await cap.db.doc(`partes/${pid}`).delete();
   await cap.db.doc(`importacoes/${id}`).set({arquivo: m.arquivo, hash: m.hash, titulo: m.titulo, tipo: m.tipo,
-    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito, gabaritoOrigem: ctx.gabaritoOrigem, gabaritoImagem, modoLeitura: comImagens() ? 'imagem' : 'texto', testeImagem: cap.sonda || null, ocrEstado: ocr.estado, ocrErro: ocr.erro,
+    disciplina: ctx.disciplina, topico: ctx.topico, tags, total: questoes.length, etapas: m.etapas, gabarito: ctx.gabarito, gabaritoOrigem: ctx.gabaritoOrigem, gabaritoImagem, modoLeitura: comImagens() ? 'imagem' : 'texto', testeImagem: cap.sonda || null, ocrEstado: ocr.estado, ocrErro: ocr.erro, formulaEstado: formula.estado, formulaErro: formula.erro,
     classificacao: ctx.classificacao, criado_em: estado.importacoes.get(id)?.criado_em || agora(), atualizado_em: agora()});
   const padrao = [...estado.listas.entries()].find(([, l]) => l.origem === id);
   const listaId = padrao ? padrao[0] : id;
@@ -1973,7 +2425,7 @@ function telaEnviar() {
     <div class="cab"><h1>Enviar lista</h1></div>
     ${!cap.prontas ? '<div class="aviso-topo info">Conectando ao claude.ai…</div>' : ''}
     ${semClaude ? `<div class="aviso-topo">O Claude não respondeu nesta visualização (capacidade de IA ${window.claude?.use ? 'recusada ou indisponível' : 'ausente: a página não está dentro do claude.ai'}). Abra o artefato em claude.ai no navegador (Chrome/Edge), entre na sua conta e recarregue a página.</div>` : ''}
-    ${soTexto ? `<div class="aviso-topo info">${cap.sonda?.estado === 'sem imagem' ? 'O teste confirmou: nesta conta/visualização o Claude não recebe imagens.' : cap.sonda?.estado === 'testando' ? 'Testando se o Claude recebe imagens…' : 'A plataforma não anunciou envio de imagens; o app vai testar de verdade ao processar a primeira lista.'} Sem imagem, a transcrição usa o texto do PDF, e tabelas/figuras que só existem como imagem ficam com erro para leitura por imagem.</div>` : ''}
+    ${soTexto ? `<div class="aviso-topo info">${cap.sonda?.estado === 'sem imagem' ? 'O teste confirmou: nesta conta/visualização o Claude não recebe imagens.' : cap.sonda?.estado === 'testando' ? 'Testando se o Claude recebe imagens…' : 'A plataforma não anunciou envio de imagens; o app vai testar de verdade ao processar a primeira lista.'} Sem imagem, a transcrição usa o texto do PDF; tabelas e fórmulas coladas como imagem são lidas aqui no navegador (OCR) e vão com aviso para conferência.</div>` : ''}
     ${cap.prontas && cap.sample ? `<details class="painel diag"><summary>Diagnóstico da conexão com o Claude</summary><ul class="sem-tex">
       <li>Claude (sample): disponível</li>
       <li>Limites anunciados: ${cap.limites ? esc(JSON.stringify(cap.limites)) : `não informados${cap.limitesErro ? ` (erro: ${esc(cap.limitesErro)})` : ''}`}</li>
@@ -1981,9 +2433,11 @@ function telaEnviar() {
       <li>Teste real com imagem: ${!cap.sonda ? 'ainda não feito' : esc(cap.sonda.estado) + (cap.sonda.codigo ? ` · código ${esc(cap.sonda.codigo)}` : '') + (cap.sonda.mensagem ? ` · ${esc(cap.sonda.mensagem)}` : '')}</li>
       <li>Modo em uso: ${comImagens() ? 'leitura pela imagem' : 'só texto'}</li>
       <li>OCR de tabelas em imagem (usado no modo só texto): ${esc(ocr.estado)}${ocr.erro ? ` · ${esc(ocr.erro)}` : ''}</li>
+      <li>Leitor de fórmulas em imagem → LaTeX (modo só texto): ${esc(formula.estado)}${formula.erro ? ` · ${esc(formula.erro)}` : ''}</li>
       <li>Navegador: ${esc(navigator.userAgent)}</li></ul>
       <div class="form-linha"><button class="botao" id="testar-imagem" ${cap.sonda?.estado === 'testando' ? 'disabled' : ''}>Testar leitura de imagem agora</button>
-      <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button></div></details>` : ''}
+      <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button>
+      <button class="botao" id="testar-formulas" ${formula.estado === 'carregando' ? 'disabled' : ''}>Testar leitor de fórmulas</button></div></details>` : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
@@ -1994,6 +2448,7 @@ function telaEnviar() {
     <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${porChamada()} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
     <div class="envios" id="envios"></div>`;
   document.getElementById('testar-imagem')?.addEventListener('click', () => sondarImagens(true));
+  document.getElementById('testar-formulas')?.addEventListener('click', async () => { formula.carregando = null; const pr = leitorFormulas(); desenhar(); try { await pr; toast('Leitor de fórmulas pronto.'); } catch (e) { toast(`Leitor de fórmulas falhou: ${e.message || e}`); } desenhar(); });
   document.getElementById('testar-ocr')?.addEventListener('click', async () => { ocr.estado = 'carregando'; ocr.carregando = null; ocr.worker = null; desenhar(); try { await workerOcr(); toast('OCR pronto.'); } catch (e) { toast(`OCR falhou: ${e.message || e}`); } desenhar(); });
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
   input.addEventListener('change', () => { receber(input.files); input.value = ''; });
@@ -2255,7 +2710,7 @@ async function excluirQuestoes(ids) {
       const resto = parte.questoes.filter(q => !sai.includes(q));
       if (resto.length) await cap.db.doc(`partes/${pid}`).set({...parte, questoes: resto});
       else await cap.db.doc(`partes/${pid}`).delete();
-      for (const q of sai) imagens.push(q.imagem, q.gabaritoRecorte, ...(q.figuras || []).map(f => f.asset));
+      for (const q of sai) imagens.push(q.imagem, q.gabaritoRecorte, ...(q.figuras || []).map(f => f.asset), ...(q.formulas || []).map(f => f.asset));
     }
     const tocadas = new Set([...porParte.values()].map(x => x.parte.importacao));
     for (const idImp of tocadas) {
