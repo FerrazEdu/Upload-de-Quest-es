@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 
+from . import referencias
 from .modelo import Figura, Lista, Questao, QuestaoIA, titulo_padrao
 
 
@@ -35,6 +36,8 @@ def montar(pasta: Path) -> Lista:
         ia = QuestaoIA.model_validate_json(arq.read_text(encoding="utf-8"))
         observacoes = [ia.observacoes] if ia.observacoes else []
         oficial = gabarito.get(f"{q['numero']:02d}")
+        if not oficial:   # o gabarito vem só da tabela do fim da lista, nunca da IA
+            raise ValueError(f"Q{q['numero']:02d} sem gabarito na tabela do PDF: preencha ia/lista.json")
         if oficial and oficial != ia.gabarito:
             observacoes.append(f"IA indicou {ia.gabarito}, gabarito oficial é {oficial}")
         questoes.append(Questao(
@@ -48,14 +51,14 @@ def montar(pasta: Path) -> Lista:
             assuntos=ia.assuntos,
             etapa=q.get("etapa"),
             dificuldade=ia.dificuldade,
-            enunciado=ia.enunciado.strip(),
+            enunciado=referencias.formatar(ia.enunciado.strip()),
             alternativas={a.letra: a.texto.strip() for a in ia.alternativas},
-            gabarito=oficial or ia.gabarito,
+            gabarito=oficial,
             figuras=[Figura(nome=f["nome"], arquivo=f["arquivo"]) for f in q["figuras"]],
             pagina=q["pagina"],
             imagem=q["imagem"],
-            revisar=ia.revisar or bool(oficial and oficial != ia.gabarito) or not oficial,
-            observacoes="; ".join(observacoes) or (None if oficial else "gabarito oficial não encontrado"),
+            revisar=ia.revisar or oficial != ia.gabarito,
+            observacoes="; ".join(observacoes) or None,
         ))
 
     lista = Lista(

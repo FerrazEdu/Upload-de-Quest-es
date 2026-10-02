@@ -29,12 +29,16 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
 5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.
 6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)
    usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo
-   (o que a figura mostra, em até 15 palavras). Créditos/legendas da figura ("Fonte: UNICAMP,
-   2023.") são transcritos logo abaixo, em *itálico* — exceto quando já aparecem DENTRO da
-   imagem recortada da figura (confira a imagem da figura): aí não repita. Não descreva a
-   figura no enunciado nem invente dados que só ela mostra.
+   (o que a figura mostra, em até 15 palavras). Créditos da figura ("Fonte: UNICAMP, 2023.")
+   são transcritos logo abaixo dela, como referência (regra 8) — exceto quando já aparecem
+   DENTRO da imagem recortada da figura (confira a imagem da figura): aí não repita. Não
+   descreva a figura no enunciado nem invente dados que só ela mostra.
 7. Não transcreva: número da questão, cabeçalho com banca/ano, letras das alternativas,
    cabeçalho/rodapé da página, marcas d'água.
+8. Referências (créditos de figura e fontes de texto: "Fonte: ...", "Disponível em: ...
+   Acesso em: ...", "Adaptado de ...") ficam num parágrafo próprio, no ponto onde aparecem,
+   com o texto literal (parênteses inclusive, URL como texto simples), neste formato exato:
+   <p style="text-align: right;"><sub>Fonte: UNICAMP, 2014.</sub></p>
 """
 
 ABERTURA_UMA = """Você transcreve questões de listas de exercícios em PDF para o banco de questões

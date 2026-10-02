@@ -262,7 +262,7 @@
       ],
       "etapa": "Treinamento",
       "dificuldade": 3,
-      "enunciado": "Movimento circular uniforme é o movimento que ocorre no plano, com velocidade escalar constante ao longo de uma trajetória circular. Apesar do termo uniforme, esse movimento é acelerado, uma vez que há mudança na direção do vetor velocidade. Isso acontece por conta da existência de uma aceleração de direção radial, cujo sentido aponta para o centro da curva, como ilustra a figura a seguir.\n\n![Carro em rotatória com raio r e aceleração centrípeta apontando para o centro](figura:Q10_fig1)\n\n*(Disponível em: <https://brasilescola.uol.com.br/fisica/movimento-circular-uniforme-mcu.htm>. Acesso em: 19 out. 2021.)*\n\nNo exemplo da figura, um veículo entra na rotatória de raio $r = 4\\ \\text{m}$, com velocidade constante $v = 36\\ \\text{km/h}$.\n\nConsiderando os dados apresentados e $\\pi = 3{,}14$, assinale a alternativa que apresenta, correta e respectivamente, a velocidade angular do veículo, a aceleração centrípeta e o período do movimento.",
+      "enunciado": "Movimento circular uniforme é o movimento que ocorre no plano, com velocidade escalar constante ao longo de uma trajetória circular. Apesar do termo uniforme, esse movimento é acelerado, uma vez que há mudança na direção do vetor velocidade. Isso acontece por conta da existência de uma aceleração de direção radial, cujo sentido aponta para o centro da curva, como ilustra a figura a seguir.\n\n![Carro em rotatória com raio r e aceleração centrípeta apontando para o centro](figura:Q10_fig1)\n\n<p style=\"text-align: right;\"><sub>(Disponível em: https://brasilescola.uol.com.br/fisica/movimento-circular-uniforme-mcu.htm. Acesso em: 19 out. 2021.)</sub></p>\n\nNo exemplo da figura, um veículo entra na rotatória de raio $r = 4\\ \\text{m}$, com velocidade constante $v = 36\\ \\text{km/h}$.\n\nConsiderando os dados apresentados e $\\pi = 3{,}14$, assinale a alternativa que apresenta, correta e respectivamente, a velocidade angular do veículo, a aceleração centrípeta e o período do movimento.",
       "alternativas": {
         "A": "$\\omega = 2{,}5\\ \\text{rad/s}$; $a_c = 02{,}55\\ \\text{m/s}^2$; $T = 25{,}0\\ \\text{s}$",
         "B": "$\\omega = 2{,}5\\ \\text{rad/s}$; $a_c = 25{,}00\\ \\text{m/s}^2$; $T = 02{,}5\\ \\text{s}$",
@@ -354,7 +354,7 @@
       ],
       "etapa": "Treinamento",
       "dificuldade": 2,
-      "enunciado": "A centrifuga de mel é um equipamento composto de um tambor com cesto para os favos de mel e um corredor para a saída do mel. Os favos são colocados no cesto e centrifugados manualmente.\n\nA imagem a seguir ilustra um modelo dessa centrífuga.\n\n![Centrífuga de mel antiga com tambor de madeira, manivela e estrutura de madeira](figura:Q13_fig1)\n\n*(Centrifuga de Mel. Museu Histórico de Entre Rios, Distrito de Guarapuava. Disponível em: https://suabios.com.br/museu-historico/objetos-historicos. Acesso em: 16 jul. 2025.)*\n\nConsiderando a dinâmica do movimento circular, assinale a alternativa correta.",
+      "enunciado": "A centrifuga de mel é um equipamento composto de um tambor com cesto para os favos de mel e um corredor para a saída do mel. Os favos são colocados no cesto e centrifugados manualmente.\n\nA imagem a seguir ilustra um modelo dessa centrífuga.\n\n![Centrífuga de mel antiga com tambor de madeira, manivela e estrutura de madeira](figura:Q13_fig1)\n\n<p style=\"text-align: right;\"><sub>(Centrifuga de Mel. Museu Histórico de Entre Rios, Distrito de Guarapuava. Disponível em: https://suabios.com.br/museu-historico/objetos-historicos. Acesso em: 16 jul. 2025.)</sub></p>\n\nConsiderando a dinâmica do movimento circular, assinale a alternativa correta.",
       "alternativas": {
         "A": "A aceleração centrípeta é definida como a variação de velocidade do tambor por unidade de tempo.",
         "B": "A frequência (f) registra a quantidade de voltas que uma gota de mel descreve ao final do processo.",
@@ -440,7 +440,7 @@
       ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
-      "enunciado": "As máquinas cortadeiras e colheitadeiras de cana-de-açúcar podem substituir dezenas de trabalhadores rurais, o que pode alterar de forma significativa a relação de trabalho nas lavouras de cana-de-açúcar. A pá cortadeira da máquina ilustrada na figura abaixo gira em movimento circular uniforme a uma frequência de $300\\ \\text{rpm}$.\n\nA velocidade de um ponto extremo P da pá vale\n\n(Considere $\\pi \\cong 3$)\n\n![Pá cortadeira em forma de estrela com ponto P na borda e raio R = 60 cm](figura:Q16_fig1)\n\n*Fonte: UNICAMP, 2014.*",
+      "enunciado": "As máquinas cortadeiras e colheitadeiras de cana-de-açúcar podem substituir dezenas de trabalhadores rurais, o que pode alterar de forma significativa a relação de trabalho nas lavouras de cana-de-açúcar. A pá cortadeira da máquina ilustrada na figura abaixo gira em movimento circular uniforme a uma frequência de $300\\ \\text{rpm}$.\n\nA velocidade de um ponto extremo P da pá vale\n\n(Considere $\\pi \\cong 3$)\n\n![Pá cortadeira em forma de estrela com ponto P na borda e raio R = 60 cm](figura:Q16_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: UNICAMP, 2014.</sub></p>",
       "alternativas": {
         "A": "$9\\ \\text{m/s}$.",
         "B": "$15\\ \\text{m/s}$.",
@@ -526,7 +526,7 @@
       ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
-      "enunciado": "O plasma sanguíneo é a parte líquida do sangue e corresponde à maior parte do seu volume. Nele, proteínas, sais minerais, dióxido de carbono e outras substâncias estão dissolvidos em água. Para separar o plasma, o método de centrifugação é comumente aplicado.\n\nAdmita uma centrífuga de laboratório, girando com frequência de $60\\ \\text{Hz}$.\n\n![Pessoa colocando tubos de amostra no rotor circular de uma centrífuga de laboratório](figura:Q19_fig1)\n\n*Fonte: USS, 2022.*\n\nSe considerarmos que as amostras periféricas se encontram a $15\\ \\text{cm}$ do centro de rotação, a velocidade linear, em m/s, é de aproximadamente:",
+      "enunciado": "O plasma sanguíneo é a parte líquida do sangue e corresponde à maior parte do seu volume. Nele, proteínas, sais minerais, dióxido de carbono e outras substâncias estão dissolvidos em água. Para separar o plasma, o método de centrifugação é comumente aplicado.\n\nAdmita uma centrífuga de laboratório, girando com frequência de $60\\ \\text{Hz}$.\n\n![Pessoa colocando tubos de amostra no rotor circular de uma centrífuga de laboratório](figura:Q19_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: USS, 2022.</sub></p>\n\nSe considerarmos que as amostras periféricas se encontram a $15\\ \\text{cm}$ do centro de rotação, a velocidade linear, em m/s, é de aproximadamente:",
       "alternativas": {
         "A": "$4{,}2$",
         "B": "$9{,}0$",
@@ -585,7 +585,7 @@
       ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
-      "enunciado": "Um parafuso está encravado na periferia de um disco giratório horizontal de raio $1\\ \\text{m}$. A figura abaixo ilustra as posições do parafuso em tempos sucessivos.\n\n![Quatro discos com o parafuso em posições sucessivas e uma seta abaixo de cada um](figura:Q21_fig1)\n\n*Fonte: UECE, 2012.*\n\nUm engenheiro precisa monitorar a passagem do parafuso por uma dada posição, como a indicada pela seta. Para isso, faz uso de uma luz estroboscópica, que acende durante curtos intervalos de tempo a uma frequência de $2\\ \\text{kHz}$. Para que haja sincronismo entre a passagem do parafuso pela posição indicada pela seta e a lâmpada, a velocidade escalar do parafuso em m/s deve ser aproximadamente",
+      "enunciado": "Um parafuso está encravado na periferia de um disco giratório horizontal de raio $1\\ \\text{m}$. A figura abaixo ilustra as posições do parafuso em tempos sucessivos.\n\n![Quatro discos com o parafuso em posições sucessivas e uma seta abaixo de cada um](figura:Q21_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: UECE, 2012.</sub></p>\n\nUm engenheiro precisa monitorar a passagem do parafuso por uma dada posição, como a indicada pela seta. Para isso, faz uso de uma luz estroboscópica, que acende durante curtos intervalos de tempo a uma frequência de $2\\ \\text{kHz}$. Para que haja sincronismo entre a passagem do parafuso pela posição indicada pela seta e a lâmpada, a velocidade escalar do parafuso em m/s deve ser aproximadamente",
       "alternativas": {
         "A": "$3{,}14 \\times 10^{3}$.",
         "B": "$12{,}56 \\times 10^{3}$.",
@@ -617,7 +617,7 @@
       ],
       "etapa": "Aprofundamento",
       "dificuldade": 3,
-      "enunciado": "A imagem a seguir representa uma rotatória com raio $R$ na cidade de Palmas - TO.\n\n![Circunferência da rotatória com o raio R indicado](figura:Q22_fig1)\n\n*Fonte: UNITINS, 2025.*\n\nDado: $\\pi = 3$ e $R = 20\\ \\text{m}$.\n\nUm carro percorreu $420\\ \\text{m}$ em volta da rotatória com velocidade constante de $36\\ \\text{km/h}$, e sua trajetória é representada fielmente pela imagem. Com base nisso, julgue as proposições a seguir.\n\nI. A velocidade angular é $0{,}5\\ \\text{rad/s}$.\n\nII. A frequência do movimento é $1/12\\ \\text{Hz}$.\n\nIII. A distância percorrida pelo carro é $3{,}5$ vezes o comprimento da rotatória.\n\nÉ correto o que se afirma em",
+      "enunciado": "A imagem a seguir representa uma rotatória com raio $R$ na cidade de Palmas - TO.\n\n![Circunferência da rotatória com o raio R indicado](figura:Q22_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: UNITINS, 2025.</sub></p>\n\nDado: $\\pi = 3$ e $R = 20\\ \\text{m}$.\n\nUm carro percorreu $420\\ \\text{m}$ em volta da rotatória com velocidade constante de $36\\ \\text{km/h}$, e sua trajetória é representada fielmente pela imagem. Com base nisso, julgue as proposições a seguir.\n\nI. A velocidade angular é $0{,}5\\ \\text{rad/s}$.\n\nII. A frequência do movimento é $1/12\\ \\text{Hz}$.\n\nIII. A distância percorrida pelo carro é $3{,}5$ vezes o comprimento da rotatória.\n\nÉ correto o que se afirma em",
       "alternativas": {
         "A": "I apenas.",
         "B": "III apenas.",
@@ -703,7 +703,7 @@
       ],
       "etapa": "Desafios",
       "dificuldade": 4,
-      "enunciado": "A corrida é um dos esportes mais democráticos, afinal, basta um tênis adequado, uma roupa confortável e muita força de vontade. Sua prática garante uma melhor expectativa de vida, pois colabora no funcionamento cardíaco, na redução da pressão arterial e do colesterol LDL. Os amigos Beto e Vini são praticantes de corrida e costumam realizá-la em uma pista circular. Beto demora $48$ segundos para dar a volta completa na pista. Vini corre em sentido oposto e encontra Beto a cada $18$ segundos.\n\nO tempo em segundos que Vini demora para dar uma volta completa é:\n\n![Dois corredores em sentidos opostos sobre uma pista circular vermelha](figura:Q25_fig1)\n\n*Fonte: UPE, 2022.*",
+      "enunciado": "A corrida é um dos esportes mais democráticos, afinal, basta um tênis adequado, uma roupa confortável e muita força de vontade. Sua prática garante uma melhor expectativa de vida, pois colabora no funcionamento cardíaco, na redução da pressão arterial e do colesterol LDL. Os amigos Beto e Vini são praticantes de corrida e costumam realizá-la em uma pista circular. Beto demora $48$ segundos para dar a volta completa na pista. Vini corre em sentido oposto e encontra Beto a cada $18$ segundos.\n\nO tempo em segundos que Vini demora para dar uma volta completa é:\n\n![Dois corredores em sentidos opostos sobre uma pista circular vermelha](figura:Q25_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: UPE, 2022.</sub></p>",
       "alternativas": {
         "A": "$28{,}8$ segundos.",
         "B": "$29{,}6$ segundos.",
@@ -848,7 +848,7 @@
       ],
       "etapa": "Desafios",
       "dificuldade": 4,
-      "enunciado": "A figura a seguir representa a trajetória do movimento circular uniforme, realizado totalmente num plano vertical em um local onde há gravidade, em que um veículo está, durante todo o movimento, em contato com um trilho . Nessa figura estão assinaladas quatro posições (1, 2, 3 e 4). A posição 1 está diametralmente oposta à posição 3, assim como a posição 2 está em relação a 4. As posições 3 e 1 pertencem à linha tracejada na vertical (V) e, respectivamente, são a posição mais elevada e menos elevada da trajetória. Enquanto as posições 4 e 2 pertencem à linha tracejada na horizontal (H) e paralela ao solo.\n\n![Trilho circular vertical sobre o solo com as posições 1, 2, 3 e 4](figura:Q30_fig1)\n\n*Fonte: EEAR, 2024.*\n\nAssinale a alternativa que indica corretamente uma relação entre os módulos das reações normais ($N_1$, $N_2$, $N_3$ e $N_4$) em cada uma dessas posições ($N_1$ na posição 1, $N_2$ na posição 2, $N_3$ na posição 3 e $N_4$ na posição 4).",
+      "enunciado": "A figura a seguir representa a trajetória do movimento circular uniforme, realizado totalmente num plano vertical em um local onde há gravidade, em que um veículo está, durante todo o movimento, em contato com um trilho . Nessa figura estão assinaladas quatro posições (1, 2, 3 e 4). A posição 1 está diametralmente oposta à posição 3, assim como a posição 2 está em relação a 4. As posições 3 e 1 pertencem à linha tracejada na vertical (V) e, respectivamente, são a posição mais elevada e menos elevada da trajetória. Enquanto as posições 4 e 2 pertencem à linha tracejada na horizontal (H) e paralela ao solo.\n\n![Trilho circular vertical sobre o solo com as posições 1, 2, 3 e 4](figura:Q30_fig1)\n\n<p style=\"text-align: right;\"><sub>Fonte: EEAR, 2024.</sub></p>\n\nAssinale a alternativa que indica corretamente uma relação entre os módulos das reações normais ($N_1$, $N_2$, $N_3$ e $N_4$) em cada uma dessas posições ($N_1$ na posição 1, $N_2$ na posição 2, $N_3$ na posição 3 e $N_4$ na posição 4).",
       "alternativas": {
         "A": "$N_1 = N_2$ e $N_3 = N_4$",
         "B": "$N_1 > N_3$ e $N_4 = N_2$",
