@@ -1,0 +1,32 @@
+{
+  "numero": 15,
+  "instituicao": "EEAR",
+  "ano": 2023,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 3,
+  "enunciado": "Um móvel ao realizar um movimento circular uniforme em uma pista de raio igual a $6$ metros, percorre entre os tempos $t = 2\\ \\text{s}$ e $t = 5\\ \\text{s}$ a distância de $108$ metros.\n\nQual o período, em segundos, desse movimento?",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$\\frac{\\pi}{2}$"
+    },
+    {
+      "letra": "B",
+      "texto": "$\\frac{\\pi}{3}$"
+    },
+    {
+      "letra": "C",
+      "texto": "$\\frac{\\pi}{4}$"
+    },
+    {
+      "letra": "D",
+      "texto": "$\\frac{\\pi}{6}$"
+    }
+  ],
+  "gabarito": "B",
+  "explicacao": "No MCU a velocidade escalar é constante, então ela sai da distância percorrida no intervalo. Depois, o período vem de $v = \\frac{2\\pi R}{T}$.\n\nVelocidade escalar:\n\n$$v = \\frac{\\Delta s}{\\Delta t} = \\frac{108\\ \\text{m}}{(5 - 2)\\ \\text{s}} = 36\\ \\text{m/s}$$\n\nPeríodo:\n\n$$T = \\frac{2\\pi R}{v} = \\frac{2\\pi \\cdot 6}{36} = \\frac{\\pi}{3}\\ \\text{s}$$\n\n**Gabarito: B**",
+  "revisar": false,
+  "observacoes": null
+}

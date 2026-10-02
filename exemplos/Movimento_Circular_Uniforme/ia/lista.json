@@ -1,0 +1,44 @@
+{
+  "gabarito": {
+    "01": "C",
+    "02": "C",
+    "03": "D",
+    "04": "A",
+    "05": "B",
+    "06": "B",
+    "07": "C",
+    "08": "D",
+    "09": "D",
+    "10": "B",
+    "11": "C",
+    "12": "D",
+    "13": "E",
+    "14": "C",
+    "15": "B",
+    "16": "C",
+    "17": "C",
+    "18": "C",
+    "19": "D",
+    "20": "B",
+    "21": "B",
+    "22": "E",
+    "23": "D",
+    "24": "B",
+    "25": "A",
+    "26": "D",
+    "27": "E",
+    "28": "B",
+    "29": "D",
+    "30": "B"
+  },
+  "classificacao": {
+    "disciplina": "Física",
+    "topico": "Cinemática II",
+    "assunto": "Movimento circular",
+    "descartados": [
+      "Física / Dinâmica II (assunto Dinâmica do MCU): várias questões de Aprofundamento e Desafios cobram força centrípeta"
+    ],
+    "confiante": true,
+    "justificativa": "A capa é 'Movimento Circular Uniforme'; o assunto Movimento circular pertence ao tópico Cinemática II."
+  }
+}

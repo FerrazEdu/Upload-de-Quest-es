@@ -1,0 +1,36 @@
+{
+  "numero": 29,
+  "instituicao": "UFAM",
+  "ano": 2025,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 4,
+  "enunciado": "Quando necessário, adote os seguintes valores:\n\n$$\\pi = 3$$\n\n$$g = 10\\ \\text{m/s}^2$$\n\n$$\\text{sen}\\,45^\\circ = \\cos 45^\\circ = \\frac{\\sqrt{2}}{2} = 0{,}71$$\n\nUm avião de pequeno porte, com massa total de duas toneladas, descreve uma curva à esquerda num plano horizontal em trajetória circular de raio $R = 1000\\ \\text{m}$, com velocidade escalar constante, conforme representado na figura a seguir, onde $\\vec{F}$ é a força de sustentação, perpendicular às asas, e $45^\\circ$ é o ângulo de inclinação das asas em relação ao plano horizontal:\n\n![Avião inclinado 45° com a força de sustentação F, o peso mg e o raio R](figura:Q29_fig1)\n\nI. A resultante das forças externas que atuam sobre o avião é nula.\n\nII. A força centrípeta sobre o avião tem intensidade igual a $20\\ \\text{kN}$.\n\nIII. A velocidade escalar do avião é igual a $360\\ \\text{km/h}$.\n\nConsiderando apenas as forças indicadas na figura, podemos afirmar que:\n\nAssinale a alternativa **CORRETA**:",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "Somente a afirmativa I é verdadeira."
+    },
+    {
+      "letra": "B",
+      "texto": "Somente a afirmativa III é verdadeira."
+    },
+    {
+      "letra": "C",
+      "texto": "Somente as afirmativas I e III são verdadeiras."
+    },
+    {
+      "letra": "D",
+      "texto": "Somente as afirmativas II e III são verdadeiras."
+    },
+    {
+      "letra": "E",
+      "texto": "Todas as afirmativas são verdadeiras."
+    }
+  ],
+  "gabarito": "D",
+  "explicacao": "Na curva horizontal, a componente vertical da sustentação equilibra o peso e a componente horizontal faz o papel de resultante centrípeta. Com $m = 2000\\ \\text{kg}$:\n\n$$F\\cos 45^\\circ = mg \\qquad F\\,\\text{sen}\\,45^\\circ = F_{cp}$$\n\nDividindo uma pela outra:\n\n$$F_{cp} = mg \\tan 45^\\circ = 2000 \\cdot 10 \\cdot 1 = 20000\\ \\text{N} = 20\\ \\text{kN}$$\n\nE, como $F_{cp} = \\frac{mv^2}{R}$:\n\n$$\\frac{mv^2}{R} = mg\\tan 45^\\circ \\Rightarrow v^2 = gR = 10 \\cdot 1000 = 10000 \\Rightarrow v = 100\\ \\text{m/s} = 360\\ \\text{km/h}$$\n\n**I. Falsa.** O avião faz curva, então a resultante é centrípeta e não nula.\n\n**II. Verdadeira.** $F_{cp} = 20\\ \\text{kN}$.\n\n**III. Verdadeira.** $v = 100\\ \\text{m/s} = 360\\ \\text{km/h}$.\n\n**Gabarito: D**",
+  "revisar": false,
+  "observacoes": null
+}

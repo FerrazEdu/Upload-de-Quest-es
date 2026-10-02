@@ -1,0 +1,36 @@
+{
+  "numero": 7,
+  "instituicao": "ENEM",
+  "ano": 2025,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 3,
+  "enunciado": "Os satélites artificiais e as sondas para exploração espacial são algumas das grandes realizações humanas desenvolvidas no último século. Para coletar e armazenar informações ao longo de anos, esses equipamentos precisam de energia. Como forma de fornecer energia limpa ao satélite, são acoplados diversos painéis de células solares, que, em fotografias, muitas vezes são confundidos com “asas”.\n\nUm satélite geoestacionário precisa armazenar a energia obtida pelos seus painéis solares em suas baterias. Como forma de otimizar o processo de absorção da energia solar, o ideal é que a superfície dos painéis mantenha-se perpendicular aos raios solares incidentes. Para isso, foi adaptado um sistema que rotaciona os painéis solares com velocidade angular constante.\n\nQual é a velocidade de rotação dos painéis em comparação à velocidade de rotação da Terra ($R_T$)?",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$0{,}25\\ R_T$"
+    },
+    {
+      "letra": "B",
+      "texto": "$0{,}5\\ R_T$"
+    },
+    {
+      "letra": "C",
+      "texto": "$R_T$"
+    },
+    {
+      "letra": "D",
+      "texto": "$2\\ R_T$"
+    },
+    {
+      "letra": "E",
+      "texto": "$4\\ R_T$"
+    }
+  ],
+  "gabarito": "C",
+  "explicacao": "Um satélite geoestacionário acompanha a rotação da Terra: ele completa uma volta em torno do eixo terrestre no mesmo tempo que a Terra gira em torno de si mesma (cerca de 24 h) e mantém sempre a mesma face voltada para a Terra. Assim, o corpo do satélite gira, em relação ao Sol, uma vez por dia.\n\nPara que os painéis fiquem sempre perpendiculares aos raios solares (direção praticamente fixa), eles precisam girar em relação ao satélite compensando exatamente esse giro: uma volta a cada dia, isto é, com o mesmo período da Terra.\n\n$$T_{\\text{painéis}} = T_{\\text{Terra}} \\Rightarrow \\omega_{\\text{painéis}} = \\frac{2\\pi}{T_{\\text{Terra}}} = R_T$$\n\nValores como $0{,}5\\ R_T$ ou $2\\ R_T$ fariam os painéis se adiantarem ou se atrasarem em relação ao Sol ao longo do dia.\n\n**Gabarito: C**",
+  "revisar": false,
+  "observacoes": null
+}

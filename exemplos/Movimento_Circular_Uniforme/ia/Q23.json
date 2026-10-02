@@ -1,0 +1,32 @@
+{
+  "numero": 23,
+  "instituicao": "UECE",
+  "ano": 2023,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 4,
+  "enunciado": "O Autorama ou Automodelismo de Fenda é um tipo de modelismo profissional ou amador em que carros movidos a eletricidade ou a pilha competem em pistas especialmente fabricadas para o esporte ou o entretenimento. Em uma competição hipotética, dois carrinhos NP e AS irão competir em pistas circulares concêntricas. O carrinho NP encontra-se na pista de raio $R$ e desenvolve uma velocidade linear de módulo $V$ constante, ao passo que o carrinho AS, na pista de raio $1{,}5R$, desenvolve uma velocidade linear de módulo $2V$ constante. Os carrinhos iniciam a corrida alinhados e voltam a se alinhar pela primeira vez após $2\\ \\text{s}$ do início da corrida. Por alinhado, entenda-se que o raio vetor com origem em O e extremidade em NP e o raio vetor com origem em O e extremidade em AS têm mesmas direção e sentido.\n\nO instante, em segundos, em que os carrinhos voltam a se encontrar pela terceira vez é",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$18$."
+    },
+    {
+      "letra": "B",
+      "texto": "$12$."
+    },
+    {
+      "letra": "C",
+      "texto": "$24$."
+    },
+    {
+      "letra": "D",
+      "texto": "$6$."
+    }
+  ],
+  "gabarito": "D",
+  "explicacao": "Como as pistas são concêntricas, o alinhamento depende só das velocidades angulares. O carrinho mais rápido (em ângulo) ganha uma volta sobre o outro a cada alinhamento, com velocidade angular relativa constante.\n\nVelocidades angulares:\n\n$$\\omega_{NP} = \\frac{V}{R} \\qquad \\omega_{AS} = \\frac{2V}{1{,}5R} = \\frac{4V}{3R}$$\n\nVelocidade angular relativa:\n\n$$\\omega_{\\text{rel}} = \\frac{4V}{3R} - \\frac{V}{R} = \\frac{V}{3R}$$\n\nEntre dois alinhamentos consecutivos o ângulo relativo varia $2\\pi$, e isso leva sempre o mesmo tempo:\n\n$$\\Delta t = \\frac{2\\pi}{\\omega_{\\text{rel}}} = 2\\ \\text{s}$$\n\nLogo, os alinhamentos ocorrem em $t = 2\\ \\text{s}$, $4\\ \\text{s}$ e $6\\ \\text{s}$. O terceiro reencontro ocorre em $t = 6\\ \\text{s}$.\n\n**Gabarito: D**",
+  "revisar": false,
+  "observacoes": null
+}

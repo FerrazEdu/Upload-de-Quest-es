@@ -1,0 +1,36 @@
+{
+  "numero": 3,
+  "instituicao": "FATEC",
+  "ano": 2024,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 2,
+  "enunciado": "Apesar de a estreia, em 1877, do balé “*O Lago dos Cisnes*”, do compositor russo P. I. Tchaikovsky, ter sido um fracasso, hoje ele é um dos mais aclamados no mundo das artes.\n\nNo terceiro ato do balé, o(a) bailarino(a) que interpreta o Cisne Negro realiza uma sequência de 32 *fouettés*. Um *fouetté* é um movimento circular em torno do próprio corpo do(a) bailarino(a), que funciona como um eixo central. Nesse movimento giratório, considerado um dos mais difíceis do balé, o(a) bailarino(a) mantém o corpo ereto com apenas a ponta de um dos pés no piso. A cada volta, o calcanhar do pé, que está no chão, sobe e desce à medida que mantém a energia envolvida no sistema. Enquanto isso, o(a) bailarino(a) dobra e estica a outra perna, mantendo-a no ar sem tocar o piso.\n\nAdotando-se um observador externo como referencial e baseando-se na descrição apresentada, é correto afirmar que uma das grandezas físicas observada para a manutenção desse movimento rotacional é",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "a massa vetorial do corpo."
+    },
+    {
+      "letra": "B",
+      "texto": "a força centrífuga da perna."
+    },
+    {
+      "letra": "C",
+      "texto": "a força elástica da perna."
+    },
+    {
+      "letra": "D",
+      "texto": "a velocidade angular do corpo."
+    },
+    {
+      "letra": "E",
+      "texto": "a temperatura do corpo."
+    }
+  ],
+  "gabarito": "D",
+  "explicacao": "Um movimento de rotação em torno de um eixo é descrito pela velocidade angular $\\omega$, que indica o ângulo descrito por unidade de tempo. Para o observador externo, manter o giro significa manter o corpo girando com velocidade angular (não nula) em torno do eixo.\n\n$$\\omega = \\frac{\\Delta\\varphi}{\\Delta t}$$\n\n- A: massa é grandeza escalar; não existe “massa vetorial”.\n- B: força centrífuga só aparece para um observador no referencial que gira (não inercial), não para o observador externo.\n- C: não há mola ou deformação elástica relevante descrita.\n- E: temperatura não é grandeza cinemática do movimento.\n\n**Gabarito: D**",
+  "revisar": false,
+  "observacoes": null
+}

@@ -1,0 +1,36 @@
+{
+  "numero": 22,
+  "instituicao": "UNITINS",
+  "ano": 2025,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 3,
+  "enunciado": "A imagem a seguir representa uma rotatória com raio $R$ na cidade de Palmas - TO.\n\n![Circunferência da rotatória com o raio R indicado](figura:Q22_fig1)\n\n*Fonte: UNITINS, 2025.*\n\nDado: $\\pi = 3$ e $R = 20\\ \\text{m}$.\n\nUm carro percorreu $420\\ \\text{m}$ em volta da rotatória com velocidade constante de $36\\ \\text{km/h}$, e sua trajetória é representada fielmente pela imagem. Com base nisso, julgue as proposições a seguir.\n\nI. A velocidade angular é $0{,}5\\ \\text{rad/s}$.\n\nII. A frequência do movimento é $1/12\\ \\text{Hz}$.\n\nIII. A distância percorrida pelo carro é $3{,}5$ vezes o comprimento da rotatória.\n\nÉ correto o que se afirma em",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "I apenas."
+    },
+    {
+      "letra": "B",
+      "texto": "III apenas."
+    },
+    {
+      "letra": "C",
+      "texto": "I e III apenas."
+    },
+    {
+      "letra": "D",
+      "texto": "II e III apenas."
+    },
+    {
+      "letra": "E",
+      "texto": "I, II e III."
+    }
+  ],
+  "gabarito": "E",
+  "explicacao": "No movimento circular uniforme, a velocidade linear relaciona-se com a angular por $v = \\omega R$, e a frequência por $\\omega = 2\\pi f$.\n\nConvertendo a velocidade:\n\n$$v = 36\\ \\text{km/h} = \\frac{36}{3{,}6} = 10\\ \\text{m/s}$$\n\n**I. Verdadeira.**\n\n$$\\omega = \\frac{v}{R} = \\frac{10}{20} = 0{,}5\\ \\text{rad/s}$$\n\n**II. Verdadeira.**\n\n$$f = \\frac{\\omega}{2\\pi} = \\frac{0{,}5}{2 \\cdot 3} = \\frac{1}{12}\\ \\text{Hz}$$\n\n**III. Verdadeira.** O comprimento da rotatória é\n\n$$C = 2\\pi R = 2 \\cdot 3 \\cdot 20 = 120\\ \\text{m}$$\n\ne $\\frac{420}{120} = 3{,}5$.\n\n**Gabarito: E**",
+  "revisar": false,
+  "observacoes": null
+}

@@ -1,0 +1,32 @@
+{
+  "numero": 28,
+  "instituicao": "EEAR",
+  "ano": 2022,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 4,
+  "enunciado": "Os satélites geoestacionários realizam MCU (Movimento Circular Uniforme) com órbitas que pertencem a um plano imaginário que corta a Terra na Linha do Equador e que apresenta o mesmo período de rotação da Terra. Isso é obtido quando o satélite está a uma altura de $36.000\\ \\text{km}$ em relação a um ponto na superfície e com uma determinada velocidade tangencial.\n\nSe esse ponto situado na superfície, na Linha do Equador, apresenta uma velocidade tangencial de módulo igual a $1.600\\ \\text{km/h}$, o módulo da velocidade tangencial de um satélite geoestacionário será de \\_\\_\\_\\_\\_ km/h.\n\nUtilize $\\pi = 3$.",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$9.000$"
+    },
+    {
+      "letra": "B",
+      "texto": "$10.600$"
+    },
+    {
+      "letra": "C",
+      "texto": "$18.000$"
+    },
+    {
+      "letra": "D",
+      "texto": "$21.200$"
+    }
+  ],
+  "gabarito": "B",
+  "explicacao": "O satélite geoestacionário e o ponto do Equador têm o mesmo período ($T = 24\\ \\text{h}$), logo a mesma velocidade angular. Então a velocidade tangencial é proporcional ao raio: $v = \\omega r$.\n\nRaio da Terra, a partir da velocidade do ponto no Equador:\n\n$$v_T = \\frac{2\\pi R_T}{T} \\Rightarrow R_T = \\frac{v_T\\, T}{2\\pi} = \\frac{1600 \\cdot 24}{2 \\cdot 3} = 6400\\ \\text{km}$$\n\nRaio da órbita do satélite:\n\n$$r = R_T + h = 6400 + 36000 = 42400\\ \\text{km}$$\n\nCom a mesma $\\omega$:\n\n$$\\frac{v_S}{v_T} = \\frac{r}{R_T} \\Rightarrow v_S = 1600 \\cdot \\frac{42400}{6400} = 10600\\ \\text{km/h}$$\n\n**Gabarito: B**",
+  "revisar": false,
+  "observacoes": null
+}

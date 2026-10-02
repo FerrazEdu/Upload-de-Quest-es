@@ -1,0 +1,32 @@
+{
+  "numero": 4,
+  "instituicao": "UFMG",
+  "ano": 2025,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 2,
+  "enunciado": "Quando observada em um referencial fixo na Terra, a Lua tem uma órbita quase circular em torno da Terra com um raio aproximado de $4{,}0 \\times 10^{8}\\ \\text{m}$ e um período de rotação de $27{,}3$ dias ou $2{,}4 \\times 10^{6}\\ \\text{s}$. Isso é possível, mesmo com a presença da força de atração gravitacional que existe entre elas, porque a Lua se movimenta com velocidade tangencial suficiente para se manter sempre aproximadamente à mesma distância da Terra.\n\nCom base nessas informações dadas e usando $\\pi \\approx 3$, o módulo da velocidade tangencial da Lua, considerando a sua órbita circular e o referencial fixo na Terra, é",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$3.600\\ \\text{km/h}$."
+    },
+    {
+      "letra": "B",
+      "texto": "$1.000\\ \\text{km/h}$."
+    },
+    {
+      "letra": "C",
+      "texto": "$1.800\\ \\text{km/h}$."
+    },
+    {
+      "letra": "D",
+      "texto": "$500\\ \\text{km/h}$."
+    }
+  ],
+  "gabarito": "A",
+  "explicacao": "Em movimento circular uniforme, a Lua percorre uma circunferência inteira ($2\\pi R$) em um período $T$.\n\n$$v = \\frac{2\\pi R}{T} = \\frac{2 \\cdot 3 \\cdot 4{,}0 \\times 10^{8}}{2{,}4 \\times 10^{6}}\\ \\text{m/s} = \\frac{24 \\times 10^{8}}{2{,}4 \\times 10^{6}}\\ \\text{m/s} = 1.000\\ \\text{m/s}$$\n\nConvertendo para km/h (multiplica por $3{,}6$):\n\n$$v = 1.000 \\cdot 3{,}6 = 3.600\\ \\text{km/h}$$\n\nA alternativa B traz o valor numérico em m/s, mas com a unidade errada.\n\n**Gabarito: A**",
+  "revisar": false,
+  "observacoes": null
+}

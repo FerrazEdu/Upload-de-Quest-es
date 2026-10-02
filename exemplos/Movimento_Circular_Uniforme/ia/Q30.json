@@ -1,0 +1,32 @@
+{
+  "numero": 30,
+  "instituicao": "EEAR",
+  "ano": 2024,
+  "adaptada": false,
+  "disciplina": "Física",
+  "topico": "Cinemática II",
+  "dificuldade": 4,
+  "enunciado": "A figura a seguir representa a trajetória do movimento circular uniforme, realizado totalmente num plano vertical em um local onde há gravidade, em que um veículo está, durante todo o movimento, em contato com um trilho . Nessa figura estão assinaladas quatro posições (1, 2, 3 e 4). A posição 1 está diametralmente oposta à posição 3, assim como a posição 2 está em relação a 4. As posições 3 e 1 pertencem à linha tracejada na vertical (V) e, respectivamente, são a posição mais elevada e menos elevada da trajetória. Enquanto as posições 4 e 2 pertencem à linha tracejada na horizontal (H) e paralela ao solo.\n\n![Trilho circular vertical sobre o solo com as posições 1, 2, 3 e 4](figura:Q30_fig1)\n\n*Fonte: EEAR, 2024.*\n\nAssinale a alternativa que indica corretamente uma relação entre os módulos das reações normais ($N_1$, $N_2$, $N_3$ e $N_4$) em cada uma dessas posições ($N_1$ na posição 1, $N_2$ na posição 2, $N_3$ na posição 3 e $N_4$ na posição 4).",
+  "alternativas": [
+    {
+      "letra": "A",
+      "texto": "$N_1 = N_2$ e $N_3 = N_4$"
+    },
+    {
+      "letra": "B",
+      "texto": "$N_1 > N_3$ e $N_4 = N_2$"
+    },
+    {
+      "letra": "C",
+      "texto": "$N_1 > N_3 > N_4 > N_2$"
+    },
+    {
+      "letra": "D",
+      "texto": "$N_1 = N_3 = N_4 = N_2$"
+    }
+  ],
+  "gabarito": "B",
+  "explicacao": "No MCU a resultante centrípeta tem o mesmo módulo em todos os pontos, $F_{cp} = \\frac{mv^2}{R}$, sempre apontando para o centro. O veículo percorre o trilho por dentro, então a normal aponta para o centro.\n\n**Posição 1 (ponto mais baixo):** normal para cima (centro), peso para baixo.\n\n$$N_1 - mg = \\frac{mv^2}{R} \\Rightarrow N_1 = \\frac{mv^2}{R} + mg$$\n\n**Posição 3 (ponto mais alto):** normal e peso para baixo (centro).\n\n$$N_3 + mg = \\frac{mv^2}{R} \\Rightarrow N_3 = \\frac{mv^2}{R} - mg$$\n\n**Posições 2 e 4 (horizontal):** o peso é perpendicular ao raio e só a normal é centrípeta.\n\n$$N_2 = N_4 = \\frac{mv^2}{R}$$\n\nPortanto $N_1 > N_2 = N_4 > N_3$, o que confirma $N_1 > N_3$ e $N_4 = N_2$.\n\n**Gabarito: B**",
+  "revisar": false,
+  "observacoes": null
+}

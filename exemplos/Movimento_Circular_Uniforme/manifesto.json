@@ -1,0 +1,584 @@
+{
+  "arquivo": "Movimento_Circular_Uniforme.pdf",
+  "hash_pdf": "b82871727b1450eb44617a1334365711a5e2e1b7d93de7f71bd3eb5561e3d88e",
+  "tipo": "lista",
+  "titulo_lista": "Movimento Circular Uniforme",
+  "total_questoes": 30,
+  "numeros_faltando": [],
+  "numeros_repetidos": [],
+  "etapas": {
+    "Fixação": 3,
+    "Treinamento": 4,
+    "Aprofundamento": 6,
+    "Desafios": 8
+  },
+  "paginas_sem_questao": [
+    "paginas/p1.png",
+    "paginas/p2.png",
+    "paginas/p10.png"
+  ],
+  "pagina_gabarito": "paginas/p10.png",
+  "gabarito_pdf": {},
+  "questoes": [
+    {
+      "numero": 1,
+      "pagina": 3,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        82.0,
+        284.5,
+        244.0
+      ],
+      "imagem": "questoes/Q01.png",
+      "texto_pdf": "Questão 01                            UEA 2021\n\nNa embalagem de uma furadeira elétrica é informado que ela gira\na 3000 rpm. A unidade rpm, cuja sigla abrevia a expressão\n                  , é muito utilizada no cotidiano, apesar de\nnão ser a unidade escolhida pelo Sistema  Internacional de\nUnidades.\nNesse sistema, a informação que equivale a 3000 rpm é\nA 50 s, representando o período de rotação.\n B 50 rad/s, representando a velocidade angular.\nC 50 Hz, representando a frequência de rotação.\nD 180 s, representando o período de rotação.\n E 180 Hz, representando a frequência de rotação.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 2,
+      "pagina": 3,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        244.0,
+        284.5,
+        462.9
+      ],
+      "imagem": "questoes/Q02.png",
+      "texto_pdf": "Questão 02             MACKENZIE 2024 (ADAPTADO)\n\nA aceleração centrípeta é um conceito importante no estudo\nda física e do movimento circular.\nCom base nesse conceito, analise o efeito da aceleração\ncentrípeta na velocidade de um objeto em movimento circular.\nSelecione a alternativa correta.\nA A aceleração centrípeta faz com que a velocidade do objeto\n  em movimento circular aumente progressivamente.\n B A aceleração centrípeta provoca uma diminuição contínua na\n   velocidade do objeto em movimento circular.\nC A aceleração centrípeta atua somente sobre a direção do vetor\n   velocidade, mantendo sua magnitude constante; por isso, não\n    altera a velocidade escalar do objeto em movimento circular.\nD A aceleração centrípeta influencia tanto a direção quanto a\n   magnitude do vetor velocidade, modificando a velocidade do\n   objeto em movimento circular.\n E A  aceleração  centrípeta  sempre  está  presente  nos\n   movimentos descritos pela cinemática.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 3,
+      "pagina": 3,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        462.9,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q03.png",
+      "texto_pdf": "Questão 03                             FATEC 2024\n\nApesar de a estreia, em 1877, do balé ˝O Lago dos Cisnes˛, do\ncompositor russo P. I. Tchaikovsky, ter sido um fracasso, hoje\nele é um dos mais aclamados no mundo das artes.\nNo terceiro ato do balé, o(a) bailarino(a) que interpreta o Cisne\nNegro realiza uma sequência de 32 fouettés. Um fouetté é um\nmovimento circular em torno do próprio corpo do(a) bailarino(a),\nque funciona como um eixo central. Nesse movimento giratório,\nconsiderado um dos mais difíceis do balé, o(a) bailarino(a)\nmantém o corpo ereto com apenas a ponta de um dos pés no\npiso. A cada volta, o calcanhar do pé, que está no chão, sobe e\ndesce à medida que mantém a energia envolvida no sistema.\nEnquanto isso, o(a) bailarino(a) dobra e estica a outra perna,\nmantendo-a no ar sem tocar o piso.\nAdotando-se um  observador  externo como  referencial e\nbaseando-se na descrição apresentada, é correto afirmar que\numa das grandezas  físicas observada para a manutenção\ndesse movimento rotacional é\nA a massa vetorial do corpo.\n B a força centrífuga da perna.\nC a força elástica da perna.\nD a velocidade angular do corpo.\n E a temperatura do corpo.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 4,
+      "pagina": 3,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        49.9,
+        565.0,
+        238.5
+      ],
+      "imagem": "questoes/Q04.png",
+      "texto_pdf": "Questão 04                        UFMG 2025\n\nQuando observada em um referencial fixo na Terra, a Lua tem\numa órbita quase  circular em torno da Terra com um  raio\naproximado de 4,0 x 108 m e um período de rotação de 27,3 dias\nou 2,4 x 106 s. Isso é possível, mesmo com a presença da força\nde atração gravitacional que existe entre elas, porque a Lua se\nmovimenta com velocidade tangencial suficiente para se manter\nsempre aproximadamente à mesma distância da Terra.\nCom base nessas informações dadas e usando À H 3, o\nmódulo da velocidade tangencial da Lua, considerando a sua\nórbita circular e o referencial fixo na Terra, é\nA 3.600 km/h.\n B 1.000 km/h.\nC 1.800 km/h.\nD 500 km/h.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 5,
+      "pagina": 3,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        238.5,
+        565.0,
+        407.5
+      ],
+      "imagem": "questoes/Q05.png",
+      "texto_pdf": "Questão 05                             EEAR 2024\n\nEm uma pista de teste circular de 4,2 km de comprimento, um\nveículo  partiu do marco  inicial da  pista e manteve uma\nvelocidade constante de 35 m/s executando voltas completas\nna pista. As dimensões do veículo, em relação às dimensões\nda pista, podem ser desprezadas e o movimento executado foi\ncircular e uniforme.\nO valor do período, em segundos, observado no movimento é\nigual a\nA 110.\n B 120.\nC 130.\nD 140.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 6,
+      "pagina": 3,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        407.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q06.png",
+      "texto_pdf": "Questão 06                        UNICAMP 2025\n\nOs últimos anos testemunharam a retomada do interesse de\nalguns países pela exploração da Lua. Diversas missões com\ndestino a esse satélite foram lançadas: Chandrayaan-3 (Índia,\n2023), Luna 25 (Rússia, 2023), Peregrine Mission One (EUA,\n2024), Slim (Japão, 2024) e Chang'e 6 (China, 2024).\nUma sonda descreve, em torno da Lua, uma órbita circular\nde raio r = 1,848 × 106 m e dá uma volta completa num\nperíodo T = 2,0 h. Nesse movimento circular uniforme, qual\na velocidade escalar da sonda em relação ao centro da Lua?\nSe necessário, use À H 3,0.\nA 256,6 m/s.\n B 1.540 m/s.\nC 3.696 km/s.\nD 5.544 km/s.",
+      "figuras": [],
+      "etapa": "Fixação"
+    },
+    {
+      "numero": 7,
+      "pagina": 4,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        56.9,
+        284.5,
+        322.9
+      ],
+      "imagem": "questoes/Q07.png",
+      "texto_pdf": "Questão 07                          ENEM 2025\n\nOs satélites artificiais e as sondas para exploração espacial\nsão algumas das grandes realizações humanas desenvolvidas\nno último século. Para coletar e armazenar informações ao\nlongo de anos, esses equipamentos precisam de energia.\nComo forma de  fornecer  energia  limpa ao  satélite, são\nacoplados  diversos  painéis de  células  solares,  que, em\nfotografias, muitas vezes são confundidos com     .\n\nUm  satélite  geoestacionário  precisa armazenar a  energia\nobtida pelos seus painéis solares em suas baterias. Como\nforma de otimizar o processo de absorção da energia solar, o\nideal  é  que  a   superfície  dos   painéis  mantenha-se\nperpendicular aos  raios  solares  incidentes. Para  isso,  foi\nadaptado um sistema que rotaciona os painéis solares com\nvelocidade angular constante.\n\nQual é a velocidade de rotação dos painéis em comparação à\nvelocidade de rotação da Terra (RT)?\nA 0,25 RT\n B 0,5 RT\nC RT\nD 2 RT\n E 4 RT",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 8,
+      "pagina": 4,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        322.9,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q08.png",
+      "texto_pdf": "Questão 08                            USS 2024\n\nDada máquina de lavar, com abertura superior para colocação\nda roupa, tem capacidade de 16 kg e centrifugação de 720\nrotações por minuto. Considere um ponto preso à superfície\ndo tambor da máquina, localizado a 50 cm do eixo de rotação,\ne o valor de = 3.\n\nA velocidade linear, em m/s, deste ponto vale:\n\nA 12,0\n B 14,4\nC 22,5\nD 36,0",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 9,
+      "pagina": 4,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        93.9,
+        565.0,
+        287.5
+      ],
+      "imagem": "questoes/Q09.png",
+      "texto_pdf": "Questão 09                             EEAR 2023\n\nNo canto da sala, sobre uma pequena mesa, estava colocado\no antigo relógio pertencente à família. Apesar de empoeirado e\nesquecido pelo tempo, ainda funcionando perfeitamente. O\nponteiro indicador dos minutos medindo exatamente 10 cm do\neixo até a extremidade. Um ponto nesta extremidade possui\numa velocidade tangencial, em m/s, igual a _____.\n\nAssinale a alternativa que completa a lacuna do texto anterior.\n\nA\n\n B\n\nC\n\n\nD",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 10,
+      "pagina": 4,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        287.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q10.png",
+      "texto_pdf": "Questão 10                          UNILAGO 2022\n\nMovimento circular uniforme é o movimento que ocorre no\nplano, com velocidade escalar constante ao longo de uma\ntrajetória circular. Apesar do termo uniforme, esse movimento\né acelerado, uma vez que há mudança na direção do vetor\nvelocidade. Isso acontece por conta da existência de uma\naceleração de direção  radial, cujo sentido aponta para o\ncentro da curva, como ilustra a figura a seguir.\n\n\n\n\n\n          (Disponível em: <https://brasilescola.uol.com.br/fisica/movimento-circular-\n                                 uniforme-mcu.htm>. Acesso em: 19 out. 2021.)\n\nNo exemplo da figura, um veículo entra na rotatória de raio\nr = 4 m, com velocidade constante v = 36 km/h.\n\nConsiderando os dados apresentados e = 3,14, assinale a\nalternativa que  apresenta,  correta  e  respectivamente,  a\nvelocidade angular do veículo, a aceleração centrípeta e o\nperíodo do movimento.\n\nA É = 2,5 rad/s;€€ ac = 02,55 m/s2 ;€€ T = 25,0 s\n B É = 2,5 rad/s; ac = 25,00 m/s2 ; T = 02,5 s\nC É = 3,6 rad/s;€€ ac = 36,00 m/s2 ;€€ T = 03,6 s\nD É = 10,0 rad/s;€€ ac = 100,00 m/s2 ;€€ T = 10,0 s\n E É = 32,4 rad/s;€€ ac = 324,00 m/s2 ;€€ T = 03,4 s",
+      "figuras": [
+        {
+          "nome": "Q10_fig1",
+          "arquivo": "figuras/Q10_fig1.png",
+          "regiao": [
+            328.4,
+            383.7,
+            509.5,
+            565.1
+          ]
+        }
+      ],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 11,
+      "pagina": 5,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        54.9,
+        284.5,
+        428.9
+      ],
+      "imagem": "questoes/Q11.png",
+      "texto_pdf": "Questão 11               UNICAMP 2023 (ADAPTADO)\n\nA prática esportiva de       vem conquistando muitos\nadeptos e se tornando uma modalidade de competição. Numa\nprova de velocidade, um atleta consegue dar 105 saltos em 30\nsegundos.\n\nConsiderando que o ponto da corda que passa sob os pés e\nacima da cabeça do praticante descreve uma trajetória circular\nde raio r = 90 cm, qual é a velocidade escalar desse ponto da\ncorda?\n\nConsidere = 3.\n\n\n\n\n\n                                                          Fonte: UNICAMP, 2023.\n\nA 0,18 m/s.\n B 3,15 m/s.\nC 18,9 m/s.\nD 567 m/s.",
+      "figuras": [
+        {
+          "nome": "Q11_fig1",
+          "arquivo": "figuras/Q11_fig1.png",
+          "regiao": [
+            26.0,
+            177.8,
+            279.0,
+            372.4
+          ]
+        }
+      ],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 12,
+      "pagina": 5,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        428.9,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q12.png",
+      "texto_pdf": "Questão 12                            UNIFOR 2023\n\nO jovem João Arthur resolveu  viajar para uma cidade no\ninterior do estado e foi no seu carro, um Creta 1.6 Flex, ano\n2019. Seu veículo possui pneus 205/65 R15 que, com o aro,\nmedem um diâmetro de 625 mm.\n\nDeslocando-se a velocidade constante de 90 km/h em uma\nrodovia federal, plana e horizontal, assinale a opção que indica\nqual a faixa de rotação, em rpm, de um dos pneus do carro,\nconsiderando   estarem   devidamente   calibrados   e   a\ntemperatura constante?\n\nAdote (pi) = 3,0.\n\nA Entre 651 - 660.\n B Entre 661 - 700.\nC Entre 701 - 750.\nD Entre 751 - 800.\n E Entre 801 - 850.",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 13,
+      "pagina": 5,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        54.9,
+        565.0,
+        454.9
+      ],
+      "imagem": "questoes/Q13.png",
+      "texto_pdf": "Questão 13                       UNICENTRO 2026\n\nA centrifuga de mel é um equipamento composto de um\ntambor com cesto para os favos de mel e um corredor para a\nsaída  do  mel.  Os  favos  são  colocados  no  cesto  e\ncentrifugados manualmente.\n\nA imagem a seguir ilustra um modelo dessa centrífuga.\n\n\n\n\n\n         (Centrifuga de Mel. Museu Histórico de Entre Rios, Distrito de Guarapuava.\n  Disponível em: https://suabios.com.br/museu-historico/objetos-historicos. Acesso\n                                                       em: 16 jul. 2025.)\n\nConsiderando a dinâmica do movimento circular, assinale a\nalternativa correta.\n\nA A aceleração centrípeta é definida como a variação de\n   velocidade do tambor por unidade de tempo.\n B A frequência (f) registra a quantidade de voltas que uma\n   gota de mel descreve ao final do processo.\nC O período (T) é o intervalo de tempo necessário para a\n   extração total do mel através do processo de centrifugação.\nD Uma gota de mel está sujeita à aceleração centrípeta, que\n   tem sentido tangente ao raio do tambor.\n E Uma gota de mel está sujeita à aceleração centrípeta, que\n   tem a mesma direção do raio do tambor.",
+      "figuras": [
+        {
+          "nome": "Q13_fig1",
+          "arquivo": "figuras/Q13_fig1.png",
+          "regiao": [
+            322.8,
+            137.0,
+            516.2,
+            267.0
+          ]
+        }
+      ],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 14,
+      "pagina": 5,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        454.9,
+        565.0,
+        616.5
+      ],
+      "imagem": "questoes/Q14.png",
+      "texto_pdf": "Questão 14                          UNILAGO 2019\n\nNo momento em que o cadeirante solta as mãos das rodas da\ncadeira, a frequência de rotação das rodas é igual a 5 voltas\npor segundo.\n\nSe o diâmetro das rodas é igual a 60 cm, assinale a alternativa\nque apresenta, corretamente, a velocidade linear da cadeira\nnesse instante.\n\nA 5,6 m/s\n B  7,5 m/s\nC 9,4 m/s\nD 11,3 m/s\n E 13,2 m/s",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 15,
+      "pagina": 5,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        616.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q15.png",
+      "texto_pdf": "Questão 15                             EEAR 2023\n\nUm móvel ao realizar um movimento circular uniforme em uma\npista de raio igual a 6 metros, percorre entre os tempos t = 2 s\ne t = 5 s a distância de 108 metros.\nQual o período, em segundos, desse movimento?\n\nA À/2\n B À/3\nC À/4\nD À/6",
+      "figuras": [],
+      "etapa": "Treinamento"
+    },
+    {
+      "numero": 16,
+      "pagina": 6,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        81.6,
+        284.5,
+        445.5
+      ],
+      "imagem": "questoes/Q16.png",
+      "texto_pdf": "Questão 16                         UNICAMP 2014\n\nAs máquinas cortadeiras e colheitadeiras de cana-de-açúcar\npodem substituir dezenas de trabalhadores rurais, o que pode\nalterar de forma  significativa a  relação de  trabalho nas\nlavouras de cana-de-açúcar. A pá cortadeira da máquina\nilustrada na figura abaixo gira em movimento circular uniforme\na uma frequência de 300 rpm.\nA velocidade de um ponto extremo P da pá vale\n(Considere 3)\n\n\n\n\n\n                                                          Fonte: UNICAMP, 2014.\n\nA 9 m/s.\n B 15 m/s.\nC 18 m/s.\nD 60 m/s.",
+      "figuras": [
+        {
+          "nome": "Q16_fig1",
+          "arquivo": "figuras/Q16_fig1.png",
+          "regiao": [
+            56.0,
+            200.0,
+            250.0,
+            370.0
+          ]
+        }
+      ],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 17,
+      "pagina": 6,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        445.5,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q17.png",
+      "texto_pdf": "Questão 17                              UFT 2024\n\nUma pessoa gira um objeto 1 de massa m1 = 200 g acima da\ncabeça em movimento circular, com auxílio de um cordão. Em\num dado instante ela solta o cordão e observa o objeto atingir\no solo alguns metros à sua frente. Em seguida, utilizando o\nmesmo cordão, ela substitui o objeto 1 pelo objeto 2, de\nmesmo formato e dimensões, porém com massa m2 = 400 g.\nNovamente realiza um movimento circular da mesma maneira\nda situação anterior. Ao soltar o cordão observa que este\nobjeto 2 cai no mesmo ponto que o primeiro.\nEnquanto os  objetos estão  girando, presos  pelo  cordão,\nrealizam Movimento Circular Uniforme (MCU). Em seguida,\nquando o cordão é solto, os objetos são denominados de\nprojéteis. Em ambas as situações o ângulo de lançamento é\nzero, assim, os projéteis realizam, na horizontal, Movimento\nRetilíneo Uniforme (MRU) e, na vertical, Movimento Retilíneo\nUniformemente Variado (MRUV).\nCom relação às situações apresentadas no texto, é CORRETO\nafirmar que:\nA A velocidade angular do objeto 2 é duas vezes maior que do\n   objeto 1.\n B O projétil 2 leva menos tempo para cair do que o projétil 1.\nC As velocidades horizontais dos dois projéteis são iguais.\nD As forças centrípetas sobre os objetos são iguais.",
+      "figuras": [],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 18,
+      "pagina": 6,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        49.5,
+        565.0,
+        231.6
+      ],
+      "imagem": "questoes/Q18.png",
+      "texto_pdf": "Questão 18                       FCMSCSP 2020\n\nO velocímetro dos automóveis indica a velocidade a partir do\nraio das rodas do automóvel e da contagem do número de\nvoltas que essas rodas efetuam em certo intervalo de tempo.\nSuponha que um velocímetro, calibrado para um automóvel\ncom rodas de raio 30 cm, esteja indicando a velocidade de\n90 km/h, mas está erroneamente instalado em um automóvel\ncom rodas de raio 27 cm.\nEsse automóvel está se movendo com velocidade de\nA 93 km/h.\n B 87 km/h.\nC 81 km/h.\nD 99 km/h.\n E 72 km/h.",
+      "figuras": [],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 19,
+      "pagina": 6,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        231.6,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q19.png",
+      "texto_pdf": "Questão 19                             USS 2022\n\nO  plasma  sanguíneo  é  a  parte  líquida  do  sangue  e\ncorresponde à maior parte do seu volume. Nele, proteínas,\nsais minerais, dióxido de carbono e outras substâncias estão\ndissolvidos em água. Para separar o plasma, o método de\ncentrifugação é comumente aplicado.\nAdmita uma centrífuga de laboratório, girando com frequência\nde 60 Hz.\n\n\n\n\n\n                                                               Fonte: USS, 2022.\n\nSe considerarmos que as amostras periféricas se encontram a\n15 cm do centro de rotação, a velocidade linear, em m/s, é de\naproximadamente:\nA 4,2\n B 9,0\nC 28\nD 57",
+      "figuras": [
+        {
+          "nome": "Q19_fig1",
+          "arquivo": "figuras/Q19_fig1.png",
+          "regiao": [
+            292.9,
+            334.0,
+            546.1,
+            505.0
+          ]
+        }
+      ],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 20,
+      "pagina": 7,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        54.0,
+        284.5,
+        340.0
+      ],
+      "imagem": "questoes/Q20.png",
+      "texto_pdf": "Questão 20                          UDESC 2025\n\nUm carro percorre uma rotatória circular de raio 100 metros. O\nmotorista mantém uma velocidade constante de 72 km/h\ndurante todo o trajeto.\n\nAnalise as proposições com base na informação.\n\nI. O módulo da aceleração centrípeta do carro é 4 m/s2.\n\nII. A  direção da  aceleração  centrípeta é sempre  radial,\napontando para o centro da rotatória.\n\nIII. O vetor deslocamento do carro, ao completar uma volta\ncompleta na rotatória, tem magnitude igual a 200 metros.\n\nIV. A força centrípeta responsável por manter o carro em\nmovimento circular é proporcionada pela força de atrito entre\nos pneus e o asfalto.\n\nV. O período para o carro completar uma volta completa, na\nrotatória, é de 10 segundos.\n\nAssinale a alternativa correta.\n\nA Somente as proposições II e III são verdadeiras.\n B Somente as proposições I, II e IV são verdadeiras.\nC Somente as proposições I, III e V são verdadeiras.\nD Somente as proposições II, IV e V são verdadeiras.\n E Todas as proposições são verdadeiras.",
+      "figuras": [],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 21,
+      "pagina": 7,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        340.0,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q21.png",
+      "texto_pdf": "Questão 21                            UECE 2012\n\nUm parafuso está encravado na periferia de um disco giratório\nhorizontal de raio 1 m. A figura abaixo ilustra as posições do\nparafuso em tempos sucessivos.\n\n\n\n\n\n                                                              Fonte: UECE, 2012.\n\nUm engenheiro precisa monitorar a passagem do parafuso por\numa dada posição, como a indicada pela seta. Para isso, faz\nuso de uma luz estroboscópica, que acende durante curtos\nintervalos de tempo a uma frequência de 2 kHz. Para que haja\nsincronismo entre a passagem do parafuso pela posição\nindicada pela seta e a lâmpada, a velocidade escalar do\nparafuso em m/s deve ser aproximadamente\n\nA 3,14 x 103.\n B 12,56 x 103.\nC 18,84 x 103.\nD 6,28 x 103.",
+      "figuras": [
+        {
+          "nome": "Q21_fig1",
+          "arquivo": "figuras/Q21_fig1.png",
+          "regiao": [
+            27.5,
+            396.0,
+            283.4,
+            482.2
+          ]
+        }
+      ],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 22,
+      "pagina": 7,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        54.0,
+        565.0,
+        469.5
+      ],
+      "imagem": "questoes/Q22.png",
+      "texto_pdf": "Questão 22                             UNITINS 2025\n\nA imagem a seguir representa uma rotatória com raio R na\ncidade de Palmas - TO.\n\n\n\n\n\n                                                           Fonte: UNITINS, 2025.\n\nDado: À = 3 e R = 20 m.\n\nUm  carro  percorreu 420 m em  volta da  rotatória com\nvelocidade  constante  de  36  km/h,  e  sua  trajetória  é\nrepresentada fielmente pela imagem. Com base nisso, julgue\nas proposições a seguir.\n\nI. A velocidade angular é 0,5 rad/s.\n\nII. A frequência do movimento é 1/12 Hz.\n\nIII. A  distância  percorrida  pelo  carro  é  3,5  vezes  o\ncomprimento da rotatória.\nÉ correto o que se afirma em\n\nA  I apenas.\n B   III apenas.\nC  I e III apenas.\nD  II e III apenas.\n E   I, II e III.",
+      "figuras": [
+        {
+          "nome": "Q22_fig1",
+          "arquivo": "figuras/Q22_fig1.png",
+          "regiao": [
+            342.0,
+            100.0,
+            493.0,
+            242.0
+          ]
+        }
+      ],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 23,
+      "pagina": 7,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        469.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q23.png",
+      "texto_pdf": "Questão 23                            UECE 2023\n\nO Autorama ou Automodelismo de Fenda é um  tipo de\nmodelismo profissional ou amador em que carros movidos a\neletricidade ou a pilha competem em pistas especialmente\nfabricadas para o esporte ou o entretenimento. Em uma\ncompetição hipotética, dois carrinhos NP e AS irão competir\nem pistas circulares concêntricas. O carrinho NP encontra-se\nna pista de raio R e desenvolve uma velocidade linear de\nmódulo V constante, ao passo que o carrinho AS, na pista de\nraio 1,5R, desenvolve uma velocidade linear de módulo 2V\nconstante. Os carrinhos iniciam a corrida alinhados e voltam a\nse alinhar pela primeira vez após 2 s do início da corrida. Por\nalinhado, entenda-se que o raio vetor com origem em O e\nextremidade em NP e o  raio vetor com origem em O e\nextremidade em AS têm mesmas direção e sentido.\n\nO instante, em segundos, em que os carrinhos voltam a se\nencontrar pela terceira vez é\n\nA 18.\n B 12.\nC 24.\nD 6.",
+      "figuras": [],
+      "etapa": "Aprofundamento"
+    },
+    {
+      "numero": 24,
+      "pagina": 8,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        81.6,
+        284.5,
+        263.5
+      ],
+      "imagem": "questoes/Q24.png",
+      "texto_pdf": "Questão 24               CESMAC MEDICINA 2022/1\n\nEm um treinamento para levar astronautas ao espaço, um\nastronauta é  colocado numa  cabine que  gira no  plano\nhorizontal, em movimento circular de raio 5,0 m. Em dado\nintervalo de tempo, o movimento é circular e uniforme, de\nperíodo 3,0 s.\nNessa situação, qual é o módulo da aceleração a que o\nastronauta está submetido? Considere = 3,0 nos seus\ncálculos e a aceleração da gravidade g = 10 m/s2.\nA 1g\n B 2g\nC 3g\nD 4g\n E 5g",
+      "figuras": [],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 25,
+      "pagina": 8,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        263.5,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q25.png",
+      "texto_pdf": "Questão 25                             UPE 2022\n\nA corrida é um dos esportes mais democráticos, afinal, basta\num tênis adequado, uma roupa confortável e muita força de\nvontade. Sua prática garante uma melhor expectativa de vida,\npois colabora no funcionamento cardíaco, na redução da\npressão arterial e do colesterol LDL. Os amigos Beto e Vini são\npraticantes de corrida e costumam realizá-la em uma pista\ncircular. Beto demora 48 segundos para dar a volta completa\nna pista. Vini corre em sentido oposto e encontra Beto a cada\n18 segundos.\nO tempo em segundos que Vini demora para dar uma volta\ncompleta é:\n\n\n\n\n\n                                                                Fonte: UPE, 2022.\n\nA 28,8 segundos.\n B 29,6 segundos.\nC 32,8 segundos.\nD 36,4 segundos.\n E 38,4 segundos.",
+      "figuras": [
+        {
+          "nome": "Q25_fig1",
+          "arquivo": "figuras/Q25_fig1.png",
+          "regiao": [
+            60.0,
+            405.8,
+            246.0,
+            598.2
+          ]
+        }
+      ],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 26,
+      "pagina": 8,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        49.5,
+        565.0,
+        228.6
+      ],
+      "imagem": "questoes/Q26.png",
+      "texto_pdf": "Questão 26                            UECE 2022\n\nEm uma rodovia, o raio de curva simples, sem inclinação, é\nselecionado de acordo com as características técnicas da\nestrada e da topografia da região. Em um trecho da rodovia\nBR-116, um veículo que trafega com velocidade V descreve\numa curva simples de raio R sob a ação de uma resultante\ncentral de módulo F.\nPara que a intensidade da resultante sobre o veículo seja\nreduzida à metade em um trecho da rodovia com o dobro do\nlimite de velocidade, o raio da curva simples deverá ser de\nA 4R.\n B 2R.\nC R.\nD 8R.",
+      "figuras": [],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 27,
+      "pagina": 8,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        228.6,
+        565.0,
+        440.5
+      ],
+      "imagem": "questoes/Q27.png",
+      "texto_pdf": "Questão 27                            UFRR 2026\n\nDurante o  recreio, os curumins se divertem brincando e\ncorrendo pelo pátio da escola. Alguns deles brincam com um\npedaço de madeira amarrado em uma corda. Eles giram o\nbrinquedo sobre a cabeça e largam a corda. Vence quem\nconsegue lançar o pedaço de madeira mais longe. Nessa\nbrincadeira há conceitos físicos envolvidos.\nSabendo disso, assinale a alternativa INCORRETA.\nA Existe uma força na corda que aponta para a mão do\n   curumim.\n B O peso do pedaço de madeira aponta sempre para a Terra.\nC A distância que o pedaço de madeira alcançará depende de\n   sua velocidade tangencial.\nD Sem a força centrípeta o pedaço de madeira não poderia se\n   manter em uma trajetória curvilínea.\n E A velocidade escalar média angular do pedaço de madeira e\n   a velocidade escalar média tangencial são independentes.",
+      "figuras": [],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 28,
+      "pagina": 8,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        440.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q28.png",
+      "texto_pdf": "Questão 28                             EEAR 2022\n\nOs  satélites  geoestacionários  realizam MCU  (Movimento\nCircular Uniforme) com órbitas que pertencem a um plano\nimaginário que corta a Terra na Linha do Equador e que\napresenta o mesmo período de rotação da Terra. Isso é obtido\nquando o satélite está a uma altura de 36.000 km em relação a\num ponto na superfície e com uma determinada velocidade\ntangencial.\nSe esse ponto situado na superfície, na Linha do Equador,\napresenta uma velocidade tangencial de módulo igual a\n1.600 km/h, o módulo da velocidade tangencial de um\nsatélite geoestacionário será de _____ km/h.\nUtilize = 3.\nA 9.000\n B 10.600\nC 18.000\nD 21.200",
+      "figuras": [],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 29,
+      "pagina": 9,
+      "coluna": 1,
+      "regiao": [
+        2.0,
+        55.0,
+        284.5,
+        738.0
+      ],
+      "imagem": "questoes/Q29.png",
+      "texto_pdf": "Questão 29                          UFAM 2025\n\nQuando necessário, adote os seguintes valores:\n\n                      À = 3\n                    g = 10 m/s²\n             sen45° = cos 45° = 2/2 = 0,71\n\nUm  avião de pequeno  porte, com massa  total de duas\ntoneladas,  descreve uma  curva  à  esquerda num  plano\nhorizontal em trajetória circular de raio R = 1000 m, com\nvelocidade  escalar  constante,  conforme  representado na\nfigura a seguir, onde F× é a força de sustentação, perpendicular\nàs asas, e 45° é o ângulo de inclinação das asas em relação ao\nplano horizontal:\n\n\n\n\n\n I. A resultante das forças externas que atuam sobre o avião é nula.\n\n II. A força centrípeta sobre o avião tem intensidade igual a 20 kN.\n\n III. A velocidade escalar do avião é igual a 360 km/h.\n\nConsiderando apenas as forças indicadas na figura, podemos\nafirmar que:\n\nAssinale a alternativa CORRETA:\n\nA Somente a afirmativa I é verdadeira.\n B Somente a afirmativa III é verdadeira.\nC Somente as afirmativas I e III são verdadeiras.\nD Somente as afirmativas II e III são verdadeiras.\n E Todas as afirmativas são verdadeiras.",
+      "figuras": [
+        {
+          "nome": "Q29_fig1",
+          "arquivo": "figuras/Q29_fig1.png",
+          "regiao": [
+            16.5,
+            202.0,
+            283.6,
+            372.5
+          ]
+        }
+      ],
+      "etapa": "Desafios"
+    },
+    {
+      "numero": 30,
+      "pagina": 9,
+      "coluna": 2,
+      "regiao": [
+        288.5,
+        54.5,
+        565.0,
+        738.0
+      ],
+      "imagem": "questoes/Q30.png",
+      "texto_pdf": "Questão 30                             EEAR 2024\n\nA figura a seguir representa a trajetória do movimento circular\nuniforme, realizado totalmente num plano vertical em um local\nonde há gravidade, em que um veículo está, durante todo o\nmovimento, em contato com um trilho  . Nessa figura estão\nassinaladas quatro posições (1, 2, 3 e 4). A posição 1 está\ndiametralmente oposta à posição 3, assim como a posição 2\nestá em relação a 4. As posições 3 e 1 pertencem à linha\ntracejada na vertical (V) e, respectivamente, são a posição\nmais elevada e menos elevada da  trajetória. Enquanto as\nposições 4 e 2 pertencem à linha tracejada na horizontal (H) e\nparalela ao solo.\n\n\n\n\n\n                                                              Fonte: EEAR, 2024.\n\nAssinale a alternativa que indica corretamente uma relação\nentre os módulos das reações normais (N1, N2, N3 e N4) em\ncada uma dessas posições (N1 na posição 1, N2 na posição 2,\nN3 na posição 3 e N4 na posição 4).\nA N† = N‡ e N… = N—\n B N1 > N3 e N4=N2\nC N1 > N3 > N4 > N2\nD N1 = N3 = N4 = N2",
+      "figuras": [
+        {
+          "nome": "Q30_fig1",
+          "arquivo": "figuras/Q30_fig1.png",
+          "regiao": [
+            297.0,
+            190.8,
+            547.0,
+            381.2
+          ]
+        }
+      ],
+      "etapa": "Desafios"
+    }
+  ]
+}

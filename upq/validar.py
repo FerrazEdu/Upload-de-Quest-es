@@ -54,7 +54,9 @@ def normalizar(s: str) -> str:
 def conferir_com_pdf(texto_pdf: str, transcricao: str) -> list[str]:
     """Compara números e palavras do PDF com a transcrição (só gera avisos)."""
     avisos = []
-    corpo = "\n".join(texto_pdf.splitlines()[1:])  # 1ª linha é a barra "Questão NN  BANCA ANO"
+    # 1ª linha é a barra "Questão NN  BANCA ANO"; créditos de figura podem estar dentro da imagem.
+    corpo = "\n".join(l for l in texto_pdf.splitlines()[1:]
+                      if not re.match(r"\s*\(?(Fonte|Disponível em)", l))
     digitos_trans = re.sub(r"\D", "", transcricao)
     faltando = [n for n in re.findall(r"\d+", corpo.replace(".", ""))
                 if len(n) >= 2 and n not in digitos_trans]
