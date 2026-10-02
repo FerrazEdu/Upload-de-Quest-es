@@ -186,7 +186,7 @@ const UPQRecorte = (() => {
       }
       comps.push(c);
     }
-    return {comps, rot, W};
+    return {comps, rot, W, px};
   }
 
   // retângulo (pt) que cobre o número e a letra de uma linha da tabela
@@ -207,7 +207,7 @@ const UPQRecorte = (() => {
   }
 
   function lerQuadro(canvas, limiar, inicio) {
-    const {comps, rot, W} = componentes(canvas, limiar);
+    const {comps, rot, W, px} = componentes(canvas, limiar);
     const glifos = comps.filter(c => { const h = c.y1 - c.y0 + 1, w = c.x1 - c.x0 + 1;
       return h >= ESCALA * 3 && h <= ESCALA * 30 && w <= ESCALA * 30 && w >= 2 && c.n > 12; });
     // linhas: glifos com o centro vertical alinhado
@@ -241,24 +241,105 @@ const UPQRecorte = (() => {
         const xc = (itens[i].x0 + itens[i + 1].x1) / 2;
         let col = colunas.find(c => Math.abs(c.xc - xc) < ESCALA * 40);
         if (!col) colunas.push(col = {xc, celulas: []});
-        col.celulas.push({digitos: itens[i].g.length, letra: itens[i + 1].g[0], y: itens[i].g[0].y0, caixa: caixaDe(itens[i], itens[i + 1])});
+        col.celulas.push({digitos: itens[i].g.length, largura: itens[i].x1 - itens[i].x0, letra: itens[i + 1].g[0], y: itens[i].g[0].y0, caixa: caixaDe(itens[i], itens[i + 1])});
       }
     colunas.sort((a, b) => a.xc - b.xc);
     const tentativas = [
       colunas.flatMap(c => c.celulas.sort((a, b) => a.y - b.y)),                                   // tabela por tabela
-      linhasQuadro.flatMap(itens => itens.filter((_, i) => i % 2 === 0).map((n, k) => ({digitos: n.g.length, letra: itens[2 * k + 1].g[0], caixa: caixaDe(n, itens[2 * k + 1])}))),  // linha a linha
+      linhasQuadro.flatMap(itens => itens.filter((_, i) => i % 2 === 0).map((n, k) => ({digitos: n.g.length, largura: n.x1 - n.x0, letra: itens[2 * k + 1].g[0], caixa: caixaDe(n, itens[2 * k + 1])}))),  // linha a linha
     ];
-    const confere = cel => cel.every((c, i) => c.digitos === String(inicio + i).length);
+    // números sem zero (1, 2… 10) ou com zero à esquerda (01, 02… 10): as duas formas valem
+    // Conferência da ordem pelo número de dígitos: contando os glifos ou, quando dígitos pequenos
+    // se grudam, pela largura do número (1–9 têm cerca de metade da largura de 10–99).
+    const confere = cel => {
+      if (cel.length < 5) return false;   // leitura parcial nunca vale
+      const largura = String(inicio + cel.length - 1).length;
+      if (cel.every((c, i) => c.digitos === String(inicio + i).length) || cel.every(c => c.digitos === Math.max(2, largura))) return true;
+      const ref = cel.filter((c, i) => String(inicio + i).length === largura).map(c => c.largura).sort((a, b) => a - b);
+      if (!ref.length) return false;
+      const med = ref[Math.floor(ref.length / 2)];
+      const padrao = cel.map(c => c.largura / med);
+      const semZero = padrao.every((r, i) => String(inicio + i).length < largura ? r > 0.3 && r < 0.75 : r > 0.8 && r < 1.25);
+      const comZero = padrao.every(r => r > 0.8 && r < 1.25) && inicio + cel.length - 1 >= 10;
+      return semZero || comZero;
+    };
     const celulas = tentativas.find(confere);
     if (!celulas) return {pares: {}, motivo: `quadro com ${tentativas[0].length} linhas, mas a numeração não fecha`, pontos: tentativas[0].length};
     const pares = {}, caixas = {};
     for (let i = 0; i < celulas.length; i++) {
-      const letra = classificarLetra(celulas[i].letra, rot, W);
+      const letra = reconhecerLetra(celulas[i].letra, rot, W, px);
       if (!letra) return {pares: {}, caixas: {}, motivo: `não reconheci a letra da questão ${inicio + i}`, pontos: celulas.length};
       pares[String(inicio + i).padStart(2, '0')] = letra;
       caixas[String(inicio + i).padStart(2, '0')] = celulas[i].caixa;
     }
     return {pares, caixas, motivo: null, pontos: celulas.length};
+  }
+
+  // Segundo método, que não depende do tamanho da letra: compara o glifo (em tons de cinza,
+  // esticado para uma grade 20×20) com A–E desenhados pelo navegador em várias fontes.
+  const GRADE = 20;
+  let modelos = null;
+  function gradeDe(cinza, w, h) {   // cinza: Float32Array w×h com 0 (fundo) a 1 (tinta)
+    const g = new Float32Array(GRADE * GRADE);
+    for (let gy = 0; gy < GRADE; gy++) for (let gx = 0; gx < GRADE; gx++) {
+      const xa = gx * w / GRADE, xb = (gx + 1) * w / GRADE, ya = gy * h / GRADE, yb = (gy + 1) * h / GRADE;
+      let soma = 0, n = 0;
+      for (let y = Math.floor(ya); y < Math.ceil(yb); y++) for (let x = Math.floor(xa); x < Math.ceil(xb); x++) { soma += cinza[y * w + x]; n++; }
+      g[gy * GRADE + gx] = n ? soma / n : 0;
+    }
+    const m = g.reduce((a, b) => a + b) / g.length;
+    let d = 0; for (let i = 0; i < g.length; i++) { g[i] -= m; d += g[i] * g[i]; }
+    d = Math.sqrt(d) || 1; for (let i = 0; i < g.length; i++) g[i] /= d;
+    return g;
+  }
+  function carregarModelos() {
+    if (modelos) return modelos;
+    modelos = [];
+    const c = document.createElement('canvas'); c.width = c.height = 160;
+    const ctx = c.getContext('2d', {willReadFrequently: true});
+    const fontes = ['Arial', 'Helvetica', 'Inter', 'Montserrat', 'Roboto', 'Segoe UI', 'DejaVu Sans', 'Liberation Sans', 'Verdana', 'sans-serif'];
+    for (const f of fontes) for (const peso of ['bold', '600', 'normal']) for (const letra of 'ABCDE') {
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 160, 160); ctx.fillStyle = '#000';
+      ctx.font = `${peso} 110px "${f}"`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(letra, 80, 84);
+      const d = ctx.getImageData(0, 0, 160, 160).data;
+      let x0 = 160, y0 = 160, x1 = -1, y1 = -1;
+      for (let y = 0; y < 160; y++) for (let x = 0; x < 160; x++) if (d[(y * 160 + x) * 4] < 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) continue;
+      const w = x1 - x0 + 1, h = y1 - y0 + 1, cinza = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cinza[y * w + x] = 1 - d[((y0 + y) * 160 + x0 + x) * 4] / 255;
+      modelos.push({letra, g: gradeDe(cinza, w, h)});
+    }
+    return modelos;
+  }
+  function letraPorModelo(c, W, px) {
+    const w = c.x1 - c.x0 + 1, h = c.y1 - c.y0 + 1, cinza = new Float32Array(w * h);
+    let fundo = 0, n = 0;   // cor do fundo: pixels claros em volta da caixa
+    for (let x = c.x0; x <= c.x1; x++) for (const y of [c.y0 - 2, c.y1 + 2]) {
+      const j = (y * W + x) * 4; if (j >= 0 && j < px.length) { fundo += Math.max(px[j], px[j + 1], px[j + 2]); n++; }
+    }
+    fundo = n ? fundo / n : 255;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const j = ((c.y0 + y) * W + c.x0 + x) * 4;
+      cinza[y * w + x] = Math.max(0, Math.min(1, (fundo - Math.max(px[j], px[j + 1], px[j + 2])) / Math.max(60, fundo - 30)));
+    }
+    const g = gradeDe(cinza, w, h);
+    const melhor = {};
+    for (const m of carregarModelos()) {
+      let r = 0; for (let i = 0; i < g.length; i++) r += g[i] * m.g[i];
+      if (!(m.letra in melhor) || r > melhor[m.letra]) melhor[m.letra] = r;
+    }
+    const ord = Object.entries(melhor).sort((a, b) => b[1] - a[1]);
+    return {letra: ord[0][0], nota: ord[0][1], margem: ord[0][1] - ord[1][1]};
+  }
+  // Decisão: forma (buracos/hastes) e modelo concordando; se a forma não decidir, o modelo
+  // decide sozinho só com folga clara sobre a 2ª letra.
+  function reconhecerLetra(c, rot, W, px) {
+    const forma = classificarLetra(c, rot, W);
+    const modelo = letraPorModelo(c, W, px);
+    if (forma && forma === modelo.letra) return forma;
+    if (!forma && modelo.nota > 0.6 && modelo.margem > 0.08) return modelo.letra;
+    if (forma && modelo.margem < 0.04) return forma;   // modelo indeciso: fica a forma
+    return null;
   }
 
   function classificarLetra(c, rot, W) {

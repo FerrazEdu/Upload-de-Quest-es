@@ -504,7 +504,6 @@ async function processar(job, {reprocessar = false} = {}) {
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).
       const completo = g => m.questoes.every(q => g[nn(q.numero)]);
       let gabarito = m.gabaritoPdf, origem = 'tabela do PDF';
-      if (job.gabaritoDigitado) { gabarito = job.gabaritoDigitado; origem = 'digitado a partir da tabela'; }
       if (!completo(gabarito) && m.paginaGabarito && comImagens()) {
         atualizar(job, {mensagem: 'Lendo a tabela de gabarito com o Claude…'});
         gabarito = await lerGabarito(m.paginaGabarito).catch(() => ({}));
@@ -512,7 +511,9 @@ async function processar(job, {reprocessar = false} = {}) {
       }
       if (!completo(gabarito)) {
         const faltam = m.questoes.filter(q => !gabarito[nn(q.numero)]).map(q => nn(q.numero));
-        return atualizar(job, {estado: 'gabarito', mensagem: `Não consegui ler a tabela de gabarito (${m.gabaritoMotivo || `faltam as questões ${faltam.join(', ')}`}). Nada foi enviado ao Claude ainda.`});
+        const motivo = m.gabaritoMotivo || `faltam as questões ${faltam.join(', ')}`;
+        guardarFalhaGabarito(job, motivo).catch(() => {});
+        return atualizar(job, {estado: 'gabarito', mensagem: `Não consegui ler a tabela de gabarito automaticamente (${motivo}). A lista não foi processada e nada foi enviado ao Claude.`});
       }
       const classe = m.tipo === 'lista' ? await classificar(m) : null;
       job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, gabaritoOrigem: origem, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
@@ -569,6 +570,16 @@ async function transcreverPendentes(job) {
   };
   await Promise.all(Array.from({length: SIMULTANEAS}, trabalhador));
   if (erroFatal) throw erroFatal;
+}
+
+// Tabela que o leitor não conseguiu ler: guarda a página e o motivo (coleção "falhas") para
+// ajustar o leitor sem precisar do PDF.
+async function guardarFalhaGabarito(job, motivo) {
+  if (!cap.db || !cap.assets || job.falhaGuardada) return;
+  job.falhaGuardada = true;
+  const imagem = job.m.paginaGabarito ? (await cap.assets.upload(job.m.paginaGabarito, {type: 'image/jpeg'})).id : null;
+  await cap.db.doc(`falhas/${job.idImp}`).set({arquivo: job.m.arquivo, hash: job.m.hash, motivo, gabaritoImagem: imagem,
+    questoes: job.m.questoes.length, criado_em: agora()});
 }
 
 async function salvarNoBanco(job) {
@@ -679,13 +690,6 @@ function desenharEnvios() {
     if (acao === 'abrir') ir('lista', {lista: job.lista});
     else if (acao === 'continuar') enfileirar(job);
     else if (acao === 'reprocessar') enfileirar(job, {reprocessar: true});
-    else if (acao === 'usar-gabarito') {
-      const letras = (alvo.querySelector(`[data-gab-job="${job.id}"]`).value.toUpperCase().match(/[A-E]/g) || []);
-      const n = job.m.questoes.length;
-      if (letras.length !== n) { alvo.querySelector(`[data-gab-info="${job.id}"]`).textContent = `${letras.length} letras; a lista tem ${n} questões.`; return; }
-      job.gabaritoDigitado = Object.fromEntries(job.m.questoes.map((q, i) => [nn(q.numero), letras[i]]));
-      enfileirar(job);
-    }
     else if (acao === 'descartar') { estado.jobs.splice(estado.jobs.indexOf(job), 1); desenharEnvios(); }
     else if (acao === 'ver-existente') { const l = [...estado.listas.entries()].find(([, x]) => x.origem === job.idImp); if (l) ir('lista', {lista: l[0]}); }
   }));
@@ -708,9 +712,7 @@ function cartaoEnvio(e) {
     : e.estado === 'fila' ? b('descartar', 'Tirar da fila') : '';
   const manual = e.estado !== 'gabarito' ? '' : `<div class="gab-manual">
     ${e.m?.paginaGabarito ? `<img src="${e.urlGabarito ||= URL.createObjectURL(e.m.paginaGabarito)}" alt="Página da tabela de gabarito">` : '<div class="sub">O PDF não tem página de gabarito depois das questões.</div>'}
-    <label class="rotulo-campo">Último recurso: digite as letras da tabela, em ordem (${e.m?.questoes.length || 0} questões)
-      <input class="campo" data-gab-job="${e.id}" placeholder="Ex.: CCDABBCDDB…" autocomplete="off" spellcheck="false"></label>
-    <div class="form-linha"><button class="botao primario" data-job="${e.id}" data-acao="usar-gabarito">Usar e continuar</button><span class="sub" data-gab-info="${e.id}"></span></div></div>`;
+    <div class="sub">A página da tabela foi guardada para análise do leitor de gabarito.</div></div>`;
   return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>
     <div class="acoes-envio">${acoes}</div><div class="etapas">${etapas}</div>${manual}</div>`;
 }
