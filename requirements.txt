@@ -1,0 +1,5 @@
+pymupdf>=1.24
+anthropic>=1.11
+pydantic>=2.7
+requests>=2.31
+openpyxl>=3.1

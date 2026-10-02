@@ -1,42 +1,95 @@
 # Upload de Questões
 
-Ferramentas para transformar listas de exercícios em PDF em questões cadastradas no banco de
-questões, **preservando formatação, LaTeX e imagens**.
-
-## Fluxo
+Transforma listas de exercícios em PDF em questões no banco (Supabase), com **LaTeX,
+negrito/itálico, tabelas e figuras em alta resolução**, e uma resolução comentada por questão.
 
 ```
-PDF da lista ──(IA + prompts/gerar_planilha.md)──▶ planilha ──(validar_planilha.py)──▶ importação
+PDF ──segmentar──▶ recortes + figuras + manifesto ──transcrever (IA)──▶ ia/QNN.json
+      (segundos)                                     (paralelo)
+    ──revisar──▶ transcricao.json + revisao.html ──enviar──▶ Supabase (Storage + importar_lista)
+                 (validação automática + olho humano)
 ```
 
-1. Envie o PDF para a IA com o prompt de `prompts/gerar_planilha.md`.
-2. Salve a resposta como `<codigo_lista>.csv` (ou cole no Excel e salve `.xlsx`).
-3. Valide e revise visualmente:
-   ```
-   pip install openpyxl
-   python ferramentas/validar_planilha.py MAT-EM2-L07.csv --preview
-   ```
-   Abra o `MAT-EM2-L07.preview.html` gerado no navegador.
-4. Corrija os erros apontados e importe.
+## Por que este desenho
 
-## Segmentação do PDF (sem IA, segundos por lista)
+- **A camada de texto do PDF não serve como fonte final.** O texto é selecionável, mas as
+  fontes Type3 trocam símbolos (π vira "À", ≈ vira "H"), achatam expoentes (10⁸ vira "108")
+  e partem palavras. Por isso a IA lê a **imagem** de cada questão; o texto do PDF entra
+  como apoio e como conferência automática de números e palavras.
+- **A geometria da página é confiável.** As barras "Questão NN", o fio entre colunas e o
+  rodapé delimitam cada questão sem IA; as figuras saem em 300 dpi, com os rótulos
+  desenhados por cima.
+- **Uma chamada por questão, em paralelo**, em vez de um documento inteiro por vez: mais
+  rápido, mais preciso e, se algo falhar, só aquela questão é refeita.
+- **O que é regra fica no código, não na IA:** título no padrão, etapa, página, gabarito
+  oficial, par disciplina/tópico (o banco recusa par fora da base).
+
+## Instalação
 
 ```
-pip install pymupdf
-python ferramentas/segmentar_pdf.py Movimento_Circular_Uniforme.pdf --saida saida/MCU
+pip install -r requirements.txt
 ```
 
-Gera um recorte PNG de cada questão, cada figura em alta resolução, as páginas sem questões
-(capa, sumário, gabarito) e um `manifesto.json` com número, página, coluna, etapa (Fixação,
-Treinamento…) e figuras de cada questão. Usa só a geometria da página, porque a camada de
-texto dessas listas (fontes Type3) vem corrompida: π vira "À", expoentes somem, colunas se
-misturam.
+## Uso
+
+```
+# 1. Segmentar + transcrever + validar + gerar revisão (uma lista ou uma pasta inteira)
+export ANTHROPIC_API_KEY=...            # sem chave: veja "Sem chave de API" abaixo
+python -m upq processar exemplos/Movimento_Circular_Uniforme.pdf
+python -m upq processar pasta_com_900_pdfs/
+
+# 2. Revisar: abrir saida/<lista>/revisao.html no navegador
+#    (original à esquerda, renderizado à direita, erros e avisos no topo de cada questão)
+python -m upq revisar saida/<lista>      # refaz validação e revisão depois de correções
+
+# 3. Enviar ao Supabase
+export SUPABASE_URL=https://wrexjikxwjqwxcsmuzis.supabase.co
+export SUPABASE_SECRET_KEY=sb_secret_...  # Dashboard → Project Settings → API Keys
+python -m upq enviar saida/<lista>        # --forcar para enviar com avisos já revisados
+
+# Opcional: .xlsx de 15 colunas (formato do Prompt Mestre)
+python -m upq exportar saida/<lista>
+```
+
+Depois de enviar, a lista fica como `rascunho`. Para publicar (aparecer no
+`visualizador.html` e para os alunos):
+
+```sql
+update public.listas set status = 'publicada' where titulo = 'Movimento Circular Uniforme';
+```
+
+### Sem chave de API
+
+O Claude Code faz o papel do motor de transcrição, seguindo as mesmas regras
+(ver `CLAUDE.md`): peça "transcreva a lista saida/<lista>" e depois rode
+`python -m upq revisar saida/<lista>`. Serve para testar e para listas avulsas; para
+o volume de 800–900 listas use a API.
+
+## Banco (Supabase)
+
+Migrações em `supabase/migrations/`, já aplicadas no projeto `wrexjikxwjqwxcsmuzis`:
+
+| Tabela | Conteúdo |
+|---|---|
+| `topicos` | base oficial de tópicos (166 pares disciplina/tópico, de `dados/base_topicos.txt`) |
+| `listas` | uma linha por PDF (`hash_pdf` único: reenviar o mesmo PDF atualiza) |
+| `questoes` | enunciado, `alternativas` (JSON A–E), gabarito, explicação, figuras, dificuldade, etapa |
+
+- Texto rico é **Markdown + LaTeX** (`$...$`, `$$...$$`); figuras são `![descrição](URL pública)`.
+- `importar_lista(p jsonb)` grava a lista inteira numa transação e nunca apaga questões.
+- RLS: leitura pública só de listas `publicada`; escrita só com a chave secreta.
+- Figuras no bucket público `figuras`.
 
 ## Arquivos
 
-- `docs/ESPECIFICACAO_PLANILHA.md` — o contrato da planilha: colunas e regras de marcação
-  (negrito, LaTeX, tabelas, marcadores de imagem `[[IMG:p4:2|...]]`).
-- `prompts/gerar_planilha.md` — prompt para a IA gerar a planilha a partir do PDF.
-- `ferramentas/segmentar_pdf.py` — recorta questões e figuras do PDF.
-- `ferramentas/validar_planilha.py` — validador + preview HTML com MathJax.
-- `exemplos/MAT-EM2-L07.csv` — exemplo com 2 questões corretas e 2 com erros propositais.
+| Caminho | O quê |
+|---|---|
+| `upq/segmentar.py` | recorta questões e figuras, lê etapas do sumário e o gabarito |
+| `upq/prompt.py` | regras de transcrição, formatação, dificuldade e resolução (adaptadas do Prompt Mestre) |
+| `upq/transcrever.py` | motor da API do Claude (paralelo, cache do prompt, saída em JSON Schema) |
+| `upq/montar.py` | junta tudo em `transcricao.json` com título, etapa e gabarito oficial |
+| `upq/validar.py` | estrutura, base de tópicos, LaTeX, figuras e conferência com o texto do PDF |
+| `upq/revisao.py` | gera `revisao.html` |
+| `upq/enviar.py` / `upq/exportar.py` | Supabase / .xlsx |
+| `visualizador.html` | o banco publicado, como o aluno vê |
+| `docs/prompt_mestre_original.md` | prompt usado antes, para referência |

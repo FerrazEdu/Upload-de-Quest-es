@@ -1,0 +1,191 @@
+DISCIPLINA: História
+- Idade Antiga: Egito; Grécia; Primeiras civilizações; Roma
+- Idade Média: Cruzadas; Feudalismo; Império Bizantino
+- Idade Moderna: Estados Nacionais; Expansão marítima; História da América; Mercantilismo; Reforma e contrarreforma; Renascimento; Revolução industrial
+- Idade Contemporânea: Entreguerras; Guerra Fria; Imperialismo; Nazifascismo; Primaveira Árabe; Primeira Guerra Mundial; Revolução Francesa; Segunda Guerra Mundial
+- Brasil Colônia: Catequização; Ciclos econõmicos; Escravidão; Independência; Revoltas brasileiras
+- Brasil Império: Abolição da escravidão; Guerra do Paraguai; Período Regencial; Primeiro Reinado; Revoltas brasileiras; Segundo Reinado
+- Brasil República: Constituição Federal; Direitos Sociais; Ditadura militar; Era Vargas; Governo JK; Proclamação da República; Redemocratização; República Oligárquica; República Velha; Revoltas brasileiras
+
+DISCIPLINA: Geografia
+- Geografia Econômica: Blocos econômicos; Comércio; Conceitos geográficos; Desigualdade socioeconômica; DIT; Doutrinas econômicas; Fontes de energia; Globalização; Modais; Modelos de produção; Neoliberalismo; Setores da economia; Sistemas econômicos
+- Geografia Urbana e Demografia: Densidade demográfica; Fenômenos urbanos e problemas sociais; Indicadores demográficos; Migrações; Pirâmides etárias; Teorias demográficas; Transição demográfica
+- Geografia Agrária: Conflitos no campo; Estrutura fundiária; Modelos de produção agrícola; Reforma agrária; Revolução verde
+- Geopolítica: Blocos econômicos; Colonialismo e neocolonialismo; Conflitos geopolíticos; Imperialismo; Ordens mundiais; Sustentabilidade
+- Geografia Física: Cartografia; Ciclo das rochas; Eras geológicas; Geologia; Relevos; Tectonismo
+- Hidrografia
+- Climatologia: Climas do Brasil; El Nino e La Nina; Fatores do clima; Fenômenos climáticos
+- Impactos ambientais: Degradação dos solos; Desmatamento; Escassez hídrica; Mudanças climáticas; Poluição
+
+DISCIPLINA: Filosofia
+- Fundamentos da Filosofia: A Passagem do Mito ao Logos; Mito e Religião; O Que é Filosofia
+- Filosofia Clássica: Aristóteles; Platão; Pré-Socráticos; Sócrates
+- Filosofia Moderna: Contratualismo; Idealismo; Iluminismo; Kant; Racionalismo e empirismo
+- Filosofia Contemporânea: Educação; Escola de Frankfurt; Guerra Fria; Michel Foucault; Nietzche; Sartre
+- Filosofia Religiosa: Santo Agostinho; São Tomás de Aquino
+- Filosofia da Ciência
+- Ética e Moral
+- Política
+
+DISCIPLINA: Sociologia
+- Fundamentos da Sociologia: O Que é Sociologia; Sociologia e suas Áreas
+- Sociólogos Clássicos: Auguste Comte; Émile Durkheim; Marx e Engels; Max Weber
+- Cultura e Identidade
+- Instituições Sociais
+- Sociologia do Trabalho
+- Política
+- Movimentos Sociais: Abolição, racismo e antirracismo; Movimento feminista; Movimento LGBT; Movimento operário
+- Sociologia Brasileira
+- Tecnologia
+- Religião
+- Indústria Cultural, Consumo, Comunicação e Influência
+- Consciência Coletiva
+
+DISCIPLINA: Biologia
+- Fundamentos da Biologia: Introdução à Célula; Níveis de Organização Biológica; Noções de Metabolismo e Energia; O que é Vida
+- Método Científico
+- Bioquímica: Enzimas; Macromoléculas; Vitaminas
+- Citologia e Moléculas da Vida: Células; Divisão celular; Membrana Plasmática; Organelas; Transportes de membrana
+- Metabolismo Energético I: Fermentação; Respiração celular
+- Metabolismo Energético II: Fotossíntese; Quimiossíntese
+- Biologia Molecular: Bases nitrogenadas; DNA e RNA; Proteínas
+- Evolução e Classificação dos Seres Vivos: Cladogramas; Especiação; Origem da vida; Teorias evolutivas
+- Ecologia: Biomas e diversidade; Cadeia alimentar; Ciclos biogeoquímicos; Dinâmica de populações; Ecossistemas; Fluxos de energia e de matéria; Gráficos de relações ecológicas; Impactos antrópicos; Preservação e conservação ambiental; Problemas ambientais; Relações ecológicas; Sucessão ecológica
+- Impactos e Problemas Ambientais
+- Genética: 1° Lei de Mendel; 2° Lei de Mendel; Biotecnologia; Doenças genéticas; Engenharia genética; Fator Rh e Sistema ABO; Fundamentos da genética; Heredogramas; Interações gênicas
+- Histologia: Tecido Muscular
+- Fisiologia Humana: Sistema cardiorrespiratório; Sistema digestório; Sistema endócrino; Sistema excretor; Sistema hematopoietico; Sistema imunológico; Sistema nervoso; Sistema reprodutor
+- Botânica: Fisiologia vegetal; Fitormônios; Grupos vegetais; Histologia vegetal; Reprodução
+- Zoologia: Artrópodes e Equinodermos; Cordados; Primeiros filos
+- Doenças: Bacterioses; Protozooses e verminoses; Vírus e viroses
+- Microbiologia
+- Reprodução e Embriologia
+
+DISCIPLINA: Física
+- Energia e suas Transformações: Fontes de energia; Impactos Ambientais e Contexto Energético
+- Ferramental Matemático: Conversão de unidades; Potência de 10 e notação científica; Proporção entre grandezas físicas; Triângulo retângulo na Física
+- Grandezas Físicas
+- Termologia I: Calorimetria; Dilatação; Termometria
+- Cinemática I: Fundamentos da cinemática; Movimento uniforme; Movimento uniformemente variado; Queda livre e lançamento vertical
+- Ondulatória I: Espectro eletromagnético; Fenômenos ondulatórios; Propriedades das ondas
+- Dinâmica I: Força de atrito; Força elástica e lei de Hooke; Forças particulares; Leis de Newton; Polias fixas e móveis
+- Vetores
+- Eletrostática: Campo e potencial elétrico; Eletrização; Força elétrica
+- Eletrodinâmica I: 1º Lei de Ohm; 2º Lei de Ohm; Amperímetro e voltímetro; Circuitos elétricos; Potência elétrica; Tensão e corrente
+- Potência e Eficiência
+- Cinemática II: Acoplamento no MCU; Cinemática vetorial; Lançamento horizontal; Lançamento oblíquo; Movimento circular
+- Termologia II: Gases; Termodinâmica
+- Dinâmica II: Dinâmica do MCU; Plano inclinado
+- Dinâmica III: Colisões; Energia cinética e mecânica; Energia potencial elástica; Energia potencial gravitacional; Força elástica; Impulso e quantidade de movimento; Movimento Harmônico Simples
+- Estática: Equilíbrio de corpos
+- Hidrostática: Densidade; Empuxo; Pressão
+- Eletrodinâmica II: Associação de pilhas e baterias; Geradores, receptores e capacitores; Ponte de Wheatstone
+- Magnetismo e Eletromagnetismo
+- Óptica: Espelhos; Fenômenos ópticos; Lentes
+- Ondulatória II: Acústica
+- Gravitação
+- Física Moderna: Física nuclear; Mecânica quântica; Radiação de corpo negro; Relatividade
+
+DISCIPLINA: Química
+- Propriedades da Matéria
+- Processos de Separação de Misturas
+- Atomística: Alotropia; Efeitos luminosos; Leis ponderais; Modelo atômico atual; Modelos atômicos; Propriedades atômicas
+- Estequiometria: Cálculos estequiométricos; Variáveis no cálculo estequiométrico
+- Tabela Periódica e suas Propriedades: Elementos químicos; Famílias e períodos; Propriedades periódicas
+- Química Orgânica: Compostos orgânicos; Funções orgânicas; Isomeria; Reações orgânicas
+- Ligações Químicas, Propriedades dos Compostos e Polaridade: Forças intermoleculares; Ligações químicas; Polaridade
+- Geometria Molecular: Arranjos geométricos espaciais; Teoria da Repulsão dos Pares de Elétrons
+- Radioatividade: Decaimento radioativo; Partículas; Reações nucleares
+- Propriedades Coligativas: Crioscopia; Osmoscopia; Tonoscopia
+- Eletroquímica: Eletrólise; Oxirredução; Pilhas; Reações
+- Química Ambiental
+- Química Inorgânica: Ácidos; Bases; Funções inorgânicas; Ionização e dissociação iônica; NOX; Óxidos; Reações inorgânicas; Sais
+- Termoquímica: Equações termoquímicas; Lei de Hess
+- Soluções: Concentração; Diluição e mistura de soluções; Dispersões
+- Equilíbrio Químico
+- Cinética Química
+- Reações Químicas
+- Gases e suas Transformações
+- Polímeros
+
+DISCIPLINA: Linguagens e Códigos
+- Funções da Linguagem
+- Figuras de Linguagem
+- Tipologias Textuais
+- Gêneros Textuais
+- Campanhas Publicitárias, Anúncios e Influência
+- Crítica Social, Cultural e Artística
+- Variações Linguísticas: Normas linguísticas; Patrimônio linguístico
+- Poemas e Poesias
+- Expressividade e Lirismo
+- Progressão Textual e Temática
+- Mecanismos de Coesão e Coerência
+- Intertextualidade
+- Charges e HQs
+- Literatura: Arcadismo; Barroco; Classicismo; Contemporânea; Leituras obrigatórias; Modernismo; Naturalismo; Parnasianismo; Quinhentismo; Realismo; Romantismo; Simbolismo; Trovadorismo
+- Artes: Cubismo; Dadaísmo; Expressionismo; Futurismo; Surrealismo
+- Movimentos Artísticos
+- Recursos Argumentativos
+- Estratégias Argumentativas
+- Gramática: Colocação Pronominal; Concordância; Fonética e Fonologia; Morfologia; Ortografia e Acentuação; Pontuação; Regência; Semântica e Lexicologia; Sintaxe
+- Tecnologias
+- Interpretação de Texto
+- Educação Física
+- Linguagem Corporal
+
+DISCIPLINA: Espanhol
+- Interpretação de Texto
+- Charges e HQ's
+- Campanhas Publicitárias
+- Vocabulário e Semântica
+
+DISCIPLINA: Inglês
+- Vocabulário e Semântica
+- Interpretação de Texto
+- Charges e HQs
+- Campanhas Publicitárias
+
+DISCIPLINA: Matemática
+- Fundamentos da Matemática: Divisão; Frações; Multiplicação; Potenciação; Radiciação; Soma; Subtração
+- Razão, Proporção e Regra de Três: Divisão diretamente proporcional; Divisão inversamente proporcional; Regra de 3 composta; Regra de 3 simples
+- Razão e Proporção Avançada: Regra de 3 simples
+- Porcentagem: Aumento percentual; Redução percentual; Taxa percentual
+- Unidades de Medida e Conversões
+- Notação Cientifica
+- Escalas: Escalas lineares; Escalas superficiais; Escalas volumétricas
+- Vazão
+- Matemática Financeira: Aumentos; Descontos; Juros compostos; Juros Simples; Taxa percentual
+- Gráficos e Tabelas: Gráficos; Tabelas
+- Estatística: Desvio padrão e variância; Medidas de tendência central
+- Conjuntos
+- Álgebra: Números complexos; Polinômios
+- Inequações
+- Sistemas e Equações: Escalonamento; Primeiro grau; Segundo grau
+- Função do Primeiro Grau
+- Progressão Aritmética: Soma dos termos; Termo geral
+- Sequências Lógicas
+- Progressão Geométrica
+- Função do Segundo Grau
+- Geometria Plana: Ângulos; Área e perímetro; Circunferências e arcos; Polígonos e semelhança; Razões trigonométricas
+- Trigonometria
+- Geometria Espacial: Poliedros; Projeção ortogonal
+- Geometria Analítica: Circunferência; Plano cartesiano; Reta
+- Análise Combinatória: Arranjo; Combinação; Permutação; PFC
+- Probabilidade
+- Função Exponencial e Logarítmica
+- Função Trigonométrica
+- Logaritmo
+- Matrizes
+- Lógica
+- MMC e MDC
+- Conjuntos Numéricos
+- Função Racional
+
+DISCIPLINA: Redação
+- Cadernos de Aprimoramento Textual
+
+DISCIPLINA: Intensivo Revisional
+- Matemática
+- Biologia
+- Química
+- Física

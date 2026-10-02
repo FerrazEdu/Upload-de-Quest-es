@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banco de Questões</title>
+<!-- Mostra o que está PUBLICADO no Supabase, como o aluno veria.
+     A chave abaixo é a publicável (pública por definição): só lê o que o RLS libera. -->
+<script>
+const SUPABASE_URL = 'https://wrexjikxwjqwxcsmuzis.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_YEqRSJ0o2SPRcBEKNDlnow_slDQLoBc';
+MathJax = {tex: {inlineMath: [['$', '$']], displayMath: [['$$', '$$']], processEscapes: true}};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+:root{--fundo:#f5f4f0;--cartao:#fff;--borda:#ddd8cc;--texto:#1f1d1a;--suave:#6b665c;--acento:#b3261e;--certa:#e3f3e3}
+@media (prefers-color-scheme:dark){:root{--fundo:#1b1a18;--cartao:#252320;--borda:#3a3732;--texto:#ece8e0;--suave:#a39d92;--certa:#1f3a22}}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 system-ui,sans-serif;background:var(--fundo);color:var(--texto)}
+header{background:var(--acento);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:18px}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;max-width:1100px;margin:0 auto;padding:16px}
+@media (max-width:800px){.layout{grid-template-columns:1fr}}
+nav button{display:block;width:100%;text-align:left;margin:0 0 6px;padding:10px 12px;border:1px solid var(--borda);
+border-radius:8px;background:var(--cartao);color:var(--texto);font:inherit;font-size:14px;cursor:pointer}
+nav button.ativo{border-color:var(--acento);box-shadow:inset 3px 0 0 var(--acento)}
+nav small{color:var(--suave);display:block}
+.q{background:var(--cartao);border:1px solid var(--borda);border-radius:10px;padding:16px 18px;margin:0 0 16px}
+.q h2{font-size:15px;margin:0 0 8px;color:var(--suave);font-weight:600}
+.q img{max-width:100%;height:auto;display:block;margin:8px auto}
+.q table{border-collapse:collapse}.q td,.q th{border:1px solid var(--borda);padding:4px 8px}
+ol.alts{list-style:none;padding:0}ol.alts li{display:flex;gap:8px;padding:5px 8px;border-radius:6px}
+ol.alts li p{margin:0}ol.alts .l{font-weight:700}
+.q.aberta li.certa{background:var(--certa)}
+.resp{display:none;border-top:1px dashed var(--borda);margin-top:10px;padding-top:6px}
+.q.aberta .resp{display:block}
+.q>button{border:1px solid var(--borda);background:var(--fundo);color:var(--texto);border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit;font-size:14px}
+.vazio{color:var(--suave)}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+</style></head><body>
+<header><h1>Banco de Questões</h1></header>
+<div class="layout"><nav id="listas"><p class="vazio">Carregando…</p></nav><main id="questoes"></main></div>
+<script>
+const api = (caminho) => fetch(`${SUPABASE_URL}/rest/v1/${caminho}`, {headers: {apikey: SUPABASE_KEY}})
+  .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)));
+
+function md(texto) {
+  const g = [];
+  const t = texto.replace(/\\\$/g, '\u0001')
+    .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, m => { g.push(m); return `\u0002${g.length - 1}\u0002`; });
+  return marked.parse(t).replace(/\u0002(\d+)\u0002/g, (m, i) => g[+i].replace(/</g, '&lt;')).replace(/\u0001/g, '\\$');
+}
+
+async function abrir(lista, botao) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('ativo', b === botao));
+  const main = document.getElementById('questoes');
+  main.innerHTML = '<p class="vazio">Carregando…</p>';
+  const qs = await api(`questoes?lista_id=eq.${lista.id}&order=numero`);
+  main.innerHTML = '';
+  for (const q of qs) {
+    const s = document.createElement('section');
+    s.className = 'q';
+    const alts = Object.entries(q.alternativas).map(([l, t]) =>
+      `<li class="${l === q.gabarito ? 'certa' : ''}"><span class="l">${l})</span><div>${md(t)}</div></li>`).join('');
+    s.innerHTML = `<h2>${q.titulo}</h2>${md(q.enunciado)}<ol class="alts">${alts}</ol>
+      <button>Ver resposta</button><div class="resp">${md(q.explicacao || '')}</div>`;
+    s.querySelector('button').onclick = () => s.classList.toggle('aberta');
+    main.appendChild(s);
+  }
+  if (window.MathJax?.typesetPromise) MathJax.typesetPromise([main]);
+}
+
+api('listas?status=eq.publicada&order=titulo').then(listas => {
+  const nav = document.getElementById('listas');
+  nav.innerHTML = listas.length ? '' : '<p class="vazio">Nenhuma lista publicada ainda.</p>';
+  listas.forEach((l, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `${l.titulo}<small>${l.disciplina} · ${l.topico} · ${l.total_questoes} questões</small>`;
+    b.onclick = () => abrir(l, b);
+    nav.appendChild(b);
+    if (i === 0) abrir(l, b);
+  });
+}).catch(e => { document.getElementById('listas').innerHTML = `<p class="vazio">Erro: ${e}</p>`; });
+</script>
+</body></html>

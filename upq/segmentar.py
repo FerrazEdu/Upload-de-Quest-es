@@ -1,25 +1,29 @@
-#!/usr/bin/env python3
 """Recorta uma lista em PDF (modelo Plataforma Assaad) em questões e figuras.
 
-Não depende da camada de texto do PDF para o conteúdo — ela vem quebrada nas
-listas exportadas com fontes Type3 (π vira "À", expoentes somem, colunas se
-misturam). Usa apenas a GEOMETRIA da página, que é confiável:
+A camada de texto dessas listas é selecionável, mas não é confiável como fonte
+final: com as fontes Type3 do PDF, símbolos trocam de caractere (π vira "À",
+≈ vira "H"), expoentes e índices perdem a posição (10⁸ vira "108", N₁ vira
+"N1") e palavras se partem. A delimitação usa só a GEOMETRIA da página:
 
   - cada questão começa numa barra "Questão NN";
   - a questão vai até a próxima barra da mesma coluna (ou o fim da coluna);
   - figuras são as imagens grandes dentro da região da questão.
 
+O texto da região entra no manifesto como `texto_pdf`: serve de apoio para a IA
+(ordem das palavras, nomes próprios) e para conferir números na validação.
+
 Saída (pasta --saida):
-  manifesto.json            lista, etapas e, por questão: página, coluna, região, figuras
+  manifesto.json            lista, etapas e, por questão: página, região, texto_pdf, figuras
   questoes/QNN.png          recorte da questão inteira (entrada para a IA e para revisão)
   figuras/QNN_figK.png      cada figura em alta resolução, como aparece no PDF
   paginas/pN.png            páginas sem questões (capa, sumário, gabarito)
 
 Uso:
-    python ferramentas/segmentar_pdf.py LISTA.pdf --saida saida/LISTA
+    python -m upq.segmentar LISTA.pdf --saida saida/LISTA
 """
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -91,6 +95,14 @@ def etapas_pelo_sumario(doc):
     return {}
 
 
+def gabarito_em_texto(pagina) -> dict[str, str]:
+    """Lê o quadro de gabarito quando ele está em texto (em algumas listas é imagem;
+    aí volta vazio e a IA lê a página renderizada)."""
+    texto = pagina.get_text()
+    pares = re.findall(r"^\s*(\d{1,3})\s*\n\s*([A-E])\s*$", texto, re.M)
+    return {f"{int(n):02d}": letra for n, letra in pares}
+
+
 def segmentar(caminho_pdf: Path, saida: Path) -> dict:
     doc = pymupdf.open(caminho_pdf)
     (saida / "questoes").mkdir(parents=True, exist_ok=True)
@@ -143,7 +155,8 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
                     # Renderiza o recorte em vez de extrair o arquivo da imagem: assim
                     # entram também rótulos desenhados por cima (vetores, ângulos, letras).
                     pagina.get_pixmap(dpi=DPI_FIGURA, clip=f).save(saida / "figuras" / nome)
-                    figuras.append({"arquivo": f"figuras/{nome}",
+                    figuras.append({"nome": nome.removesuffix(".png"),
+                                    "arquivo": f"figuras/{nome}",
                                     "regiao": [round(v, 1) for v in f]})
                 nome_q = f"Q{numero:02d}.png"
                 pagina.get_pixmap(dpi=DPI_QUESTAO, clip=regiao).save(saida / "questoes" / nome_q)
@@ -153,6 +166,7 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
                     "coluna": col + 1,
                     "regiao": [round(v, 1) for v in regiao],
                     "imagem": f"questoes/{nome_q}",
+                    "texto_pdf": pagina.get_text("text", clip=regiao, sort=True).strip(),
                     "figuras": figuras,
                 })
 
@@ -166,14 +180,22 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
     faltando = sorted(set(range(1, max(numeros) + 1)) - set(numeros)) if numeros else []
     repetidos = sorted({n for n in numeros if numeros.count(n) > 1})
 
+    # O gabarito fica numa página sem questões depois da última questão.
+    ultima = max((q["pagina"] for q in questoes), default=0)
+    pag_gabarito = next((p for p in paginas_sem_questao if p > ultima), None)
+
     manifesto = {
         "arquivo": caminho_pdf.name,
+        "hash_pdf": hashlib.sha256(caminho_pdf.read_bytes()).hexdigest(),
+        "tipo": "simulado" if "simulado" in (caminho_pdf.name + titulo_lista).lower() else "lista",
         "titulo_lista": titulo_lista,
         "total_questoes": len(questoes),
         "numeros_faltando": faltando,
         "numeros_repetidos": repetidos,
         "etapas": inicio_etapas,
         "paginas_sem_questao": [f"paginas/p{p}.png" for p in paginas_sem_questao],
+        "pagina_gabarito": f"paginas/p{pag_gabarito}.png" if pag_gabarito else None,
+        "gabarito_pdf": gabarito_em_texto(doc[pag_gabarito - 1]) if pag_gabarito else {},
         "questoes": questoes,
     }
     (saida / "manifesto.json").write_text(
