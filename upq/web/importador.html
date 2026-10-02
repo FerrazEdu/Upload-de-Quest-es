@@ -133,7 +133,11 @@ tbody tr.sel td { background: var(--acento-fundo); }
 .enunciado { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 12px 14px; overflow-wrap: anywhere; }
 .enunciado p { margin: 0 0 10px; } .enunciado p:last-child { margin-bottom: 0; }
 .enunciado img, .alt img { max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; background: #fff; }
-.enunciado table { border-collapse: collapse; } .enunciado td, .enunciado th { border: 1px solid var(--borda-forte); padding: 4px 8px; }
+.conteudo-q table, .enunciado table, .alt .conteudo table { border-collapse: collapse; width: auto; max-width: 100%; margin: 14px 0; font-size: inherit; }
+.enunciado table td, .enunciado table th, .alt .conteudo table td, .alt .conteudo table th,
+.enunciado tbody tr:last-child td, .alt .conteudo tbody tr:last-child td { border: 1px solid var(--borda-forte); padding: 5px 10px; white-space: normal; color: var(--texto); }
+.enunciado table th, .alt .conteudo table th { background: var(--painel); font-weight: 600; }
+.enunciado table:first-child { margin-top: 0; } .enunciado table:last-child { margin-bottom: 0; }
 mjx-container { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
 mjx-container[display="true"] { margin: .6em 0 !important; }
 .alternativas { border: 1px solid var(--borda); border-radius: 6px; overflow: hidden; }
@@ -417,7 +421,11 @@ function promptLote(lote, ctx) {
 - Texto extraído do PDF (${comImagens() ? 'apoio; contém erros de símbolos — confira na imagem' : 'fonte desta transcrição; corrija os erros de símbolos'}):
 <<<
 ${q.textoPdf}
->>>`;
+>>>${q.correcao ? `
+- ATENÇÃO, NOVA TENTATIVA: a transcrição anterior desta questão foi rejeitada pela validação por:
+${q.correcao.map(e => `  * ${e}`).join('\n')}
+  Refaça a questão inteira a partir ${comImagens() ? 'da imagem' : 'do texto'}, corrigindo esses pontos.${q.assuntosValidos ? `
+  Assuntos válidos deste tópico (escolha 1 ou 2, grafia exata): ${q.assuntosValidos.join('; ')}` : ''}` : ''}`;
   }).join('\n\n');
   const fixos = ctx.disciplina ? `\nDisciplina e tópico da lista (use exatamente): ${ctx.disciplina} / ${ctx.topico}` : '';
   const img = comImagens();
@@ -458,9 +466,22 @@ function formatarReferencias(texto) {
   return partes.join('');
 }
 
+// Linha em branco antes e depois de toda tabela Markdown (igual a upq/referencias.py).
+function separarTabelas(texto) {
+  if (!texto) return texto;
+  const saida = [];
+  for (const l of texto.split('\n')) {
+    const tab = l.trim().startsWith('|'), ant = saida.length ? saida[saida.length - 1].trim() : '';
+    if ((tab && ant && !ant.startsWith('|')) || (!tab && l.trim() && ant.startsWith('|'))) saida.push('');
+    saida.push(l);
+  }
+  return saida.join('\n');
+}
+const normalizarTexto = t => separarTabelas(formatarReferencias(t));
+
 function normalizarIA(r, q, ctx) {
   const alternativas = {};
-  for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = String(a.texto ?? '').trim(); }
+  for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = normalizarTexto(String(a.texto ?? '').trim()); }
   // O gabarito é sempre o da tabela do PDF; a letra que a IA devolver é ignorada.
   const oficial = ctx.gabarito[nn(q.numero)];
   const obs = [r.observacoes].filter(Boolean);
@@ -471,10 +492,97 @@ function normalizarIA(r, q, ctx) {
     instituicao, ano, disciplina: ctx.disciplina || String(r.disciplina || ''), topico: ctx.topico || String(r.topico || ''),
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
-    enunciado: formatarReferencias(String(r.enunciado || '').trim()), alternativas, gabarito: oficial || '',
+    enunciado: normalizarTexto(String(r.enunciado || '').trim()), alternativas, gabarito: oficial || '',
     pagina: q.pagina, textoPdf: q.textoPdf, revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
+}
+
+// ============================================================ reprocessamento de questões com erro
+// Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
+// corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito/.test(e));
+function comCorrecao(q, erros, ctx) {
+  const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
+  return {...q, correcao: erros, assuntosValidos};
+}
+// Uma rodada: devolve Map numero → questão nova, só quando a nova tem menos erros que a anterior.
+async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}) {
+  const melhores = new Map(), porLote = porChamada();
+  for (let i = 0; i < itens.length; i += porLote) {
+    const lote = itens.slice(i, i + porLote);
+    const r = await perguntar(promptLote(lote.map(x => comCorrecao(x.q, x.erros, ctx)), ctx), comImagens() ? {images: lote.map(x => x.imagem)} : {});
+    const lista = Array.isArray(r?.questoes) ? r.questoes : [];
+    lote.forEach((x, k) => {
+      const achada = lista.find(y => +y.numero === x.q.numero) || (lista.length === lote.length ? lista[k] : null);
+      if (!achada || !String(achada.enunciado || '').trim()) return;
+      const nova = {...x.manter, ...normalizarIA(achada, x.q, ctx), ...x.manter};
+      Object.assign(nova, validarQuestao(nova, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
+      if (nova.erros.length < x.erros.length) melhores.set(x.q.numero, nova);
+    });
+    aoAvancar(Math.min(i + porLote, itens.length), itens.length);
+  }
+  return melhores;
+}
+// Durante a importação: valida o que veio do Claude e reprocessa as questões com erro.
+async function corrigirComErro(job) {
+  const ctx = job.ctx, itens = [];
+  for (const q of job.m.questoes) {
+    const r = job.resultados.get(q.numero);
+    if (!r) continue;
+    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
+    const erros = errosReprocessaveis(v);
+    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome}))}});
+  }
+  job.reprocessadas = 0; job.corrigidas = 0;
+  if (!itens.length) return;
+  atualizar(job, {etapa: 2, estado: 'rodando', progresso: 0, mensagem: `Reprocessando ${itens.length} questão(ões) com erro…`});
+  try {
+    const melhores = await rodadaCorrecao(itens, ctx, (f, t) => atualizar(job, {progresso: f / t, mensagem: `Reprocessando questões com erro: ${f} de ${t}…`}));
+    for (const [n, nova] of melhores) { const {figuras, erros, avisos, ...resto} = nova; job.resultados.set(n, resto); }
+    job.reprocessadas = itens.length; job.corrigidas = melhores.size;
+  } catch (e) { console.warn('reprocessamento adiado', e); job.reprocessadas = 0; }
+}
+// Questões já no banco: baixa o recorte guardado e reprocessa.
+async function baixarImagem(id) {
+  try { const r = await fetch(blobUrl(id)); if (r.ok) return await r.blob(); } catch {}
+  const img = new Image(); img.src = blobUrl(id); await img.decode();
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
+}
+let reprocessando = false;
+async function reprocessarQuestoes(qs) {
+  if (reprocessando || !qs.length) return;
+  if (!cap.sample) return toast('O Claude não está disponível nesta visualização.');
+  reprocessando = true; desenhar();
+  let corrigidas = 0, feitas = 0;
+  try {
+    const porImp = new Map();
+    for (const q of qs) { if (!porImp.has(q.origem)) porImp.set(q.origem, []); porImp.get(q.origem).push(q); }
+    for (const [idImp, grupo] of porImp) {
+      const imp = estado.importacoes.get(idImp);
+      if (!imp) continue;
+      const ctx = {titulo: imp.titulo, tipo: imp.tipo, gabarito: imp.gabarito || {}, disciplina: imp.disciplina, topico: imp.topico,
+        simulado: imp.tipo === 'simulado' ? dadosSimulado(imp.arquivo) : null};
+      const itens = [];
+      for (const q of grupo) itens.push({q, erros: errosReprocessaveis(q), imagem: comImagens() ? await baixarImagem(q.imagem) : null,
+        manter: {imagem: q.imagem, figuras: q.figuras, gabaritoRecorte: q.gabaritoRecorte || null}});
+      const melhores = await rodadaCorrecao(itens, ctx, (f) => toast(`Reprocessando: ${feitas + f} de ${qs.length}…`));
+      feitas += grupo.length;
+      const porParte = new Map();
+      for (const q of grupo) if (melhores.has(q.numero)) { if (!porParte.has(q.parte_id)) porParte.set(q.parte_id, []); porParte.get(q.parte_id).push(melhores.get(q.numero)); }
+      for (const [pid, novas] of porParte) {
+        const parte = estado.partes.get(pid);
+        const questoes = parte.questoes.map(x => { const n = novas.find(y => y.numero === x.numero); return n ? {...n, revisada: false} : x; });
+        await cap.db.doc(`partes/${pid}`).set({...parte, questoes});
+        corrigidas += novas.length;
+      }
+    }
+    toast(`Reprocessamento concluído: ${corrigidas} de ${qs.length} questão(ões) corrigida(s).${corrigidas < qs.length ? ' As demais continuam com erro para revisão.' : ''}`);
+  } catch (e) {
+    toast(e?.code === 'rate_limited' ? 'Limite de uso do Claude atingido. Tente de novo em alguns minutos.' : `Reprocessamento parou: ${e?.message || e?.code || e}`);
+  } finally { reprocessando = false; desenhar(); }
 }
 
 // ============================================================ processamento de um PDF
@@ -524,6 +632,7 @@ async function processar(job, {reprocessar = false} = {}) {
     }
     await transcreverPendentes(job);
     if (job.pendentes.length) return;   // parou: o botão "Continuar" retoma
+    await corrigirComErro(job);
     await salvarNoBanco(job);
   } catch (e) {
     console.error(e);
@@ -618,7 +727,7 @@ async function salvarNoBanco(job) {
     status: padrao?.[1]?.status || 'rascunho', criado_em: padrao?.[1]?.criado_em || agora(), atualizado_em: agora()});
   const erros = questoes.filter(q => q.erros.length).length, avisos = questoes.filter(q => q.avisos.length).length;
   atualizar(job, {estado: 'concluido', progresso: 1, lista: listaId,
-    mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.`});
+    mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.` + (job.reprocessadas ? ` ${job.corrigidas} de ${job.reprocessadas} com erro foram corrigidas no reprocessamento automático.` : '')});
 }
 
 let pdfjsPronto = new Promise(r => window.pdfjsLib ? r() : window.addEventListener('pdfjs-pronto', r, {once: true}));
@@ -779,7 +888,8 @@ function telaBanco(qs) {
   principal.innerHTML = `
     <div class="cab"><div><h1>Banco de questões</h1>
       <div class="resumo-lista"><span>${qs.length} questões no banco</span><span>${achadas.length} com estes filtros</span></div></div>
-      <button class="botao" id="limpar" ${Object.values(filtroBanco).some(Boolean) ? '' : 'disabled'}>Limpar filtros</button></div>
+      <div class="form-linha">${podeEditar && cap.sample && qs.some(q => errosReprocessaveis(q).length) ? `<button class="botao primario" id="reprocessar-erros" ${reprocessando ? 'disabled' : ''}>${reprocessando ? 'Reprocessando…' : `Reprocessar questões com erro (${qs.filter(q => errosReprocessaveis(q).length).length})`}</button>` : ''}
+      <button class="botao" id="limpar" ${Object.values(filtroBanco).some(Boolean) ? '' : 'disabled'}>Limpar filtros</button></div></div>
     ${htmlFiltros(qs, filtroBanco, 'fb')}
     <div class="gerenciar">
       <div class="painel rolagem tabela-wrap"><table>
@@ -806,6 +916,8 @@ function telaBanco(qs) {
   const redesenhar = () => telaBanco(banco());
   ligarFiltros(filtroBanco, redesenhar);
   document.getElementById('limpar').onclick = () => { Object.assign(filtroBanco, FILTRO_VAZIO); redesenhar(); };
+  const botaoRep = document.getElementById('reprocessar-erros');
+  if (botaoRep) botaoRep.onclick = () => reprocessarQuestoes(banco().filter(q => errosReprocessaveis(q).length));
   document.getElementById('marcar-todas')?.addEventListener('change', e => { visiveis.forEach(q => e.target.checked ? selecionadas.add(q.id) : selecionadas.delete(q.id)); redesenhar(); });
   principal.querySelectorAll('[data-marcar]').forEach(c => {
     c.addEventListener('click', e => e.stopPropagation());
@@ -961,6 +1073,7 @@ function detalheQuestao(q, comBotoes) {
   return `
     <div class="cab" style="margin:0"><h2>Detalhes da questão</h2>${comBotoes && cap.db ? `<div class="form-linha">
       ${q.avisos?.length && !q.erros?.length ? '<button class="botao" data-acao-q="revisada">Marcar como revisada</button>' : ''}
+      ${cap.sample && errosReprocessaveis(q).length ? `<button class="botao primario" data-acao-q="reprocessar" ${reprocessando ? 'disabled' : ''}>Reprocessar</button>` : ''}
       <button class="botao" data-acao-q="editar">Editar</button></div>` : ''}</div>
     ${q.erros?.length ? `<ul class="avisos erro sem-tex">${q.erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
     ${q.avisos?.length ? `<ul class="avisos alerta sem-tex">${q.avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
@@ -1017,14 +1130,15 @@ function ligarDetalhe(raiz, q, aoFechar) {
     if (acao === 'editar') trocarConteudo(raiz, formEdicao(q), q, aoFechar);
     else if (acao === 'cancelar') { trocarConteudo(raiz, detalheQuestao(q, true), q, aoFechar); }
     else if (acao === 'revisada') { await gravarQuestao(q, {revisada: true}); aoFechar?.(); }
+    else if (acao === 'reprocessar') { b.disabled = true; b.textContent = 'Reprocessando…'; await reprocessarQuestoes([q]); aoFechar?.(); }
   }));
   raiz.querySelector('#form-q')?.addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target), alternativas = {};
-    for (const l of 'ABCDE') { const t = String(f.get('alt_' + l) || '').trim(); if (t) alternativas[l] = t; }
+    for (const l of 'ABCDE') { const t = String(f.get('alt_' + l) || '').trim(); if (t) alternativas[l] = normalizarTexto(t); }
     const ano = parseInt(f.get('ano'), 10);
     await gravarQuestao(q, {instituicao: String(f.get('instituicao') || '').trim() || null, ano: Number.isInteger(ano) ? ano : null,
-      dificuldade: +f.get('dificuldade'), assuntos: f.getAll('assunto').map(String), enunciado: formatarReferencias(String(f.get('enunciado') || '').trim()),
+      dificuldade: +f.get('dificuldade'), assuntos: f.getAll('assunto').map(String), enunciado: normalizarTexto(String(f.get('enunciado') || '').trim()),
       alternativas, gabarito: String(f.get('gabarito')), revisada: true});
     aoFechar?.(); if (!aoFechar) { document.activeElement?.blur(); desenhar(); }
   });

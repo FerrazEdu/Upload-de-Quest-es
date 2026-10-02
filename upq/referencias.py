@@ -43,3 +43,26 @@ def formatar(texto: str) -> str:
             lead = p[: len(p) - len(p.lstrip())]
             partes[i] = lead + ABRE + _limpar(p) + FECHA
     return "".join(partes)
+
+
+def separar_tabelas(texto: str) -> str:
+    """Linha em branco antes e depois de toda tabela Markdown (sem ela, o texto colado vira
+    linha da tabela ou fica grudado nela)."""
+    if not texto:
+        return texto
+    linhas = texto.split("\n")
+    saida = []
+    for i, l in enumerate(linhas):
+        tab = l.strip().startswith("|")
+        ant = saida[-1] if saida else ""
+        if tab and ant.strip() and not ant.strip().startswith("|"):
+            saida.append("")
+        elif not tab and l.strip() and ant.strip().startswith("|"):
+            saida.append("")
+        saida.append(l)
+    return "\n".join(saida)
+
+
+def normalizar(texto: str) -> str:
+    """Formatação aplicada pelo código a enunciados e alternativas."""
+    return separar_tabelas(formatar(texto))
