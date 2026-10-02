@@ -22,8 +22,10 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    - Ano, data, número de questão e quantidades contadas no texto corrido ficam como texto
      ("em 2023", "Questão 05", "quatro posições (1, 2, 3 e 4)").
 2. Cifrão de dinheiro sempre escapado: R\$ 25,00. Todo $ sem barra abre ou fecha fórmula.
-3. **negrito** e *itálico* como no PDF (títulos de obras, termos estrangeiros e palavras
-   destacadas como **CORRETA**, **INCORRETA**, **EXCETO**).
+3. NEGRITO É OBRIGATÓRIO: todo trecho em negrito no PDF vai em **negrito** (títulos, cabeçalhos
+   de tabela, "TEXTO I", palavras destacadas como **CORRETA**, **INCORRETA**, **EXCETO**).
+   *Itálico* como no PDF (títulos de obras, termos estrangeiros). No texto extraído, os
+   trechos em fonte negrito já vêm entre ** — todos eles têm de sair em negrito.
 4. Parágrafos separados por uma linha em branco. Afirmativas I, II, III cada uma em seu
    parágrafo, começando por "I. ", "II. ". Listas de dados (π = 3; g = 10 m/s²) uma por linha.
 5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.
@@ -46,6 +48,17 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    Acesso em: ...", "Adaptado de ...") ficam num parágrafo próprio, no ponto onde aparecem,
    com o texto literal (parênteses inclusive, URL como texto simples), neste formato exato:
    <p style="text-align: right;"><sub>Fonte: UNICAMP, 2014.</sub></p>
+9. ALINHAMENTO COMO NO PDF: tudo o que está centralizado no PDF (títulos, tabelas, figuras,
+   fórmulas e dados destacados, "TEXTO I") fica centralizado. Envolva cada trecho centralizado
+   num bloco próprio, com as marcas sozinhas na linha:
+   ::: centro
+   **Título centralizado**
+   :::
+   Dentro do bloco vale o Markdown normal (tabela, ![...](figura:NOME), $LaTeX$, **negrito**).
+   No texto extraído, as linhas centralizadas vêm com "[centralizado]" (não copie a marca).
+   Texto justificado ou à esquerda fica fora do bloco. Referências seguem a regra 8 (à direita).
+10. COMPLETUDE: nenhuma coluna ou linha de tabela, figura ou trecho do PDF pode faltar. Use
+   TODAS as figuras informadas. Se algo não estiver legível, marque revisar = true.
 """
 
 ABERTURA_UMA = """Você transcreve questões de listas de exercícios em PDF para o banco de questões

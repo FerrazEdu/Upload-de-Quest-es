@@ -27,6 +27,10 @@ Quando pedirem "transcreva a lista X", faça exatamente o que `upq/transcrever.p
    - `alternativas` é uma lista `[{"letra": "A", "texto": "..."}]`.
    - `assuntos`: 1 ou 2 assuntos do tópico, com a grafia de `dados/base_topicos.txt`.
    - Não gere resolução: o trabalho é só transcrição e classificação.
+   - Formatação do PDF é obrigatória: todo trecho marcado `**...**` no `texto_pdf` sai em negrito;
+     linhas marcadas `[centralizado]` (e figuras com `centralizada: true`) vão num bloco
+     `::: centro` ... `:::` (o código converte em HTML centralizado). Nada pode faltar: todas as
+     colunas/linhas de tabela e todas as figuras. Banca e ano saem da barra "Questão NN BANCA ANO".
 5. Rode `python -m upq revisar saida/<nome>`, corrija os ERROS apontados e revise os avisos.
 
 Não invente gabarito, banca ou ano. Não altere `dados/base_topicos.txt` sem pedido.

@@ -62,7 +62,7 @@ function md(texto, figuras) {
   const guardadas = [];
   let t = texto.replace(/\\\$/g, '\u0001')
     .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, m => { guardadas.push(m); return `\u0002${guardadas.length - 1}\u0002`; })
-    .replace(/\(figura:([A-Za-z0-9_]+)\)/g, (m, n) => `(${figuras[n] || n})`);
+    .replace(/(\(|src=")figura:([A-Za-z0-9_]+)/g, (m, a, n) => a + (figuras[n] || n));
   let html = marked.parse(t);
   return html.replace(/\u0002(\d+)\u0002/g, (m, i) => guardadas[+i].replace(/</g, '&lt;'))
              .replace(/\u0001/g, '\\$');

@@ -21,6 +21,21 @@ def dados_simulado(manifesto: dict) -> tuple[int | None, int | None]:
             int(next(g for g in dia.groups() if g)) if dia else None)
 
 
+def cabecalho_da_barra(texto_pdf: str) -> tuple[str | None, int | None]:
+    """Banca e ano da barra "Questão NN  BANCA ANO" (1ª linha do texto do PDF), pelo código.
+    "(ADAPTADO)" sai; o ano é o último 19xx/20xx. Sem texto legível na barra → (None, None)."""
+    linha = (texto_pdf or "").split("\n", 1)[0]
+    resto = re.sub(r"^\s*Quest[aã]o\s*\d[\d ]*", "", linha, flags=re.I).strip()
+    if not re.search(r"[A-Za-z]{2,}", resto):
+        return None, None
+    resto = re.sub(r"\(\s*ADAPTAD[OA]\s*\)", " ", resto, flags=re.I).strip()
+    anos = list(re.finditer(r"(?:19|20)\d{2}", resto))
+    ano = int(anos[-1].group(0)) if anos else None
+    inst = (resto[: anos[-1].start()] if anos else resto)
+    inst = re.sub(r"[\s\-–—|,/]+$", "", inst).strip() or None
+    return inst, ano
+
+
 def montar(pasta: Path) -> Lista:
     manifesto = json.loads((pasta / "manifesto.json").read_text(encoding="utf-8"))
     dados_lista = json.loads((pasta / "ia" / "lista.json").read_text(encoding="utf-8"))
@@ -34,6 +49,9 @@ def montar(pasta: Path) -> Lista:
         if not arq.exists():
             raise FileNotFoundError(f"falta a transcrição de Q{q['numero']:02d} ({arq})")
         ia = QuestaoIA.model_validate_json(arq.read_text(encoding="utf-8"))
+        centradas = {f["nome"] for f in q["figuras"] if f.get("centralizada")}
+        inst_barra, ano_barra = cabecalho_da_barra(q.get("texto_pdf", ""))
+        instituicao, ano = inst_barra or ia.instituicao, ano_barra or ia.ano
         observacoes = [ia.observacoes] if ia.observacoes else []
         oficial = gabarito.get(f"{q['numero']:02d}")
         if not oficial:   # o gabarito vem só da tabela do fim da lista, nunca da IA
@@ -43,16 +61,16 @@ def montar(pasta: Path) -> Lista:
         questoes.append(Questao(
             numero=q["numero"],
             titulo=titulo_padrao(manifesto["tipo"], manifesto["titulo_lista"], q["numero"],
-                                 ia.instituicao, ia.ano, sim, dia),
-            instituicao=ia.instituicao,
-            ano=ia.ano,
+                                 instituicao, ano, sim, dia),
+            instituicao=instituicao,
+            ano=ano,
             disciplina=ia.disciplina,
             topico=ia.topico,
             assuntos=ia.assuntos,
             etapa=q.get("etapa"),
             dificuldade=ia.dificuldade,
-            enunciado=referencias.normalizar(ia.enunciado.strip()),
-            alternativas={a.letra: referencias.normalizar(a.texto.strip()) for a in ia.alternativas},
+            enunciado=referencias.normalizar(ia.enunciado.strip(), centradas),
+            alternativas={a.letra: referencias.normalizar(a.texto.strip(), centradas) for a in ia.alternativas},
             gabarito=oficial,
             figuras=[Figura(nome=f["nome"], arquivo=f["arquivo"]) for f in q["figuras"]],
             pagina=q["pagina"],

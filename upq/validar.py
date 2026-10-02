@@ -16,7 +16,7 @@ from .modelo import Lista
 
 FAIXA_ETAPA = {"Fixação": (1, 2), "Treinamento": (2, 3), "Aprofundamento": (3, 4), "Desafios": (4, 5)}
 RE_MATH = re.compile(r"\$\$.+?\$\$|\$.+?\$", re.S)
-RE_FIGURA = re.compile(r"!\[[^\]]*\]\(figura:([A-Za-z0-9_]+)\)")
+RE_FIGURA = re.compile(r'(?:!\[[^\]]*\]\(|src=")figura:([A-Za-z0-9_]+)')
 PROIBIDOS = [r"\ce{", r"\SI{", r"\usepackage", r"\begin{document}"]
 UNICODE_MAT = "²³¹⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉√≤≥≠±×÷∞∫∑πΔ≈"
 
@@ -51,9 +51,56 @@ def normalizar(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
+def _so_alnum(s: str) -> str:
+    """Texto comparável: sem comandos LaTeX, tags, acentos, pontuação e espaços."""
+    s = re.sub(r"\\[a-zA-Z]+|<[^>]+>", " ", s)
+    return re.sub(r"[^a-z0-9]", "", normalizar(s))
+
+
+def _trechos_negrito(t: str) -> str:
+    partes = re.findall(r"\*\*(.+?)\*\*", t, re.S) + re.findall(r"<strong>(.+?)</strong>", t, re.S)
+    partes += re.findall(r"<thead>(.*?)</thead>", t, re.S)   # cabeçalho de tabela HTML
+    linhas = t.split("\n")
+    for i, l in enumerate(linhas):   # 1ª linha de tabela Markdown = cabeçalho (sai em negrito)
+        if l.strip().startswith("|") and (i == 0 or not linhas[i - 1].strip().startswith("|")):
+            partes.append(l)
+    return "|".join(_so_alnum(x) for x in partes)
+
+
+def _trechos_centralizados(t: str) -> str:
+    partes = re.findall(r'<p style="text-align: center;">(.*?)</p>', t, re.S)
+    partes += re.findall(r'<table style="margin-left: auto; margin-right: auto;">(.*?)</table>', t, re.S)
+    return "|".join(_so_alnum(x) for x in partes)
+
+
+def conferir_formatacao(texto_pdf: str, transcricao: str) -> list[str]:
+    """Negrito e centralização do PDF (marcados no texto extraído) têm de estar na transcrição."""
+    erros = []
+    linhas = texto_pdf.splitlines()[1:]   # a 1ª é a barra "Questão NN"
+    negrito, centro = _trechos_negrito(transcricao), _trechos_centralizados(transcricao)
+    faltam_n, faltam_c = [], []
+    for l in linhas:
+        cent = l.startswith("[centralizado] ")
+        l = l.removeprefix("[centralizado] ")
+        for run in re.findall(r"\*\*(.+?)\*\*", l):
+            n = _so_alnum(run)
+            if len(re.sub(r"[0-9]", "", n)) >= 4 and n not in negrito:
+                faltam_n.append(run.strip())
+        limpo = l.replace("**", "")
+        n = _so_alnum(limpo)
+        if cent and len(n) >= 3 and not re.match(r"\s*\(?(fonte|dispon[ií]vel)", limpo, re.I) and n not in centro:
+            faltam_c.append(limpo.strip())
+    if faltam_n:
+        erros.append("negrito do PDF ausente na transcrição: " + "; ".join(f"«{t[:60]}»" for t in faltam_n[:4]))
+    if faltam_c:
+        erros.append("texto centralizado no PDF sem centralizar: " + "; ".join(f"«{t[:60]}»" for t in faltam_c[:4]))
+    return erros
+
+
 def conferir_com_pdf(texto_pdf: str, transcricao: str) -> list[str]:
-    """Compara números e palavras do PDF com a transcrição (só gera avisos)."""
+    """Compara números e palavras do PDF com a transcrição: o que falta é erro (trecho perdido)."""
     avisos = []
+    texto_pdf = texto_pdf.replace("[centralizado] ", "").replace("**", "")
     # 1ª linha é a barra "Questão NN  BANCA ANO"; créditos de figura podem estar dentro da imagem.
     corpo = "\n".join(l for l in texto_pdf.splitlines()[1:]
                       if not re.match(r"\s*\(?(Fonte|Disponível em)", l))
@@ -76,6 +123,7 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
     lista = Lista.model_validate_json((pasta / "transcricao.json").read_text(encoding="utf-8"))
     manifesto = json.loads((pasta / "manifesto.json").read_text(encoding="utf-8"))
     texto_pdf = {q["numero"]: q["texto_pdf"] for q in manifesto["questoes"]}
+    fora_do_recorte = {q["numero"]: q.get("fora_do_recorte") for q in manifesto["questoes"]}
     base = topicos.carregar()
     resultado = {}
 
@@ -105,6 +153,10 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
             if a not in validos:
                 erros.append(f"assunto fora da base para {q.topico}: {a}")
 
+        fora = fora_do_recorte.get(q.numero) or []
+        if fora:
+            erros.append("recorte incompleto: trecho da página fora da questão ("
+                         + "; ".join(f"«{t}»" for t in fora[:3]) + ")")
         campos = {"enunciado": q.enunciado,
                   **{f"alternativa {k}": v for k, v in q.alternativas.items()}}
         for nome, texto in campos.items():
@@ -116,10 +168,11 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
         if usadas - nomes:
             erros.append(f"figura inexistente referenciada: {', '.join(sorted(usadas - nomes))}")
         if nomes - usadas:
-            avisos.append(f"figura recortada mas não usada no texto: {', '.join(sorted(nomes - usadas))}")
+            erros.append(f"figura recortada mas não usada no texto: {', '.join(sorted(nomes - usadas))}")
 
         transcrito = "\n".join([q.enunciado, *q.alternativas.values()])
-        avisos += conferir_com_pdf(texto_pdf.get(q.numero, ""), transcrito)
+        erros += conferir_com_pdf(texto_pdf.get(q.numero, ""), transcrito)
+        erros += conferir_formatacao(texto_pdf.get(q.numero, ""), transcrito)
         if q.revisar:
             avisos.insert(0, f"IA pediu revisão: {q.observacoes or '(sem motivo)'}")
         resultado[q.numero] = {"erros": erros, "avisos": avisos}

@@ -133,6 +133,8 @@ tbody tr.sel td { background: var(--acento-fundo); }
 .enunciado { background: var(--campo); border: 1px solid var(--borda); border-radius: 6px; padding: 12px 14px; overflow-wrap: anywhere; }
 .enunciado p { margin: 0 0 10px; } .enunciado p:last-child { margin-bottom: 0; }
 .enunciado img, .alt img { max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; background: #fff; }
+.enunciado p[style*="center"] img, .alt p[style*="center"] img { display: inline-block; vertical-align: middle; margin: 8px 4px; max-width: calc(50% - 14px); }
+.enunciado p[style*="center"] img:only-child, .alt p[style*="center"] img:only-child { max-width: 100%; }
 .conteudo-q table, .enunciado table, .alt .conteudo table { border-collapse: collapse; width: auto; max-width: 100%; margin: 14px 0; font-size: inherit; }
 .enunciado table td, .enunciado table th, .alt .conteudo table td, .alt .conteudo table th,
 .enunciado tbody tr:last-child td, .alt .conteudo tbody tr:last-child td { border: 1px solid var(--borda-forte); padding: 5px 10px; white-space: normal; color: var(--texto); }
@@ -244,7 +246,7 @@ function md(texto, figuras = {}) {
   const guardadas = [];
   const t = String(texto || '').replace(/\\\$/g, '\u0001')
     .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, m => { guardadas.push(m); return `\u0002${guardadas.length - 1}\u0002`; })
-    .replace(/\(figura:([A-Za-z0-9_]+)\)/g, (m, n) => `(${figuras[n] || ''})`);
+    .replace(/(\(|src=")figura:([A-Za-z0-9_]+)/g, (m, a, n) => a + (figuras[n] || ''));
   const html = window.marked ? marked.parse(t) : `<p>${esc(t)}</p>`;
   return html.replace(/\u0002(\d+)\u0002/g, (m, i) => esc(guardadas[+i])).replace(/\u0001/g, '\\$');
 }
@@ -306,7 +308,7 @@ function indiceBanco() { return new Map(banco().map(q => [q.id, q])); }
 
 // ============================================================ validação (porta de upq/validar.py)
 const RE_MATH = /\$\$[\s\S]+?\$\$|\$[^$]+?\$/g;
-const RE_FIG = /!\[[^\]]*\]\(figura:([A-Za-z0-9_]+)\)/g;
+const RE_FIG = /(?:!\[[^\]]*\]\(|src=")figura:([A-Za-z0-9_]+)/g;
 const UNICODE_MAT = '²³¹⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉√≤≥≠±×÷∞∫∑πΔ≈';
 const semAcento = s => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -322,7 +324,35 @@ function checarLatex(campo, texto, erros, avisos) {
   const achados = [...new Set([...fora].filter(c => UNICODE_MAT.includes(c)))];
   if (achados.length) avisos.push(`${campo}: símbolo fora de LaTeX (${achados.join(' ')})`);
 }
+// Negrito e centralização do PDF (marcados no texto extraído) têm de estar na transcrição
+// (igual a conferir_formatacao em upq/validar.py).
+const soAlnum = t => semAcento(String(t).replace(/\\[a-zA-Z]+|<[^>]+>/g, ' ')).replace(/[^a-z0-9]/g, '');
+function trechosNegrito(t) {
+  const partes = [...t.matchAll(/\*\*([\s\S]+?)\*\*/g), ...t.matchAll(/<strong>([\s\S]+?)<\/strong>/g), ...t.matchAll(/<thead>([\s\S]*?)<\/thead>/g)].map(m => m[1]);
+  const linhas = t.split('\n');
+  linhas.forEach((l, i) => { if (l.trim().startsWith('|') && (i === 0 || !linhas[i - 1].trim().startsWith('|'))) partes.push(l); });
+  return partes.map(soAlnum).join('|');
+}
+function trechosCentralizados(t) {
+  return [...t.matchAll(/<p style="text-align: center;">([\s\S]*?)<\/p>/g), ...t.matchAll(/<table style="margin-left: auto; margin-right: auto;">([\s\S]*?)<\/table>/g)]
+    .map(m => soAlnum(m[1])).join('|');
+}
+function conferirFormatacao(textoPdf, transcrito) {
+  const erros = [], faltamN = [], faltamC = [];
+  const negrito = trechosNegrito(transcrito), centro = trechosCentralizados(transcrito);
+  for (let l of String(textoPdf || '').split('\n').slice(1)) {
+    const cent = l.startsWith('[centralizado] ');
+    l = l.replace(/^\[centralizado\] /, '');
+    for (const m of l.matchAll(/\*\*(.+?)\*\*/g)) { const n = soAlnum(m[1]); if (n.replace(/[0-9]/g, '').length >= 4 && !negrito.includes(n)) faltamN.push(m[1].trim()); }
+    const limpo = l.replace(/\*\*/g, ''), n = soAlnum(limpo);
+    if (cent && n.length >= 3 && !/^\s*\(?(fonte|dispon[ií]vel)/i.test(limpo) && !centro.includes(n)) faltamC.push(limpo.trim());
+  }
+  if (faltamN.length) erros.push('negrito do PDF ausente na transcrição: ' + faltamN.slice(0, 4).map(t => `«${t.slice(0, 60)}»`).join('; '));
+  if (faltamC.length) erros.push('texto centralizado no PDF sem centralizar: ' + faltamC.slice(0, 4).map(t => `«${t.slice(0, 60)}»`).join('; '));
+  return erros;
+}
 function conferirComPdf(textoPdf, transcrito) {
+  textoPdf = String(textoPdf || '').replace(/\[centralizado\] /g, '').replace(/\*\*/g, '');
   const avisos = [];
   const corpo = String(textoPdf || '').split('\n').slice(1).filter(l => !/^\s*\(?(Fonte|Disponível em)/.test(l)).join('\n');
   const digitos = transcrito.replace(/\D/g, '');
@@ -338,6 +368,7 @@ function conferirComPdf(textoPdf, transcrito) {
 }
 function validarQuestao(q, lista) {
   const erros = [], avisos = [];
+  if (q.foraDoRecorte?.length) erros.push(`recorte incompleto: trecho da página fora da questão (${q.foraDoRecorte.slice(0, 3).map(t => `«${t}»`).join('; ')}). Avise o suporte do importador.`);
   const assuntosBase = BASE.get(q.disciplina + '\u0000' + q.topico);
   if (!assuntosBase) erros.push(`par fora da base de tópicos: ${q.disciplina} / ${q.topico}`);
   if (lista?.tipo === 'lista' && lista.disciplina && (q.disciplina !== lista.disciplina || q.topico !== lista.topico)) erros.push('disciplina/tópico diferente do resto da lista');
@@ -361,8 +392,9 @@ function validarQuestao(q, lista) {
   const inexistentes = [...usadas].filter(n => !nomes.has(n));
   if (inexistentes.length) erros.push(`figura inexistente referenciada: ${inexistentes.join(', ')}`);
   const sobras = [...nomes].filter(n => !usadas.has(n));
-  if (sobras.length) avisos.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
-  avisos.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
+  if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
+  erros.push(...conferirComPdf(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
+  erros.push(...conferirFormatacao(q.textoPdf, [q.enunciado, ...Object.values(q.alternativas || {})].join('\n')));
   if (q.revisar && !q.revisada) avisos.unshift(`IA pediu revisão: ${q.observacoes || '(sem motivo)'}`);
   if (q.revisada) return {erros, avisos: []};
   return {erros, avisos};
@@ -414,7 +446,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura da questão, de cima para baixo)`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
@@ -478,23 +510,97 @@ function separarTabelas(texto) {
   }
   return saida.join('\n');
 }
-const normalizarTexto = t => separarTabelas(formatarReferencias(t));
+// Alinhamento centralizado (igual a upq/referencias.py): a IA marca com "::: centro" ... ":::"
+// e o código converte em HTML (parágrafo, tabela ou figura centralizados). LaTeX intacto.
+const P_CENTRO = '<p style="text-align: center;">', T_CENTRO = '<table style="margin-left: auto; margin-right: auto;">';
+const escAttr = t => t.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function inlineHtml(t) {
+  const guardadas = [];
+  t = t.replace(/\$\$[\s\S]+?\$\$|\\\$|\$[^$\n]+?\$/g, m => { guardadas.push(m); return `\u0002${guardadas.length - 1}\u0002`; });
+  t = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  t = t.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/(?<![\w*])\*(?!\s)([\s\S]+?)(?<!\s)\*(?![\w*])/g, '<em>$1</em>');
+  return t.replace(/\u0002(\d+)\u0002/g, (m, i) => guardadas[+i]);
+}
+function tabelaHtml(linhas, centralizada = true) {
+  const celulas = l => { l = l.trim(); if (l.startsWith('|')) l = l.slice(1); if (l.endsWith('|') && !l.endsWith('\\|')) l = l.slice(0, -1);
+    return l.split(/(?<!\\)\|/).map(c => c.trim()); };
+  const cab = celulas(linhas[0]);
+  const sep = linhas.length > 1 && /^\s*\|?[\s:\-|]+\|?\s*$/.test(linhas[1]) ? celulas(linhas[1]) : null;
+  const corpo = sep ? linhas.slice(2) : linhas.slice(1);
+  const alinh = (sep || []).map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : null);
+  const st = i => alinh[i] ? ` style="text-align: ${alinh[i]};"` : '';
+  let html = (centralizada ? T_CENTRO : '<table>') + '<thead><tr>' + cab.map((c, i) => `<th${st(i)}>${inlineHtml(c)}</th>`).join('') + '</tr></thead><tbody>';
+  for (const l of corpo) html += '<tr>' + celulas(l).map((c, i) => `<td${st(i)}>${inlineHtml(c)}</td>`).join('') + '</tr>';
+  return html + '</tbody></table>';
+}
+const RE_FIGS = /!\[([^\]]*)\]\((figura:[A-Za-z0-9_]+)\)/g, RE_SO_FIGS = /^\s*(?:!\[[^\]]*\]\(figura:[A-Za-z0-9_]+\)\s*)+$/;
+const imgsCentralizadas = bloco => P_CENTRO + [...bloco.matchAll(RE_FIGS)].map(m => `<img src="${m[2]}" alt="${escAttr(m[1])}">`).join(' ') + '</p>';
+function blocoCentralizado(bloco) {
+  const linhas = bloco.split('\n').filter(l => l.trim());
+  if (!linhas.length) return '';
+  if (linhas.every(l => l.trim().startsWith('|'))) return tabelaHtml(linhas);
+  if (RE_SO_FIGS.test(bloco)) return imgsCentralizadas(bloco);
+  if (linhas[0].trimStart().startsWith('<')) return linhas.join('\n');
+  return P_CENTRO + linhas.map(l => inlineHtml(l.trim())).join('<br>') + '</p>';
+}
+// Parágrafos, com tabela e texto colados separados em blocos próprios.
+function blocosDe(texto) {
+  const blocos = [];
+  for (const parte of texto.replace(/^\n+|\n+$/g, '').split(/\n\s*\n/)) {
+    let atual = [];
+    for (const l of parte.split('\n')) {
+      if (atual.length && atual[atual.length - 1].trim().startsWith('|') !== l.trim().startsWith('|')) { blocos.push(atual.join('\n')); atual = []; }
+      atual.push(l);
+    }
+    if (atual.length) blocos.push(atual.join('\n'));
+  }
+  return blocos.filter(b => b.trim());
+}
+// Blocos ::: centro → HTML centralizado; fora deles, toda tabela sai centralizada e as figuras
+// centralizadas no PDF (sozinhas ou lado a lado) também (igual a upq/referencias.py).
+function centralizar(texto, figurasCentralizadas = new Set()) {
+  if (!texto) return texto;
+  texto = texto.replace(/^[ \t]*:::[ \t]*centro[ \t]*\n([\s\S]*?)\n[ \t]*:::[ \t]*$/gm,
+    (m0, dentro) => '\n\n' + blocosDe(dentro).map(blocoCentralizado).join('\n\n') + '\n\n');
+  return blocosDe(texto).map(b => {
+    const linhas = b.split('\n').filter(l => l.trim());
+    if (linhas.every(l => l.trim().startsWith('|'))) return tabelaHtml(linhas);
+    if (RE_SO_FIGS.test(b) && [...b.matchAll(RE_FIGS)].every(m => figurasCentralizadas.has(m[2].replace('figura:', '')))) return imgsCentralizadas(b);
+    return b;
+  }).join('\n\n');
+}
+const normalizarTexto = (t, figurasCentralizadas) => separarTabelas(centralizar(formatarReferencias(t), figurasCentralizadas));
 
+function cabecalhoDaBarra(textoPdf) {
+  const linha = String(textoPdf || '').split('\n')[0] || '';
+  let resto = linha.replace(/^\s*Quest[aã]o\s*\d[\d ]*/i, '').trim();
+  if (!resto || !/[A-Za-z]{2,}/.test(resto)) return {instituicao: null, ano: null};
+  resto = resto.replace(/\(\s*ADAPTAD[OA]\s*\)/gi, ' ').trim();
+  const anos = [...resto.matchAll(/(?:19|20)\d{2}/g)];
+  const ano = anos.length ? +anos[anos.length - 1][0] : null;
+  const instituicao = (anos.length ? resto.slice(0, anos[anos.length - 1].index) : resto).replace(/[\s\-–—|,/]+$/, '').trim() || null;
+  return {instituicao, ano};
+}
 function normalizarIA(r, q, ctx) {
+  const centradas = new Set((q.figuras || []).filter(f => f.centralizada).map(f => f.nome));
   const alternativas = {};
-  for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = normalizarTexto(String(a.texto ?? '').trim()); }
+  for (const a of r.alternativas || []) { const l = String(a.letra || '').trim().toUpperCase(); if (/^[A-E]$/.test(l)) alternativas[l] = normalizarTexto(String(a.texto ?? '').trim(), centradas); }
   // O gabarito é sempre o da tabela do PDF; a letra que a IA devolver é ignorada.
   const oficial = ctx.gabarito[nn(q.numero)];
   const obs = [r.observacoes].filter(Boolean);
-  const instituicao = r.instituicao ? String(r.instituicao).trim() : null;
-  const ano = Number.isInteger(+r.ano) && +r.ano > 1900 ? +r.ano : null;
+  // Banca e ano vêm da barra "Questão NN  BANCA ANO" (1ª linha do texto do PDF), pelo código;
+  // a IA só completa quando a barra não traz texto legível (ex.: fonte Type3).
+  const cab = cabecalhoDaBarra(q.textoPdf);
+  const instituicao = cab.instituicao || (r.instituicao ? String(r.instituicao).trim() : null);
+  const ano = cab.ano || (Number.isInteger(+r.ano) && +r.ano > 1900 ? +r.ano : null);
   return {
     numero: q.numero, titulo: titulo(ctx.tipo, ctx.titulo, q.numero, instituicao, ano, ctx.simulado),
     instituicao, ano, disciplina: ctx.disciplina || String(r.disciplina || ''), topico: ctx.topico || String(r.topico || ''),
     assuntos: (Array.isArray(r.assuntos) ? r.assuntos : [r.assuntos]).filter(Boolean).map(String).slice(0, 2),
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
-    enunciado: normalizarTexto(String(r.enunciado || '').trim()), alternativas, gabarito: oficial || '',
-    pagina: q.pagina, textoPdf: q.textoPdf, revisar: !!r.revisar || !oficial,
+    enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
+    pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -502,27 +608,29 @@ function normalizarIA(r, q, ctx) {
 // ============================================================ reprocessamento de questões com erro
 // Toda questão com erro é reprocessada primeiro (recorte guardado + lista dos erros para a IA
 // corrigir). "Sem gabarito" não se resolve assim: o gabarito vem só da tabela.
-const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito/.test(e));
+const errosReprocessaveis = q => (q.erros || []).filter(e => !/^sem gabarito|^recorte incompleto/.test(e));
 function comCorrecao(q, erros, ctx) {
   const assuntosValidos = erros.some(e => /assunto/.test(e)) ? (BASE.get(ctx.disciplina + '\u0000' + ctx.topico) || null) : null;
   return {...q, correcao: erros, assuntosValidos};
 }
 // Uma rodada: devolve Map numero → questão nova, só quando a nova tem menos erros que a anterior.
-async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}) {
-  const melhores = new Map(), porLote = porChamada();
+async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}, repetir = true) {
+  const melhores = new Map(), porLote = porChamada(), sem = [];
   for (let i = 0; i < itens.length; i += porLote) {
     const lote = itens.slice(i, i + porLote);
     const r = await perguntar(promptLote(lote.map(x => comCorrecao(x.q, x.erros, ctx)), ctx), comImagens() ? {images: lote.map(x => x.imagem)} : {});
     const lista = Array.isArray(r?.questoes) ? r.questoes : [];
     lote.forEach((x, k) => {
       const achada = lista.find(y => +y.numero === x.q.numero) || (lista.length === lote.length ? lista[k] : null);
-      if (!achada || !String(achada.enunciado || '').trim()) return;
+      if (!achada || !String(achada.enunciado || '').trim()) return sem.push(x);
       const nova = {...x.manter, ...normalizarIA(achada, x.q, ctx), ...x.manter};
       Object.assign(nova, validarQuestao(nova, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
       if (nova.erros.length < x.erros.length) melhores.set(x.q.numero, nova);
     });
     aoAvancar(Math.min(i + porLote, itens.length), itens.length);
   }
+  // a IA pulou alguma questão do lote: pede de novo uma vez
+  if (sem.length && repetir) for (const [n, q] of await rodadaCorrecao(sem, ctx, () => {}, false)) melhores.set(n, q);
   return melhores;
 }
 // Durante a importação: valida o que veio do Claude e reprocessa as questões com erro.
@@ -702,7 +810,7 @@ async function salvarNoBanco(job) {
     const base = job.resultados.get(q.numero);
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
-    for (const f of q.figuras) figuras.push({nome: f.nome, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const recGab = m.gabaritoRecortes?.[nn(q.numero)];
     const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
     const final = {...base, imagem: up.id, figuras, gabaritoRecorte};
