@@ -370,6 +370,16 @@ function dadosSimulado(nome) {
 }
 
 // ============================================================ Claude (capacidade "sample")
+// Sem imagens nesta visualização (ex.: app de desktop): transcreve só pelo texto do PDF.
+const comImagens = () => !!cap.limites?.images;
+const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
+Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
+camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
+"m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem (use os NOMES
+informados no ponto em que o texto se refere a elas). Marque revisar = true sempre que uma fórmula,
+expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
+function porChamada() { return comImagens() ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 5; }
+
 function textoBase() {
   return DADOS.base.map(([d, t, a]) => `${d} | ${t}${a.length ? ': ' + a.join('; ') : ''}`).join('\n');
 }
@@ -395,25 +405,26 @@ async function classificar(m) {
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
     const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura da questão, de cima para baixo)`).join(', ') || 'nenhuma';
-    return `IMAGEM ${i + 1} = Questão ${nn(q.numero)}
+    return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
 - Figuras desta questão (NOMES para usar em ![...](figura:NOME)): ${figs}
-- Texto extraído do PDF (apoio; contém erros de símbolos — confira na imagem):
+- Texto extraído do PDF (${comImagens() ? 'apoio; contém erros de símbolos — confira na imagem' : 'fonte desta transcrição; corrija os erros de símbolos'}):
 <<<
 ${q.textoPdf}
 >>>`;
   }).join('\n\n');
   const fixos = ctx.disciplina ? `\nDisciplina e tópico da lista (use exatamente): ${ctx.disciplina} / ${ctx.topico}` : '';
+  const img = comImagens();
   return `${DADOS.sistema}
-
+${img ? '' : '\n' + MODO_TEXTO + '\n'}
 =====
 Lista: "${ctx.titulo}"${fixos}
-Esta mensagem traz ${lote.length} imagem(ns), na ordem abaixo.
+${img ? `Esta mensagem traz ${lote.length} imagem(ns), na ordem abaixo.` : `Esta mensagem traz ${lote.length} questão(ões), sem imagens, na ordem abaixo.`}
 
 ${blocos}
 
-Responda somente com JSON, um objeto por imagem e na mesma ordem:
+Responda somente com JSON, um objeto por questão e na mesma ordem:
 {"questoes": [{"numero": 4, "instituicao": "UFMG", "ano": 2025, "adaptada": false, "disciplina": "...", "topico": "...",
   "assuntos": ["..."], "dificuldade": 2, "enunciado": "Markdown com LaTeX", "alternativas": [{"letra": "A", "texto": "..."}],
   "gabarito": "A", "revisar": false, "observacoes": null}]}`;
@@ -462,11 +473,11 @@ async function processar(job, {reprocessar = false} = {}) {
     if (!job.ctx) {
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       let gabarito = m.gabaritoPdf;
-      if (!Object.keys(gabarito).length && m.paginaGabarito) gabarito = await lerGabarito(m.paginaGabarito);
+      if (!Object.keys(gabarito).length && m.paginaGabarito && comImagens()) gabarito = await lerGabarito(m.paginaGabarito);
       const classe = m.tipo === 'lista' ? await classificar(m) : null;
       job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
                  classificacao: classe, simulado: m.tipo === 'simulado' ? dadosSimulado(m.arquivo) : null};
-      const porLote = Math.max(1, Math.min(4, cap.limites?.images?.maxCount || 1));
+      const porLote = porChamada();
       job.pendentes = [];
       for (let i = 0; i < m.questoes.length; i += porLote) job.pendentes.push({questoes: m.questoes.slice(i, i + porLote), tentativas: 0});
     }
@@ -499,7 +510,7 @@ async function transcreverPendentes(job) {
     while (job.pendentes.length && !erroFatal) {
       const lote = job.pendentes.shift();
       try {
-        const r = await perguntar(promptLote(lote.questoes, job.ctx), {images: lote.questoes.map(q => q.imagem)});
+        const r = await perguntar(promptLote(lote.questoes, job.ctx), comImagens() ? {images: lote.questoes.map(q => q.imagem)} : {});
         const lista = Array.isArray(r?.questoes) ? r.questoes : [];
         lote.questoes.forEach((q, i) => {
           const achada = lista.find(x => +x.numero === q.numero) || (lista.length === lote.questoes.length ? lista[i] : null);
@@ -590,13 +601,15 @@ function desenhar() {
 
 // ---------------- Enviar lista
 function telaEnviar() {
-  const semClaude = cap.prontas && (!cap.sample || !cap.limites?.images);
+  const semClaude = cap.prontas && !cap.sample;
+  const soTexto = cap.prontas && cap.sample && !comImagens();
   const semGravar = cap.prontas && (!cap.db || !cap.assets);
   const bloqueado = !cap.prontas || semClaude || semGravar;
   principal.innerHTML = `
     <div class="cab"><h1>Enviar lista</h1></div>
     ${!cap.prontas ? '<div class="aviso-topo info">Conectando ao claude.ai…</div>' : ''}
-    ${semClaude ? '<div class="aviso-topo">O Claude não está disponível nesta visualização (ou não aceita imagens aqui). Abra o artefato no claude.ai, no navegador, para processar listas.</div>' : ''}
+    ${semClaude ? `<div class="aviso-topo">O Claude não respondeu nesta visualização (capacidade de IA ${window.claude?.use ? 'recusada ou indisponível' : 'ausente: a página não está dentro do claude.ai'}). Abra o artefato em claude.ai no navegador (Chrome/Edge), entre na sua conta e recarregue a página.</div>` : ''}
+    ${soTexto ? '<div class="aviso-topo info">Esta visualização não envia imagens ao Claude: a transcrição usa o texto do PDF (símbolos corrigidos pela IA) e marca para revisão o que ficar incerto. Para a leitura pela imagem, que é mais fiel, abra o artefato em claude.ai no navegador.</div>' : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
@@ -604,7 +617,7 @@ function telaEnviar() {
       <p>ou clique para escolher · as listas são processadas uma de cada vez</p>
       <input type="file" id="arquivo" accept="application/pdf,.pdf" multiple hidden ${bloqueado ? 'disabled' : ''}>
     </label>
-    <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${Math.max(1, Math.min(4, cap.limites?.images?.maxCount || 1))} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
+    <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${porChamada()} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
     <div class="envios" id="envios"></div>`;
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
   input.addEventListener('change', () => { receber(input.files); input.value = ''; });
