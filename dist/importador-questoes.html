@@ -157,6 +157,7 @@ mjx-container[display="true"] { margin: .6em 0 !important; }
 .gab-tabela img { height: 40px; width: auto; border-radius: 4px; border: 1px solid var(--borda); background: #fff; }
 .gab-manual { display: grid; gap: 8px; grid-column: 1 / -1; }
 .gab-manual img { max-width: 100%; max-height: 520px; width: auto; border: 1px solid var(--borda); border-radius: 6px; background: #fff; justify-self: start; }
+.diag { padding: 10px 14px; margin: 10px 0; font-size: 13px; } .diag summary { cursor: pointer; font-weight: 600; color: var(--suave); } .diag ul { margin: 8px 0; padding-left: 18px; overflow-wrap: anywhere; }
 .original summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--suave); }
 .original img { width: 100%; height: auto; margin-top: 8px; border-radius: 6px; border: 1px solid var(--borda); background: #fff; }
 .barra-sel { position: sticky; bottom: env(safe-area-inset-bottom, 0px); margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; background: var(--painel); border: 1px solid var(--acento); border-radius: var(--raio); box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
@@ -958,7 +959,7 @@ function textoBusca(q) {
 }
 
 // ============================================================ capacidades do artefato
-const cap = {db: null, assets: null, sample: null, downloads: null, user: null, limites: null, prontas: false};
+const cap = {db: null, assets: null, sample: null, downloads: null, user: null, limites: null, limitesErro: null, sonda: null, prontas: false};
 const estado = {importacoes: new Map(), partes: new Map(), listas: new Map(), jobs: []};
 
 async function iniciarCapacidades() {
@@ -966,7 +967,7 @@ async function iniciarCapacidades() {
   const [db, assets, sample, downloads, user] = await Promise.all(
     ['db', 'assets', 'sample', 'downloads', 'user'].map(n => claude.use(n).catch(() => null)));
   Object.assign(cap, {db, assets, sample, downloads, user});
-  if (sample) cap.limites = await sample.limits().catch(() => null);
+  if (sample) cap.limites = await sample.limits().catch(e => { cap.limitesErro = e?.code || e?.message || String(e); return null; });
   cap.prontas = true;
   if (db) {
     const erro = e => toast(`Banco do artefato indisponível: ${e.message || e.code}`);
@@ -1132,7 +1133,29 @@ function dadosSimulado(nome) {
 
 // ============================================================ Claude (capacidade "sample")
 // Sem imagens nesta visualização (ex.: app de desktop): transcreve só pelo texto do PDF.
-const comImagens = () => !!cap.limites?.images;
+const comImagens = () => !!cap.limites?.images || cap.sonda?.estado === 'ok';
+// Teste real: manda ao Claude uma imagem minúscula com a letra "B". Se ele ler, o modo com imagem
+// vale mesmo que limits() não anuncie imagens. Custa uma chamada pequena, feita uma vez.
+async function sondarImagens(forcar = false) {
+  if (!cap.sample || cap.limites?.images) return;
+  if (!forcar && (cap.sonda?.estado === 'ok' || cap.sonda?.estado === 'sem imagem')) return;
+  const c = document.createElement('canvas'); c.width = c.height = 96;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 96, 96);
+  ctx.fillStyle = '#000'; ctx.font = 'bold 72px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('B', 48, 52);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  cap.sonda = {estado: 'testando', em: agora()};
+  if (tela.nome === 'enviar') desenhar();
+  try {
+    const r = await cap.sample.json('A imagem anexada mostra uma única letra maiúscula. Responda somente com JSON: {"letra": "X"}', {images: [blob], modelTier: 'default', cache: false});
+    const letra = String(r?.letra || '').trim().toUpperCase();
+    cap.sonda = letra === 'B' ? {estado: 'ok', em: agora()} : {estado: 'sem imagem', codigo: 'resposta', mensagem: `o Claude respondeu "${letra || '?'}" (não viu a imagem)`, em: agora()};
+  } catch (e) {
+    const codigo = e?.code || 'erro';
+    const conclusivo = ['images_unavailable', 'image_rejected', 'invalid_request'].includes(codigo);
+    cap.sonda = {estado: conclusivo ? 'sem imagem' : 'indefinido', codigo, mensagem: e?.message || String(e), em: agora()};
+  }
+  if (tela.nome === 'enviar') desenhar();
+}
 const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
 Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
 camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
@@ -1141,7 +1164,7 @@ informados no ponto em que o texto se refere a elas). Figura marcada como TABELA
 existem na imagem — não invente nada: não use a figura, não escreva a tabela e marque revisar = true.
 Marque revisar = true sempre que uma fórmula,
 expoente, tabela ou dado de figura for incerto, e explique em observacoes.`;
-function porChamada() { return comImagens() ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 5; }
+function porChamada() { return comImagens() ? (cap.limites?.images ? Math.max(1, Math.min(4, cap.limites.images.maxCount || 1)) : 2) : 5; }
 
 function textoBase() {
   return DADOS.base.map(([d, t, a]) => `${d} | ${t}${a.length ? ': ' + a.join('; ') : ''}`).join('\n');
@@ -1438,6 +1461,7 @@ async function processar(job, {reprocessar = false} = {}) {
     }
     const m = job.m;
     if (!job.ctx) {
+      if (!comImagens()) { atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: 'Testando se o Claude recebe imagens nesta visualização…'}); await sondarImagens(); }
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).
@@ -1604,7 +1628,15 @@ function telaEnviar() {
     <div class="cab"><h1>Enviar lista</h1></div>
     ${!cap.prontas ? '<div class="aviso-topo info">Conectando ao claude.ai…</div>' : ''}
     ${semClaude ? `<div class="aviso-topo">O Claude não respondeu nesta visualização (capacidade de IA ${window.claude?.use ? 'recusada ou indisponível' : 'ausente: a página não está dentro do claude.ai'}). Abra o artefato em claude.ai no navegador (Chrome/Edge), entre na sua conta e recarregue a página.</div>` : ''}
-    ${soTexto ? '<div class="aviso-topo info">Esta visualização não envia imagens ao Claude: a transcrição usa o texto do PDF (símbolos corrigidos pela IA) e marca para revisão o que ficar incerto. Para a leitura pela imagem, que é mais fiel, abra o artefato em claude.ai no navegador.</div>' : ''}
+    ${soTexto ? `<div class="aviso-topo info">${cap.sonda?.estado === 'sem imagem' ? 'O teste confirmou: nesta conta/visualização o Claude não recebe imagens.' : cap.sonda?.estado === 'testando' ? 'Testando se o Claude recebe imagens…' : 'A plataforma não anunciou envio de imagens; o app vai testar de verdade ao processar a primeira lista.'} Sem imagem, a transcrição usa o texto do PDF, e tabelas/figuras que só existem como imagem ficam com erro para leitura por imagem.</div>` : ''}
+    ${cap.prontas && cap.sample ? `<details class="painel diag"><summary>Diagnóstico da conexão com o Claude</summary><ul class="sem-tex">
+      <li>Claude (sample): disponível</li>
+      <li>Limites anunciados: ${cap.limites ? esc(JSON.stringify(cap.limites)) : `não informados${cap.limitesErro ? ` (erro: ${esc(cap.limitesErro)})` : ''}`}</li>
+      <li>Imagens anunciadas: ${cap.limites?.images ? 'sim' : 'não'}</li>
+      <li>Teste real com imagem: ${!cap.sonda ? 'ainda não feito' : esc(cap.sonda.estado) + (cap.sonda.codigo ? ` · código ${esc(cap.sonda.codigo)}` : '') + (cap.sonda.mensagem ? ` · ${esc(cap.sonda.mensagem)}` : '')}</li>
+      <li>Modo em uso: ${comImagens() ? 'leitura pela imagem' : 'só texto'}</li>
+      <li>Navegador: ${esc(navigator.userAgent)}</li></ul>
+      <button class="botao" id="testar-imagem" ${cap.sonda?.estado === 'testando' ? 'disabled' : ''}>Testar leitura de imagem agora</button></details>` : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
@@ -1614,6 +1646,7 @@ function telaEnviar() {
     </label>
     <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${porChamada()} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
     <div class="envios" id="envios"></div>`;
+  document.getElementById('testar-imagem')?.addEventListener('click', () => sondarImagens(true));
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
   input.addEventListener('change', () => { receber(input.files); input.value = ''; });
   ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); if (!bloqueado) zona.classList.add('ativo'); }));
