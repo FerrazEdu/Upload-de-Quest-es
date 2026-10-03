@@ -1159,6 +1159,28 @@ async function partesDoSistema(blob) {
   };
   return {rotulo, linhas: await Promise.all(linhas.map(pedacos))};
 }
+// Rótulo de sistema ("Bruno", "André"): é uma palavra, não fórmula. Lido pelo OCR de texto (Tesseract) e
+// pelo leitor de fórmulas; vale a palavra do próprio texto da questão mais parecida com uma das leituras
+// (o enunciado cita os nomes: "André, Bruno, Caio…"); sem palavra parecida, a leitura do OCR se for só letras.
+const distancia = (a, b) => { const d = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) { let ant = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, ant + (a[i - 1] === b[j - 1] ? 0 : 1)); ant = t; } }
+  return d[b.length]; };
+async function lerRotulo(blob, leitor, contexto) {
+  const leituras = [];
+  try { const w = await comPrazo(workerOcr(), 60000); leituras.push((await comPrazo(w.recognize(blob), 30000))?.data?.text || ''); } catch (e) { console.warn('rótulo OCR', e); }
+  try { leituras.push((await leitor.ler(blob))?.latex || ''); } catch {}
+  const limpas = leituras.map(t => String(t).replace(/\\(?:mathrm|mathbf|mathit|mathsf|text|textrm|textbf|textit|boldsymbol|scriptstyle|displaystyle|bf|rm)\b\s*/g, '')
+    .replace(/\\['`^~"]\{?([a-zA-Z])\}?/g, '$1').replace(/[^A-Za-zÀ-ú]/g, '')).filter(t => t.length >= 2);
+  const palavras = [...new Set(String(contexto || '').match(/[A-ZÀ-Ú][a-zà-ú]+/g) || [])];
+  let melhor = null;
+  for (const w of palavras) for (const t of limpas) {
+    const d = distancia(semAcento(w), semAcento(t));
+    if (d <= Math.max(1, Math.floor(0.4 * w.length)) && (!melhor || d < melhor.d)) melhor = {d, w};
+  }
+  if (melhor) return melhor.w;
+  return limpas.length && leituras[0] && /^[A-Za-zÀ-ú]{2,20}$/.test(limpas[0]) ? limpas[0] : null;
+}
 async function lerSistema(f, leitor) {
   const p = await partesDoSistema(f.blob).catch(() => null);
   if (!p) return null;
@@ -1178,13 +1200,9 @@ async function lerSistema(f, leitor) {
   }
   let rotulo = '';
   if (p.rotulo) {
-    const r = await leitor.ler(p.rotulo);
-    const t = String(r?.latex || '').replace(/\\(?:mathrm|mathbf|mathit|mathsf|text|textrm|textbf|textit|boldsymbol|bf|rm)\b\s*/g, '')
-      .replace(/\\['`^~"]\{?([a-zA-Z])\}?/g, '$1').replace(/[{}\s~]/g, '');
-    if (!/^[A-Za-zÀ-ú]{1,20}$/.test(t)) return null;   // rótulo ilegível: melhor a figura do que um sistema sem nome
-    // grafia do próprio texto da questão (o leitor perde acentos: "Andre" → "André")
-    const doTexto = String(f.contexto || '').match(/[A-Za-zÀ-ú]+/g)?.find(w => semAcento(w) === semAcento(t));
-    rotulo = `\\text{${doTexto || t}}`;
+    const t = await lerRotulo(p.rotulo, leitor, f.contexto);
+    if (!t) return null;   // rótulo ilegível: melhor a figura do que um sistema sem nome
+    rotulo = `\\text{${t}}`;
   }
   return {latex: `${rotulo}\\begin{cases} ${lidas.map(r => r.latex).join(' \\\\ ')} \\end{cases}`, sistema: true,
     votos: Math.min(...lidas.map(r => r.votos ?? 1)), de: Math.max(...lidas.map(r => r.de ?? 1))};
