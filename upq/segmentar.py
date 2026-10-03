@@ -314,6 +314,9 @@ def aparar_figura(figura, linhas_texto):
     for t in linhas_texto:
         if t.x1 < r.x0 or t.x0 > r.x1:
             continue
+        # linha só de letras de alternativa ("A   B") ao lado dos desenhos: não corta (igual ao JS)
+        if all(len(w) <= 2 for w in getattr(t, "texto", "x x x").split()):
+            continue
         if t.y0 < r.y1 < t.y1:        # cruza a borda de baixo
             r.y1 = t.y0 - 1
         elif t.y0 < r.y0 < t.y1:      # cruza a borda de cima
@@ -425,9 +428,15 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
                 continue
         # Modelo da página pela largura da barra "Questão NN" (além do meio = largura toda); sem
         # barra desenhada, pelo texto que atravessa o meio; página só de continuação segue a anterior.
-        fins = [x for x in (fim_da_barra(pagina, c["r"]) for c in cabs2) if x is not None]
-        if fins:
-            uma = sum(x > pagina.rect.width / 2 + 30 for x in fins) * 2 > len(fins)
+        # Voto por barra: começa na metade esquerda e passa do meio = largura toda; barra que começa na
+        # coluna da direita (sempre passa do meio) prova duas colunas (igual a recorte.js).
+        meio = pagina.rect.width / 2
+        votos = [c["r"].x0 < meio - 30 and x > meio + 30 for c, x in ((c, fim_da_barra(pagina, c["r"])) for c in cabs2) if x is not None]
+        fins = votos
+        if any(c["col"] == 1 for c in cabs2):
+            uma = False
+        elif fins:
+            uma = sum(votos) * 2 > len(votos)
         elif cabs2:
             uma = len(limites_colunas(pagina)) == 1
         else:

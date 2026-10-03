@@ -323,6 +323,24 @@ const UPQRecorte = (() => {
     return total > 0 && comTexto >= 0.4 * total;
   }
 
+  // Um desenho pode vir no PDF partido em tiras/ladrilhos (várias imagens encostadas): junta numa figura só.
+  function juntarLadrilhos(rs) {
+    const out = rs.map(r => ({...r}));
+    for (let mudou = true; mudou;) {
+      mudou = false;
+      for (let a = 0; a < out.length && !mudou; a++) for (let b = a + 1; b < out.length; b++) {
+        const A = out[a], B = out[b];
+        const vx = Math.max(A.x0, B.x0) - Math.min(A.x1, B.x1), vy = Math.max(A.y0, B.y0) - Math.min(A.y1, B.y1);
+        const mesmaColuna = Math.abs(A.x0 - B.x0) < 2 && Math.abs(A.x1 - B.x1) < 2 && vy <= 1.5;
+        const mesmaLinha = Math.abs(A.y0 - B.y0) < 2 && Math.abs(A.y1 - B.y1) < 2 && vx <= 1.5;
+        if (!mesmaColuna && !mesmaLinha) continue;
+        out[a] = {x0: Math.min(A.x0, B.x0), y0: Math.min(A.y0, B.y0), x1: Math.max(A.x1, B.x1), y1: Math.max(A.y1, B.y1)};
+        out.splice(b, 1); mudou = true; break;
+      }
+    }
+    return out;
+  }
+
   // Alternativa em imagem: a letra (A–E, sozinha) logo à esquerda do canto de cima da figura.
   function letraDaFigura(f, linhas) {
     let melhor = null;
@@ -356,14 +374,16 @@ const UPQRecorte = (() => {
   // da figura (letras, números, "60°") ficam.
   function aparar(f, linhas) {
     const r = {...f};
+    // só conta texto que passa POR CIMA da figura (pedaços sobrepostos a ela na horizontal): a letra
+    // da alternativa ao lado do desenho ("A" ... "B" na mesma linha) não corta o desenho
+    const sobre = t => (t.trechos || [t]).reduce((a, p) => a + Math.max(0, Math.min(p.x1, r.x1) - Math.max(p.x0, r.x0)), 0);
     for (const t of linhas) {
-      if (t.x1 < r.x0 || t.x0 > r.x1) continue;
+      if (t.x1 < r.x0 || t.x0 > r.x1 || sobre(t) < Math.min(0.3 * (r.x1 - r.x0), 0.5 * (t.x1 - t.x0))) continue;
+      // linha só de letras soltas ("A   B": letras das alternativas, que o pdf.js junta num pedaço) não corta
+      if ((t.texto || '').replace(/\*\*/g, '').trim().split(/\s+/).every(w => w.length <= 2)) continue;
       if (t.y0 < r.y1 && r.y1 < t.y1) r.y1 = t.y0 - 1;
       else if (t.y0 < r.y0 && r.y0 < t.y1) r.y0 = t.y1 + 1;
     }
-    // o texto tem de passar POR CIMA da figura (pedaços sobrepostos a ela na horizontal); frase com
-    // uma imagem pequena no meio ("observe o esquema [img] ao lado") tem os pedaços dos lados e fica
-    const sobre = t => (t.trechos || [t]).reduce((a, p) => a + Math.max(0, Math.min(p.x1, r.x1) - Math.max(p.x0, r.x0)), 0);
     // e a figura tem de ocupar boa parte da linha: imagem pequena no meio de uma frase (o pdf.js junta
     // os dois lados num pedaço só) não é print vazando
     const corrida = t => ((t.texto || '').trim().split(/\s+/).length >= 5 || RE_QUESTAO.test(t.texto || ''))
@@ -928,8 +948,8 @@ const UPQRecorte = (() => {
       const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
       const centralizado = (x0, x1, n) => n >= 3 && x1 - x0 < 0.8 * largura && x0 - esq > 0.06 * largura
         && (Math.abs((x0 + x1) / 2 - centro) < 0.04 * largura || Math.abs((x0 + x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-      const dentro = imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
-        return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; });
+      const dentro = juntarLadrilhos(imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
+        return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; }));
       ordemDeLeitura(dentro);
       // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
       const tabelas = new Set();
@@ -938,7 +958,7 @@ const UPQRecorte = (() => {
       // Fórmula sem texto (imagem pequena ou desenho): entra no texto como ⟦FÓRMULA #k⟧, no ponto em que
       // aparece (na linha da letra da alternativa, ou numa linha própria), e o recorte vai junto.
       // a imagem inteira (não só a grade recortada de uma tabela) fica fora da busca por fórmulas
-      const formulas = await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, [...aparadas, ...visiveis], comCabecalho ? daParte[0] : null, pequenas);
+      const formulas = await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, [...aparadas, ...visiveis, ...dentro], comCabecalho ? daParte[0] : null, pequenas);
       const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
       formulas.forEach((f, k) => {
         f.k = k;
@@ -1013,11 +1033,23 @@ const UPQRecorte = (() => {
       const pequenas = todas.filter(r => !(r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN) && r.y0 > MARGEM_TOPO);
       // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
       // continuação segue o modelo da anterior
-      const fins = p.uma.cabecalhos.map(c => fimDaBarra(canvas, c)).filter(x => x !== null);
+      // Voto de cada barra: começa na metade esquerda e passa do meio = questão na largura toda; começa na
+      // metade direita (barra da 2ª coluna, que sempre "passa do meio") ou acaba antes do meio = duas colunas.
+      const meio = p.vp.width / 2;
+      const votos = p.uma.cabecalhos.map(c => { const fim = fimDaBarra(canvas, c); return fim === null ? null : c.x0 < meio - 30 && fim > meio + 30 ? 'uma' : 'duas'; })
+        .filter(Boolean);
       // duas barras "Questão NN" na mesma altura, uma em cada coluna: a página é de duas colunas
-      const lado = p.duas.cabecalhos.some(a => a.col === 0 && p.duas.cabecalhos.some(b => b.col === 1 && Math.abs(a.base - b.base) < 4));
-      const umaColuna = lado ? false : fins.length ? fins.filter(x => x > p.vp.width / 2 + 30).length * 2 > fins.length
+      const lado = p.duas.cabecalhos.some(a => a.col === 0 && p.duas.cabecalhos.some(b => b.col === 1 && Math.abs(a.base - b.base) < 4))
+        || p.duas.cabecalhos.some(b => b.col === 1);   // barra que começa na coluna da direita
+      let umaColuna = lado ? false : votos.length ? votos.filter(v => v === 'uma').length * 2 > votos.length
         : temCab ? p.cruzam >= 3 : umaColunaAnterior;
+      // trava: "uma coluna" com várias linhas que têm um vão bem no meio da página (texto das duas colunas
+      // lado a lado) é página de duas colunas — senão as duas questões se misturam linha a linha
+      if (umaColuna) {
+        const vaoNoMeio = p.uma.linhas.filter(l => l.y0 > MARGEM_TOPO && (l.trechos || []).some((t, i, ts) => i + 1 < ts.length
+          && t.x1 < meio - 4 && ts[i + 1].x0 > meio + 4 && ts[i + 1].x0 - t.x1 >= 8)).length;
+        if (vaoNoMeio >= 3) umaColuna = false;
+      }
       umaColunaAnterior = umaColuna;
       const m = umaColuna ? p.uma : p.duas;
       Object.assign(p, {linhas: m.linhas, cabecalhos: m.cabecalhos, umaColuna});
@@ -1056,6 +1088,13 @@ const UPQRecorte = (() => {
         q.formulas.push({nome, ...pt.formulas[+k]});
         return `⟦FÓRMULA ${nome}⟧`;
       })).join('\n');
+      // Cada figura marcada no texto, no ponto exato em que aparece no PDF (⟦FIGURA NOME⟧ numa linha
+      // própria): a transcrição tem de pôr a figura ali, não onde o texto "sugere" ("figura ao lado").
+      const linhasQ = q.textoPdf.split('\n');
+      [...q.figuras].sort((a, b) => b.linha - a.linha || q.figuras.indexOf(b) - q.figuras.indexOf(a))
+        .forEach(f => linhasQ.splice(Math.min(Math.max(1, f.linha), linhasQ.length), 0, `⟦FIGURA ${f.nome}⟧`));
+      q.textoPdf = linhasQ.join('\n');
+      q.figuras.forEach(f => { f.linha = linhasQ.indexOf(`⟦FIGURA ${f.nome}⟧`); });
       q.regioes = q.partes.map(pt => ({pagina: pt.pagina, ...pt.regiao}));
       q.imagem = await juntarRecortes(q.partes.map(pt => pt.recorte));
       delete q.partes;

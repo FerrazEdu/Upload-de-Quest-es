@@ -24,7 +24,8 @@ def dados_simulado(manifesto: dict) -> tuple[int | None, int | None]:
 def cabecalho_da_barra(texto_pdf: str) -> tuple[str | None, int | None]:
     """Banca e ano da barra "Questão NN  BANCA ANO" (1ª linha do texto do PDF), pelo código.
     "(ADAPTADO)" sai; o ano é o último 19xx/20xx. Sem texto legível na barra → (None, None)."""
-    linha = (texto_pdf or "").split("\n", 1)[0]
+    linhas = (texto_pdf or "").split("\n")
+    linha = next((l for l in linhas if re.match(r"^\s*Quest[aã]o\s*\d", l, re.I)), linhas[0])   # a barra, nunca outra linha
     resto = re.sub(r"^\s*Quest[aã]o\s*\d[\d ]*", "", linha, flags=re.I).strip()
     if not re.search(r"[A-Za-z]{2,}", resto):
         return None, None

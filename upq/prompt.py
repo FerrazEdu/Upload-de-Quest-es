@@ -37,7 +37,10 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    revisar = true.
 5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.
 6. Figuras: no ponto exato onde a figura aparece, escreva ![descrição curta](figura:NOME)
-   usando SOMENTE os NOMES de figura informados na mensagem. A descrição é texto alternativo
+   usando SOMENTE os NOMES de figura informados na mensagem. ORDEM IGUAL À DO PDF: quando o texto
+   extraído traz ⟦FIGURA NOME⟧ numa linha, a figura vai EXATAMENTE nesse ponto — entre o parágrafo
+   que vem antes e o que vem depois da marca —, mesmo que o texto diga "figura ao lado", "abaixo" ou
+   "a seguir". Nunca mova parágrafos para antes ou depois de uma figura (não copie a marca). A descrição é texto alternativo
    (o que a figura mostra, em até 15 palavras). Créditos da figura ("Fonte: UNICAMP, 2023.")
    são transcritos logo abaixo dela, como referência (regra 8) — exceto quando já aparecem
    DENTRO da imagem recortada da figura (confira a imagem da figura): aí não repita. Não

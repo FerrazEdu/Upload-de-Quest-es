@@ -375,6 +375,43 @@ function conferirRepeticoes(textoPdf, transcrito) {
   const original = String(textoPdf).split('\n').slice(1).filter(l => !l.startsWith(MARCA_OCR)).map(l => l.replace(/^\[centralizado\] /, '').replace(/\*\*/g, '').trim());
   return ['trecho repetido na transcrição (aparece mais vezes do que no PDF): ' + repetidos.slice(0, 3).map(n => `«${(original.find(l => soAlnum(l) === n) || n).slice(0, 60)}»`).join('; ')];
 }
+// A figura tem de ficar no lugar dela no PDF: as palavras logo antes da marca ⟦FIGURA NOME⟧ vêm antes
+// da figura no enunciado, e as logo depois vêm depois (texto trocado de lugar em volta da figura = erro).
+function recorteMisturado(textoPdf, numero) {
+  const linhas = String(textoPdf || '').split('\n');
+  if (!textoPdf) return null;
+  const barra = linhas[0].match(/^\s*Quest[aã]o\s*(\d[\d ]*)/i);
+  if (!barra || +barra[1].replace(/ /g, '') !== +numero) return `o texto da questão não começa na barra "Questão ${nn(numero)}" (colunas ou questões misturadas)`;
+  if (linhas.slice(1).some(l => /^\s*Quest[aã]o\s*\d/i.test(l))) return 'há a barra de outra questão dentro desta (questões misturadas)';
+  const letras = linhas.map(l => (l.match(/^(?:\*\*)?([A-E])(?:\*\*)?\s+\S/) || [])[1]).filter(Boolean);
+  let viuB = false;
+  for (let i = 1; i < letras.length; i++) {
+    if (letras[i] === 'B') viuB = true;
+    if (viuB && letras[i] < letras[i - 1]) return `alternativas fora de ordem no texto do PDF (${letras.join(' ')}): colunas misturadas`;
+  }
+  return null;
+}
+function conferirPosicaoFiguras(textoPdf, enunciado, tabelas = new Set()) {
+  const linhas = String(textoPdf || '').split('\n').slice(1), enun = String(enunciado || ''), erros = [];
+  const palavras = l => semAcento(semMarcasFormula(l).replace(/^\[centralizado\] /, '').replace(/\*\*/g, '')).match(/[a-z]{4,}/g) || [];
+  const ehAlternativa = l => /^(\*\*)?[A-E](\*\*)?(\s|$)/.test(l.trim());
+  for (const [i, l] of linhas.entries()) {
+    const m = l.match(/^⟦FIGURA ([A-Za-z0-9_]+)⟧$/);
+    if (!m || tabelas.has(m[1])) continue;
+    const pos = enun.search(new RegExp(`figura:${m[1]}\\b`));
+    if (pos < 0) continue;   // figura numa alternativa ou não usada: outras conferências cuidam
+    const antes = semAcento(enun.slice(0, pos)).replace(/\\[a-zA-Z]+/g, ' '), depois = semAcento(enun.slice(pos)).replace(/\\[a-zA-Z]+/g, ' ');
+    // últimas palavras do texto antes da marca e primeiras depois (parando nas alternativas)
+    const ant = linhas.slice(0, i).filter(x => !/^⟦FIGURA/.test(x)).flatMap(palavras).slice(-3);
+    const dep = [];
+    for (const x of linhas.slice(i + 1)) { if (ehAlternativa(x)) break; if (!/^⟦FIGURA/.test(x)) dep.push(...palavras(x)); if (dep.length >= 3) break; }
+    const falhaAntes = ant.length === 3 && !ant.every(w => antes.includes(w)) && ant.every(w => depois.includes(w));
+    const falhaDepois = dep.length >= 3 && !dep.slice(0, 3).every(w => depois.includes(w)) && dep.slice(0, 3).every(w => antes.includes(w));
+    if (falhaAntes || falhaDepois)
+      erros.push(`figura ${m[1]} fora do lugar: no PDF ela vem ${falhaAntes ? `depois de «…${ant.join(' ')}»` : `antes de «${dep.slice(0, 3).join(' ')}…»`} (texto trocado de lugar em volta da figura)`);
+  }
+  return erros;
+}
 function conferirFormatacao(textoPdf, transcrito) {
   const erros = [], faltamN = [], faltamC = [];
   const negrito = trechosNegrito(transcrito), centro = trechosCentralizados(transcrito);
@@ -406,6 +443,10 @@ function conferirComPdf(textoPdf, transcrito) {
 }
 function validarQuestao(q, lista) {
   const erros = [], avisos = [];
+  // Trava de recorte: o texto da questão começa na barra dela e as alternativas vêm em ordem; senão o
+  // recorte misturou colunas/questões (nunca deixa passar como se estivesse certo)
+  const misturado = recorteMisturado(q.textoPdf, q.numero);
+  if (misturado) erros.push(`recorte incompleto: ${misturado}. Avise o suporte do importador.`);
   if (q.foraDoRecorte?.length) erros.push(`recorte incompleto: trecho da página fora da questão (${q.foraDoRecorte.slice(0, 3).map(t => `«${t}»`).join('; ')}). Avise o suporte do importador.`);
   const assuntosBase = BASE.get(q.disciplina + '\u0000' + q.topico);
   if (!assuntosBase) erros.push(`par fora da base de tópicos: ${q.disciplina} / ${q.topico}`);
@@ -447,6 +488,12 @@ function validarQuestao(q, lista) {
   const foraDoLugar = (q.figuras || []).filter(f => f.alternativa && !f.tabela && q.alternativas?.[f.alternativa] !== undefined
     && !new RegExp(`figura:${f.nome}\\b`).test(String(q.alternativas[f.alternativa])));
   if (foraDoLugar.length) erros.push(`alternativa em imagem fora do lugar: ${foraDoLugar.map(f => `${f.nome} é a alternativa ${f.alternativa}`).join('; ')}`);
+  // alternativas em imagem: se várias são figuras, nenhuma pode ficar sem a sua (recorte ou leitura falhou)
+  const comFigura = new Set((q.figuras || []).filter(f => f.alternativa && !f.tabela).map(f => f.alternativa));
+  if (comFigura.size >= 2) {
+    const semFigura = Object.keys(q.alternativas || {}).filter(l => !comFigura.has(l) && !/figura:/.test(String(q.alternativas[l])) && !String(q.alternativas[l]).replace(/[\s.]/g, ''));
+    if (semFigura.length) erros.push(`alternativa sem a figura: ${semFigura.join(', ')} (as outras alternativas são imagens)`);
+  }
   const deFormula = (q.figuras || []).filter(f => f.deFormula).map(f => f.nome);
   if (deFormula.length) avisos.push(`trecho sem texto do PDF entrou como imagem (${deFormula.join(', ')}): confira se é desenho ou fórmula`);
   const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
@@ -465,6 +512,7 @@ function validarQuestao(q, lista) {
     if (incertas.length) avisos.push(`fórmula lida da imagem com incerteza (${incertas.map(f => f.nome).join(', ')}): confira com o original`);
     else if (lidas.length && q.lidaSemImagem) avisos.push(`fórmula lida da imagem por OCR (${lidas.map(f => f.nome).join(', ')}): confira com o original`);
   }
+  erros.push(...conferirPosicaoFiguras(q.textoPdf, q.enunciado, tabelasImg));
   const pdfSemMarcas = semMarcasFormula(q.textoPdf);
   erros.push(...conferirComPdf(pdfSemMarcas, transcrito));
   erros.push(...conferirFormatacao(pdfSemMarcas, transcrito));
@@ -513,8 +561,8 @@ async function sondarImagens(forcar = false) {
 const MODO_TEXTO = `MODO SEM IMAGEM (substitui a regra "FONTE DA VERDADE" acima)
 Nesta chamada NÃO há imagens: a fonte é o texto extraído do PDF. Corrija os erros conhecidos dessa
 camada de texto: "À" = π, "H" isolado entre números = ≈, expoentes e índices achatados ("10 8" = 10⁸,
-"m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem (use os NOMES
-informados no ponto em que o texto se refere a elas). Figura marcada como TABELA: se o texto traz a
+"m/s2" = m/s², "N1" = N₁), palavras partidas e trechos repetidos. As figuras existem: cada uma vai no ponto da sua marca
+⟦FIGURA NOME⟧ no texto (a posição real no PDF), com o texto antes e depois na mesma ordem. Figura marcada como TABELA: se o texto traz a
 marca [TABELA DA FIGURA NOME — lida por OCR], transcreva essas linhas como tabela nesse ponto (só
 corrija erros óbvios de OCR) e não use a figura; sem essa marca, não invente nada: não use a figura,
 não escreva a tabela e marque revisar = true.
@@ -697,7 +745,8 @@ function centralizar(texto, figurasCentralizadas = new Set()) {
 const normalizarTexto = (t, figurasCentralizadas) => separarTabelas(centralizar(formatarReferencias(t), figurasCentralizadas));
 
 function cabecalhoDaBarra(textoPdf) {
-  const linha = String(textoPdf || '').split('\n')[0] || '';
+  const linhasT = String(textoPdf || '').split('\n');
+  const linha = linhasT.find(l => /^\s*Quest[aã]o\s*\d/i.test(l)) || linhasT[0] || '';   // a barra, nunca outra linha
   let resto = linha.replace(/^\s*Quest[aã]o\s*\d[\d ]*/i, '').trim();
   if (!resto || !/[A-Za-z]{2,}/.test(resto)) return {instituicao: null, ano: null};
   resto = resto.replace(/\(\s*ADAPTAD[OA]\s*\)/gi, ' ').trim();
@@ -953,12 +1002,17 @@ function comTabelasOcr(texto, figuras, lidas) {
   const linhas = [];
   let noBloco = false;
   for (const l of String(texto || '').split('\n')) {
-    if (l.startsWith(MARCA_OCR)) { noBloco = true; continue; }
+    if (l.startsWith(MARCA_OCR)) { noBloco = true; const n = l.slice(MARCA_OCR.length).split(' ')[0]; linhas.push(`⟦FIGURA ${n}⟧`); continue; }
     if (noBloco && l.startsWith('| ')) continue;
     noBloco = false; linhas.push(l);
   }
   const alvo = (figuras || []).filter(f => lidas[f.nome]).sort((a, b) => (b.linha ?? linhas.length) - (a.linha ?? linhas.length));
-  for (const f of alvo) linhas.splice(Math.min(f.linha ?? linhas.length, linhas.length), 0, ...blocoOcr(f.nome, lidas[f.nome]));
+  for (const f of alvo) {
+    // a tabela lida entra no lugar da marca da figura (o ponto dela no PDF); sem marca, na linha guardada
+    const i = linhas.indexOf(`⟦FIGURA ${f.nome}⟧`);
+    if (i >= 0) linhas.splice(i, 1, ...blocoOcr(f.nome, lidas[f.nome]));
+    else linhas.splice(Math.min(f.linha ?? linhas.length, linhas.length), 0, ...blocoOcr(f.nome, lidas[f.nome]));
+  }
   return linhas.join('\n');
 }
 // promessa com prazo: estourou, chama o limpador (ex.: derruba o Worker travado) e rejeita com 'timeout'

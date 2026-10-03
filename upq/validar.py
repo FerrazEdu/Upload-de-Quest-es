@@ -135,6 +135,26 @@ def conferir_com_pdf(texto_pdf: str, transcricao: str) -> list[str]:
     return avisos
 
 
+def recorte_misturado(texto_pdf: str, numero: int) -> str | None:
+    """Trava de recorte (igual a recorteMisturado no importador): o texto começa na barra da própria
+    questão, não tem a barra de outra e as alternativas vêm em ordem."""
+    if not texto_pdf:
+        return None
+    linhas = texto_pdf.split("\n")
+    barra = re.match(r"^\s*Quest[aã]o\s*(\d[\d ]*)", linhas[0], re.I)
+    if not barra or int(barra.group(1).replace(" ", "")) != numero:
+        return f'o texto da questão não começa na barra "Questão {numero:02d}" (colunas ou questões misturadas)'
+    if any(re.match(r"^\s*Quest[aã]o\s*\d", l, re.I) for l in linhas[1:]):
+        return "há a barra de outra questão dentro desta (questões misturadas)"
+    letras = [m.group(1) for l in linhas if (m := re.match(r"^(?:\*\*)?([A-E])(?:\*\*)?\s+\S", l))]
+    viu_b = False
+    for a, b in zip(letras, letras[1:]):
+        viu_b = viu_b or b == "B"
+        if viu_b and b < a:
+            return f"alternativas fora de ordem no texto do PDF ({' '.join(letras)}): colunas misturadas"
+    return None
+
+
 def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
     lista = Lista.model_validate_json((pasta / "transcricao.json").read_text(encoding="utf-8"))
     manifesto = json.loads((pasta / "manifesto.json").read_text(encoding="utf-8"))
@@ -174,6 +194,9 @@ def validar(pasta: Path) -> tuple[Lista, dict[int, dict[str, list[str]]]]:
             if a not in validos:
                 erros.append(f"assunto fora da base para {q.topico}: {a}")
 
+        misturado = recorte_misturado(texto_pdf.get(q.numero, ""), q.numero)
+        if misturado:
+            erros.append(f"recorte incompleto: {misturado}")
         fora = fora_do_recorte.get(q.numero) or []
         if fora:
             erros.append("recorte incompleto: trecho da página fora da questão ("
