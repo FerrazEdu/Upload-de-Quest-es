@@ -32,7 +32,10 @@ O texto é exibido para alunos numa plataforma que renderiza Markdown + LaTeX (M
    imagem e não têm texto. No texto extraído elas aparecem no ponto exato como
    ⟦FÓRMULA NOME = $LaTeX$⟧ (lida da imagem) ou ⟦FÓRMULA NOME⟧ (sem leitura: leia na imagem).
    Transcreva cada uma em LaTeX nesse ponto (não copie a marca); a alternativa cujo texto é só
-   a marca tem como texto a fórmula. NUNCA escreva no lugar da fórmula um aviso como
+   a marca tem como texto a fórmula. SISTEMA COM CHAVE (equações empilhadas com "{" à esquerda)
+   é sempre UMA fórmula LaTeX: $\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases}$, com o rótulo
+   antes da chave quando houver ($\text{Bruno}\begin{cases} ... \end{cases}$); nunca linhas soltas
+   nem figura da chave. NUNCA escreva no lugar da fórmula um aviso como
    "(expressão não legível)": se não houver como ler, deixe a alternativa vazia e marque
    revisar = true.
 5. Tabelas em Markdown (| col | col | + linha de separação), com unidades no cabeçalho.

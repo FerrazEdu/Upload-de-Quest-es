@@ -52,6 +52,9 @@ monta `dist/formula/`. A validação barra fórmula não lida, fórmula ausente 
 lugar do texto ("expressão não legível"). Fórmula colada como imagem grande (alternativa inteira em
 imagem) também vai ao leitor, com o recorte da própria imagem: vira LaTeX só com leitura unânime em
 duas escalas e coerente (sem `\frac{}{}`, `\left` sem `\right`); senão continua a figura que é.
+Sistema com chave vira uma fórmula só, `\begin{cases} … \end{cases}`: chave desenhada com as equações em
+texto é montada no recorte (a letra da alternativa fica fora); sistema inteiro sem texto (ex.: "Bruno {…")
+é partido em rótulo, chave e linhas, e cada linha (longa: em pedaços) é lida pelo leitor.
 
 Colunas: cada página é lida em uma ou duas colunas pela barra "Questão NN". O texto da barra decide
 primeiro ("BANCA ANO" na ponta direita, depois do meio = barra na largura toda); sem isso, a cor da

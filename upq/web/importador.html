@@ -361,7 +361,8 @@ function trechosNegrito(t) {
   return partes.map(soAlnum).join('|');
 }
 function trechosCentralizados(t) {
-  return [...t.matchAll(/<p style="text-align: center;">([\s\S]*?)<\/p>/g), ...t.matchAll(/<table style="margin-left: auto; margin-right: auto;">([\s\S]*?)<\/table>/g)]
+  return [...t.matchAll(/<p style="text-align: center;">([\s\S]*?)<\/p>/g), ...t.matchAll(/<table style="margin-left: auto; margin-right: auto;">([\s\S]*?)<\/table>/g),
+    ...t.matchAll(/\$\$([\s\S]*?)\$\$/g)]   // fórmula destacada ($$...$$) sai centrada
     .map(m => soAlnum(m[1])).join('|');
 }
 // Trava contra vazamento: nenhum trecho do PDF pode aparecer na transcrição mais vezes do que
@@ -514,7 +515,8 @@ function validarQuestao(q, lista) {
     if (faltam.length) erros.push(`fórmula do PDF ausente na transcrição: ${faltam.slice(0, 3).map(f => `${f.nome} ($${f.latex}$)`).join('; ')}`);
     const lidas = marcas.filter(f => f.latex), incertas = lidas.filter(f => (info.get(f.nome)?.votos ?? 2) < 2);
     if (incertas.length) avisos.push(`fórmula lida da imagem com incerteza (${incertas.map(f => f.nome).join(', ')}): confira com o original`);
-    else if (lidas.length && q.lidaSemImagem) avisos.push(`fórmula lida da imagem por OCR (${lidas.map(f => f.nome).join(', ')}): confira com o original`);
+    else if (lidas.some(f => !info.get(f.nome)?.deTexto) && q.lidaSemImagem)   // (sistema montado do texto do PDF não passou por OCR)
+      avisos.push(`fórmula lida da imagem por OCR (${lidas.filter(f => !info.get(f.nome)?.deTexto).map(f => f.nome).join(', ')}): confira com o original`);
   }
   erros.push(...conferirPosicaoFiguras(q.textoPdf, q.enunciado, tabelasImg));
   const pdfSemMarcas = semMarcasFormula(q.textoPdf);
@@ -778,7 +780,7 @@ function normalizarIA(r, q, ctx) {
     etapa: q.etapa, dificuldade: Math.min(5, Math.max(1, Math.round(+r.dificuldade) || 3)),
     enunciado: normalizarTexto(String(r.enunciado || '').trim(), centradas), alternativas, gabarito: oficial || '',
     pagina: q.pagina, textoPdf: q.textoPdf, foraDoRecorte: q.foraDoRecorte || [], lidaSemImagem: !comImagens(), tabelasOcr: Object.keys(q.ocr || {}),
-    formulas: (q.formulas || []).map(f => ({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, ...(f.asset ? {asset: f.asset} : {})})), revisar: !!r.revisar || !oficial,
+    formulas: (q.formulas || []).map(f => ({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, ...(f.deTexto ? {deTexto: true} : {}), ...(f.asset ? {asset: f.asset} : {})})), revisar: !!r.revisar || !oficial,
     observacoes: [...obs, ...(oficial ? [] : ['gabarito não encontrado na tabela do PDF: preencha na edição'])].join('; ') || null, revisada: false,
   };
 }
@@ -1082,8 +1084,113 @@ function formulaValida(r) {
 }
 const COMANDOS_COMUNS = new Set(('frac dfrac sqrt cdot times div pm mp left right pi alpha beta gamma delta theta lambda mu rho sigma omega ' +
   'Delta Omega phi varphi le ge leq geq neq approx sin cos tan log ln text mathrm circ degree quad qquad infty vec').split(' '));
+// Sistema com chave desenhado inteiro (sem texto): o leitor lê uma linha por vez, então o recorte é
+// partido em rótulo (à esquerda da chave, ex.: "Bruno"), chave e linhas (pelos vãos horizontais), e cada
+// parte é lida sozinha. Volta null se o recorte não tem essa forma.
+async function partesDoSistema(blob) {
+  const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', {willReadFrequently: true}); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.drawImage(bmp, 0, 0);
+  const d = ctx.getImageData(0, 0, W, H).data, tinta = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) tinta[i] = Math.min(d[4 * i], d[4 * i + 1], d[4 * i + 2]) < 150 ? 1 : 0;
+  let iy0 = H, iy1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (tinta[y * W + x]) { iy0 = Math.min(iy0, y); iy1 = Math.max(iy1, y); }
+  if (iy1 < 0) return null;
+  const hTinta = iy1 - iy0 + 1, visto = new Uint8Array(W * H);
+  let chave = null;
+  for (let x0 = 0; x0 < W * 0.6 && !chave; x0++) for (let y0 = 0; y0 < H; y0++) {
+    const i0 = y0 * W + x0;
+    if (!tinta[i0] || visto[i0]) continue;
+    const pilha = [i0]; visto[i0] = 1; let bx0 = W, bx1 = 0, by0 = H, by1 = 0;
+    while (pilha.length) { const i = pilha.pop(), x = i % W, y = (i - x) / W;
+      bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy, j = ny * W + nx;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H && tinta[j] && !visto[j]) { visto[j] = 1; pilha.push(j); } } }
+    const bh = by1 - by0 + 1, bw = bx1 - bx0 + 1;
+    if (bh >= 0.7 * hTinta && bw <= 0.35 * bh) { chave = {x0: bx0, x1: bx1, y0: by0, y1: by1}; break; }
+  }
+  if (!chave) return null;
+  // parêntese "(" alto também é traço alto e estreito: tem o ")" que fecha à direita; a chave não
+  for (let x0 = chave.x1 + 2; x0 < W; x0++) for (let y0 = 0; y0 < H; y0++) {
+    const i0 = y0 * W + x0;
+    if (!tinta[i0] || visto[i0]) continue;
+    const pilha = [i0]; visto[i0] = 1; let bx0 = W, bx1 = 0, by0 = H, by1 = 0;
+    while (pilha.length) { const i = pilha.pop(), x = i % W, y = (i - x) / W;
+      bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy, j = ny * W + nx;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H && tinta[j] && !visto[j]) { visto[j] = 1; pilha.push(j); } } }
+    const bh = by1 - by0 + 1;
+    if (bh >= 0.6 * hTinta && bx1 - bx0 + 1 <= 0.35 * bh) return null;
+  }
+  // linhas à direita da chave: faixas com tinta separadas por vão
+  const xi = chave.x1 + 2, perfil = [];
+  for (let y = 0; y < H; y++) { let n = 0; for (let x = xi; x < W; x++) n += tinta[y * W + x]; perfil.push(n); }
+  const faixas = []; let ini = -1;
+  for (let y = 0; y <= H; y++) { const tem = y < H && perfil[y] > 0;
+    if (tem && ini < 0) ini = y; else if (!tem && ini >= 0) { faixas.push([ini, y - 1]); ini = -1; } }
+  const juntas = [];
+  for (const f of faixas) { const u = juntas[juntas.length - 1]; if (u && f[0] - u[1] <= Math.max(2, 0.03 * hTinta)) u[1] = f[1]; else juntas.push([...f]); }
+  const linhas = juntas.filter(f => f[1] - f[0] + 1 >= 0.12 * hTinta);
+  if (linhas.length < 2) return null;
+  const recorte = async (x0, x1, y0, y1) => { const m = 6, r = document.createElement('canvas');
+    r.width = x1 - x0 + 1 + 2 * m; r.height = y1 - y0 + 1 + 2 * m; const rc = r.getContext('2d');
+    rc.fillStyle = '#fff'; rc.fillRect(0, 0, r.width, r.height); rc.drawImage(c, x0, y0, x1 - x0 + 1, y1 - y0 + 1, m, m, x1 - x0 + 1, y1 - y0 + 1);
+    return new Promise(res => r.toBlob(res, 'image/png')); };
+  let rotulo = null;
+  let rx1 = -1; for (let x = 0; x < chave.x0 - 1; x++) for (let y = 0; y < H; y++) if (tinta[y * W + x]) { rx1 = x; break; }
+  if (rx1 >= 0) rotulo = await recorte(0, chave.x0 - 2, iy0, iy1);
+  // linha longa (o leitor reduz a imagem e troca letras): partida nos maiores vãos entre termos, em
+  // pedaços de até ~420 px, lidos um a um e juntados
+  const pedacos = async ([y0, y1]) => {
+    let x0 = W, x1 = -1; const col = [];
+    for (let x = xi; x < W; x++) { let n = 0; for (let y = y0; y <= y1; y++) n += tinta[y * W + x]; col.push(n); if (n) { x0 = Math.min(x0, x); x1 = x; } }
+    if (x1 < 0) return [];
+    const vaos = []; let v = -1;
+    for (let x = x0; x <= x1; x++) { const vazio = !col[x - xi]; if (vazio && v < 0) v = x; else if (!vazio && v >= 0) { vaos.push({a: v, b: x - 1}); v = -1; } }
+    const cortes = []; let ini = x0;
+    while (x1 - ini > 420) {
+      const cand = vaos.filter(g => g.a > ini + 120 && g.b < ini + 420 && g.b - g.a + 1 >= Math.max(3, 0.15 * (y1 - y0)));
+      if (!cand.length) break;
+      const g = cand.reduce((m, g) => g.b - g.a > m.b - m.a || (g.b - g.a === m.b - m.a && g.a > m.a) ? g : m);
+      cortes.push([ini, g.a - 1]); ini = g.b + 1;
+    }
+    cortes.push([ini, x1]);
+    return Promise.all(cortes.map(([a, b]) => recorte(a, b, y0, y1)));
+  };
+  return {rotulo, linhas: await Promise.all(linhas.map(pedacos))};
+}
+async function lerSistema(f, leitor) {
+  const p = await partesDoSistema(f.blob).catch(() => null);
+  if (!p) return null;
+  const lidas = [];
+  for (const partes of p.linhas) {
+    const rs = [];
+    for (const b of partes) { const r = await leitor.ler(b); if (!formulaValida(r)) return null; rs.push(r); }
+    // linha com leitura sem maioria entre as escalas fica "incerta" (aviso para conferir)
+    lidas.push({latex: rs.map(r => r.latex).join(' '), votos: Math.min(...rs.map(r => (r.votos ?? 1) * 2 > (r.de ?? 1) ? r.votos : 1)), de: Math.max(...rs.map(r => r.de ?? 1))});
+  }
+  // "y" lido como "9" colado num número com ponto de milhar (100.000.0009 = 100.000.000y) quando as outras
+  // linhas usam y: corrige e deixa a linha incerta (aviso para conferir)
+  for (const r of lidas) {
+    const outras = lidas.filter(o => o !== r).map(o => o.latex).join(' ');
+    const novo = r.latex.replace(/(\d{1,3}(?:\.\d{3})+)9(?=\s*(?:[=+\-<>]|\\[lg]e|$))/g, (m, n) => /y/.test(outras) ? n + 'y' : m);
+    if (novo !== r.latex) { r.latex = novo; r.votos = 1; }
+  }
+  let rotulo = '';
+  if (p.rotulo) {
+    const r = await leitor.ler(p.rotulo);
+    const t = String(r?.latex || '').replace(/\\(mathrm|text|textrm|mathit)\{([^{}]*)\}/g, '$2').replace(/[\s~]/g, '');
+    if (!/^[A-Za-zÀ-ú]{1,20}$/.test(t)) return null;   // rótulo ilegível: melhor a figura do que um sistema sem nome
+    rotulo = `\\text{${t}}`;
+  }
+  return {latex: `${rotulo}\\begin{cases} ${lidas.map(r => r.latex).join(' \\\\ ')} \\end{cases}`, sistema: true,
+    votos: Math.min(...lidas.map(r => r.votos ?? 1)), de: Math.max(...lidas.map(r => r.de ?? 1))};
+}
 async function lerFormula(f) {
   const leitor = await leitorFormulas();
+  // sistema com chave (várias linhas): lido linha a linha
+  const sis = await lerSistema(f, leitor);
+  if (sis) return sis;
   const r = await leitor.ler(f.blob);
   // fórmula que no PDF é uma imagem inteira: só vira LaTeX com a leitura confirmada por duas escalas
   // e unânime (desenho lido como fórmula dá leituras diferentes em cada escala)
@@ -1099,7 +1206,7 @@ function formulasViramFiguras(q) {
   for (const f of viram) {
     const nome = `Q${nn2}_fig${++k}`;
     // (imagem do PDF que não se leu como fórmula volta a ser a figura que é, sem aviso de "trecho sem texto")
-    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: f.alternativa || null, deFormula: !f.deImagem, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
+    q.figuras = [...(q.figuras || []), {nome, centralizada: !!f.centralizada, tabela: false, alternativa: f.alternativa || null, deFormula: !f.deImagem, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
     q.textoPdf = String(q.textoPdf).replace(`⟦FÓRMULA ${f.nome}⟧`, `⟦FIGURA ${nome}⟧`);
   }
   q.formulas = q.formulas.filter(f => !f.comoFigura);
@@ -1427,8 +1534,8 @@ async function salvarNoBanco(job) {
     for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, alternativa: f.alternativa || null, deFormula: !!f.deFormula, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const formulas = [];
     // recorte da fórmula só quando a leitura não foi confirmada (é o que um reprocessamento relê)
-    for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null,
-      asset: f.latex && (f.votos ?? 0) >= 2 ? null : (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, ...(f.deTexto ? {deTexto: true} : {}),
+      asset: !f.blob || f.latex && (f.votos ?? 0) >= 2 ? null : (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     // recorte da linha do gabarito: só quando a tabela foi lida do desenho (o texto do PDF é exato) —
     // cada arquivo conta no limite de 5000 do artefato
     const recGab = m.gabaritoPorImagem ? m.gabaritoRecortes?.[nn(q.numero)] : null;

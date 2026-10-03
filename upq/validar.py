@@ -73,6 +73,7 @@ def _trechos_negrito(t: str) -> str:
 def _trechos_centralizados(t: str) -> str:
     partes = re.findall(r'<p style="text-align: center;">(.*?)</p>', t, re.S)
     partes += re.findall(r'<table style="margin-left: auto; margin-right: auto;">(.*?)</table>', t, re.S)
+    partes += re.findall(r"\$\$(.*?)\$\$", t, re.S)   # fórmula destacada ($$...$$) sai centrada
     return "|".join(_so_alnum(x) for x in partes)
 
 

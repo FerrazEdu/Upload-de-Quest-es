@@ -355,6 +355,13 @@ const UPQRecorte = (() => {
     return melhor ? melhor.letra : null;
   }
 
+  // Equação de uma linha de texto do PDF em LaTeX (símbolos do texto → comandos); vazia se não for equação.
+  function latexDaLinha(t) {
+    if (!t || !/[=<>≤≥≠]/.test(t)) return '';
+    return t.replace(/\s+/g, ' ').replace(/≤/g, '\\le ').replace(/≥/g, '\\ge ').replace(/≠/g, '\\neq ').replace(/[−–]/g, '-')
+      .replace(/×/g, '\\times ').replace(/·/g, '\\cdot ').replace(/\s+/g, ' ').trim();
+  }
+
   // Imagem que é uma fórmula (e não desenho, foto ou tabela): do tamanho de uma fórmula, sem texto do PDF
   // por cima, na linha de uma alternativa (letra à esquerda) ou no meio de uma linha de texto, em tons de
   // cinza (sem cor), com tinta esparsa em traços (fundo claro e traço escuro, quase sem meio-tom de foto).
@@ -368,7 +375,9 @@ const UPQRecorte = (() => {
     const naLinha = linhas.some(l => { const hl = l.y1 - l.y0;
       return h <= 2.5 * hl && Math.abs((f.y0 + f.y1) / 2 - (l.y0 + l.y1) / 2) <= 0.4 * hl
         && (l.trechos || [l]).some(t => (t.x1 <= f.x0 + 2 && f.x0 - t.x1 < 12) || (t.x0 >= f.x1 - 2 && t.x0 - f.x1 < 12)); });
-    if (!letraDaFigura(f, linhas) && !naLinha) return false;
+    // ou sozinha na sua faixa, larga e baixa como uma fórmula destacada (sistema, equação centrada)
+    const sozinha = !linhas.some(l => Math.min(l.y1, f.y1) - Math.max(l.y0, f.y0) > 0.3 * (l.y1 - l.y0)) && h <= 60 && w >= 2.5 * h;
+    if (!letraDaFigura(f, linhas) && !naLinha && !sozinha) return false;
     const px = pixelsDe(canvas), CW = canvas.width;
     const X0 = Math.max(0, Math.floor(f.x0 * ESCALA)), X1 = Math.min(CW - 1, Math.ceil(f.x1 * ESCALA));
     const Y0 = Math.max(0, Math.floor(f.y0 * ESCALA)), Y1 = Math.min(canvas.height - 1, Math.ceil(f.y1 * ESCALA));
@@ -444,13 +453,29 @@ const UPQRecorte = (() => {
   // juntam (fração, expoente, "·", parênteses). Ficam de fora traços (linhas, réguas, barras), pingos
   // e o que contém texto (círculo da letra, caixas, tabelas). Devolve as caixas (pt), cada uma com o
   // recorte só da sua tinta (PNG).
+  // Grupo de tinta com uma chave "{" de sistema: alguma coluna (perto da esquerda) com traço contínuo de
+  // pelo menos 70% da altura do grupo (texto de várias linhas tem vão entre as linhas; a chave, não).
+  function temChave(g, W) {
+    const h = g.y1 - g.y0 + 1, w = g.x1 - g.x0 + 1, cols = new Map();
+    for (const k of g.celulas) { const x = k % W - g.x0, y = (k - k % W) / W; if (x > 0.6 * w) continue; (cols.get(x) || cols.set(x, []).get(x)).push(y); }
+    for (const ys of cols.values()) {
+      ys.sort((a, b) => a - b);
+      let ini = ys[0], ok = false;
+      for (let i = 1; i <= ys.length; i++) if (i === ys.length || ys[i] - ys[i - 1] > 2) { if (ys[i - 1] - ini + 1 >= 0.7 * h) ok = true; ini = ys[i]; }
+      if (ok) return true;
+    }
+    return false;
+  }
+
   async function tintaSemTexto(canvas, regiao, linhas, figuras, cabecalho, pequenas = []) {
     const E = ESCALA, X0 = Math.max(0, Math.floor(regiao.x0)), X1 = Math.min(Math.floor(canvas.width / E), Math.ceil(regiao.x1));
     const Y0 = Math.max(0, Math.floor(cabecalho ? Math.max(regiao.y0, cabecalho.y1 + 2) : regiao.y0)), Y1 = Math.min(Math.floor(canvas.height / E), Math.ceil(regiao.y1));
     const W = X1 - X0, H = Y1 - Y0;
     if (W < 4 || H < 4) return [];
     const px = pixelsDe(canvas), CW = canvas.width, OX = X0 * E, OY = Y0 * E;   // índices no buffer da página
-    const trechos = linhas.flatMap(l => l.trechos?.length ? l.trechos : [{x0: l.x0, x1: l.x1, base: l.base, h: l.y1 - l.y0}]);
+    // (pedaço só de espaço em branco não tem tinta: não apaga nada — o pdf.js estica um desses entre a letra
+    //  da alternativa e o texto, por cima da chave de um sistema)
+    const trechos = linhas.flatMap(l => l.trechos?.length ? l.trechos.filter(t => String(t.t ?? 'x').trim()) : [{x0: l.x0, x1: l.x1, base: l.base, h: l.y1 - l.y0}]);
     const caixaDe = t => ({x0: t.x0 - 0.8, x1: t.x1 + 0.8, y0: t.base - 1.02 * t.h - 0.5, y1: t.base + 0.32 * t.h});
     const contemTexto = c => trechos.some(t => { const b = caixaDe(t); return b.x0 + 0.8 >= c.x0 - 1 && b.x1 - 0.8 <= c.x1 + 1 && t.base - 0.6 * t.h >= c.y0 - 1 && t.base <= c.y1 + 1; });
     // imagens pequenas dentro da parte que não envolvem texto (o círculo da letra envolve a letra)
@@ -515,8 +540,11 @@ const UPQRecorte = (() => {
     // denominador), nunca de linhas de texto diferentes (alternativas vizinhas)
     const perto = (a, b) => {
       const la = a.linha ?? linhaDe(a), lb = b.linha ?? linhaDe(b);
-      if (la >= 0 && lb >= 0 && la !== lb) return false;
       const vx = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), vy = Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1);
+      // pedaços de uma chave "{" de sistema (traço estreito, um sobre o outro) se juntam mesmo em linhas diferentes
+      const estreito = c => c.x1 - c.x0 <= 10;
+      if (estreito(a) && estreito(b) && vy <= 3 && Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= 0.5 * Math.min(a.x1 - a.x0, b.x1 - b.x0)) return true;
+      if (la >= 0 && lb >= 0 && la !== lb) return false;
       const sob = -vy / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0) + 1);
       return (vy <= 0 && vx <= 6) || (sob >= 0.4 && vx <= 12) || (vx <= 0 && vy <= 5) || (vx <= 1.5 && vy <= 1.5);
     };
@@ -546,7 +574,8 @@ const UPQRecorte = (() => {
       if (w > 20 * h || h > 20 * w) continue;
       const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
       if (!g.imagem && contemTexto(caixa)) continue;
-      if (h > 45 || w > 360) continue;   // desenho (triângulo, gráfico, esquema) sem texto: não é fórmula
+      // desenho (triângulo, gráfico, esquema) sem texto: não é fórmula — salvo sistema desenhado (com chave)
+      if ((h > 45 && !(h <= 110 && temChave(g, W))) || w > 360) continue;
       // bloco cheio de uma cor só (pedaço de barra "Questão NN", ponta arredondada, faixa): não é conteúdo
       if (h <= 20 && g.celulas.length > 0.75 * w * h) {
         let cor = 0, n = 0;
@@ -1023,11 +1052,30 @@ const UPQRecorte = (() => {
       // a imagem inteira (não só a grade recortada de uma tabela) fica fora da busca por fórmulas
       const formulas = (await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, [...aparadas, ...visiveis, ...dentro, ...imagensFormula], comCabecalho ? daParte[0] : null, pequenas))
         .concat(await Promise.all(imagensFormula.map(async f => ({x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, deImagem: true,
-          alternativa: letraDaFigura(f, corpo), blob: await recorteClaro(canvas, f)}))))
+          alternativa: letraDaFigura(f, corpo), centralizada: !letraDaFigura(f, corpo) && centralizado(f.x0, f.x1, 3), blob: await recorteClaro(canvas, f)}))))
         .sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+      // Sistema com chave: a chave é tinta sem texto (alta e estreita) e as equações são linhas de texto à
+      // direita dela. Vira uma fórmula só, \begin{cases} linha \\ linha \end{cases}, no ponto da 1ª linha
+      // (a letra da alternativa, à esquerda da chave, fica fora); as outras linhas saem do texto.
+      const doSistema = new Map();
+      for (const f of [...formulas]) {
+        const h = f.y1 - f.y0, w = f.x1 - f.x0;
+        if (f.deImagem || h < 16 || w > 18 || w > 0.5 * h) continue;
+        const linhas = daParte.filter((l, i) => !(comCabecalho && i === 0) && !doSistema.has(l) && (l.y0 + l.y1) / 2 > f.y0 - 2 && (l.y0 + l.y1) / 2 < f.y1 + 2
+          && (l.trechos || []).some(t => t.x0 >= f.x1 - 3 && t.x0 - f.x1 < 25));
+        if (linhas.length < 2) continue;
+        const direita = l => l.trechos.filter(t => t.x0 >= f.x1 - 3);
+        const eq = linhas.map(l => latexDaLinha(direita(l).map(t => t.t).join('').trim()));
+        if (eq.some(x => !x)) continue;
+        const sis = {x0: f.x0, y0: Math.min(f.y0, ...linhas.map(l => l.y0)), x1: Math.max(...linhas.map(l => l.x1)), y1: Math.max(f.y1, ...linhas.map(l => l.y1)),
+          sistema: true, deTexto: true, latex: `\\begin{cases} ${eq.join(' \\\\ ')} \\end{cases}`};
+        formulas.splice(formulas.indexOf(f), 1, sis);
+        linhas.forEach((l, i) => doSistema.set(l, i ? null : {sis, esquerda: l.trechos.filter(t => t.x1 <= f.x0 + 3)}));
+      }
       const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
       formulas.forEach((f, k) => {
         f.k = k;
+        if (f.sistema) return;
         const alvo = entradas.filter(e => e.l && !(comCabecalho && e.i === 0)).map(e => ({e, sob: Math.min(e.l.y1, f.y1) - Math.max(e.l.y0, f.y0)}))
           .filter(x => x.sob >= 0.5 * (x.e.l.y1 - x.e.l.y0) || (x.sob > 0 && x.e.y > f.y0 && x.e.y < f.y1)).sort((a, b) => b.sob - a.sob)[0];
         if (alvo) alvo.e.formulas.push(f);
@@ -1042,6 +1090,8 @@ const UPQRecorte = (() => {
           return (centralizado(f.x0, f.x1, 3) ? '[centralizado] ' : '') + marca(f);
         }
         if (comCabecalho && e.i === 0) return l.texto;
+        if (doSistema.has(l)) { const d = doSistema.get(l);   // linha de sistema com chave
+          return d ? [marcadoDe({trechos: d.esquerda}).trim(), marca(d.sis), ...e.formulas.map(marca)].filter(Boolean).join(' ') : ''; }
         const prefixo = centralizado(l.x0, l.x1, l.texto.trim().length) ? '[centralizado] ' : '';
         if (!e.formulas.length) return prefixo + marcadoDe(l);
         // fórmulas na linha: na posição x entre os trechos de texto
@@ -1078,7 +1128,8 @@ const UPQRecorte = (() => {
       const ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1), ...formulas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
       return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob,
-                ...(f.deImagem ? {deImagem: true, alternativa: f.alternativa || null} : {})})),
+                ...(f.deImagem ? {deImagem: true, alternativa: f.alternativa || null, centralizada: !!f.centralizada} : {}),
+                ...(f.sistema ? {sistema: true, deTexto: !!f.deTexto, latex: f.latex} : {})})),
               recorte: await parteComprimida(recortarCanvas(canvas, util))};
     }
 
@@ -1182,7 +1233,7 @@ const UPQRecorte = (() => {
       q.textoPdf = q.partes.map(pt => pt.texto.join('\n').replace(/⟦FÓRMULA #(\d+)⟧/g, (m0, k) => {
         const nome = `Q${nn}_f${q.formulas.length + 1}`;
         q.formulas.push({nome, ...pt.formulas[+k]});
-        return `⟦FÓRMULA ${nome}⟧`;
+        return pt.formulas[+k].latex ? `⟦FÓRMULA ${nome} = $${pt.formulas[+k].latex}$⟧` : `⟦FÓRMULA ${nome}⟧`;
       })).join('\n');
       // Cada figura marcada no texto, no ponto exato em que aparece no PDF (⟦FIGURA NOME⟧ numa linha
       // própria): a transcrição tem de pôr a figura ali, não onde o texto "sugere" ("figura ao lado").
