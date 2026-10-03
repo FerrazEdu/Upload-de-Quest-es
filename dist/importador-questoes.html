@@ -2925,6 +2925,39 @@ async function medirArmazenamento() {
   try { cap.uso = (await cap.assets?.list())?.usage || null; } catch { cap.uso = null; }
   if (tela.nome === 'enviar') desenhar();
 }
+// Liberar espaço: apaga as imagens que nenhuma questão do banco usa (sobras de listas apagadas ou de
+// importações interrompidas), os registros de importação sem questões e os registros de falha de gabarito.
+// Nunca toca em imagem de questão que está no banco. Só roda sem lista em processamento.
+let liberando = false;
+async function liberarEspaco() {
+  if (liberando || !cap.assets?.list || !cap.db) return;
+  if (estado.jobs.some(j => ['rodando', 'fila', 'parado'].includes(j.estado))) return toast('Espere as listas em processamento terminarem (ou descarte-as) antes de liberar espaço.');
+  liberando = true; desenhar();
+  try {
+    const usadas = new Set();
+    for (const parte of estado.partes.values()) for (const q of parte.questoes || []) {
+      [q.imagem, q.gabaritoRecorte, ...(q.figuras || []).map(f => f.asset), ...(q.formulas || []).map(f => f.asset)].forEach(id => id && usadas.add(id));
+    }
+    const comQuestoes = new Set([...estado.partes.values()].map(p => p.importacao));
+    for (const [id, imp] of estado.importacoes) if (comQuestoes.has(id) && imp.gabaritoImagem) usadas.add(imp.gabaritoImagem);
+    // registros sem questões e falhas antigas de gabarito
+    for (const id of [...estado.importacoes.keys()].filter(id => !comQuestoes.has(id))) await cap.db.doc(`importacoes/${id}`).delete().catch(() => {});
+    const falhas = await cap.db.collection('falhas').limit(1000).get().catch(() => null);
+    for (const d of falhas?.docs || []) await cap.db.doc(`falhas/${d.id}`).delete().catch(() => {});
+    const {assets = []} = await cap.assets.list();
+    const sobras = assets.filter(a => !usadas.has(a.id));
+    let feitas = 0, proxima = 0;
+    await Promise.all(Array.from({length: 6}, async () => {
+      while (proxima < sobras.length) {
+        const a = sobras[proxima++];
+        await cap.assets.delete(a.id).catch(() => {});
+        if (++feitas % 50 === 0) toast(`Liberando espaço: ${feitas} de ${sobras.length} imagens apagadas…`);
+      }
+    }));
+    toast(`Espaço liberado: ${feitas} imagens sem uso apagadas${usadas.size ? `; ${usadas.size} imagens das questões do banco foram mantidas` : ''}.`);
+  } catch (e) { toast(`Não foi possível liberar o espaço: ${e?.message || e?.code || e}`); }
+  finally { liberando = false; await medirArmazenamento(); }
+}
 function liberarJob(job) {
   medirArmazenamento();
   if (job.urlGabarito) { URL.revokeObjectURL(job.urlGabarito); job.urlGabarito = null; }
@@ -2990,7 +3023,8 @@ function telaEnviar() {
       <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button>
       <button class="botao" id="testar-formulas" ${formula.estado === 'carregando' ? 'disabled' : ''}>Testar leitor de fórmulas</button></div></details>` : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
-    ${cap.uso?.maxFiles ? `<div class="aviso-topo ${cap.uso.files / cap.uso.maxFiles > 0.8 ? '' : 'info'}">Armazenamento de imagens deste artefato: ${cap.uso.files.toLocaleString('pt-BR')} de ${cap.uso.maxFiles.toLocaleString('pt-BR')} arquivos (${Math.round(100 * cap.uso.files / cap.uso.maxFiles)}%)${cap.uso.files / cap.uso.maxFiles > 0.8 ? ' — quase cheio: exporte as listas prontas e libere espaço antes de enviar mais.' : '.'}</div>` : ''}
+    ${cap.uso?.maxFiles ? `<div class="aviso-topo ${cap.uso.files / cap.uso.maxFiles > 0.8 ? '' : 'info'}">Armazenamento de imagens deste artefato: ${cap.uso.files.toLocaleString('pt-BR')} de ${cap.uso.maxFiles.toLocaleString('pt-BR')} arquivos (${Math.round(100 * cap.uso.files / cap.uso.maxFiles)}%)${cap.uso.files / cap.uso.maxFiles > 0.8 ? ' — quase cheio: exporte as listas prontas e libere espaço antes de enviar mais.' : '.'}
+      ${!semGravar ? `<button class="botao" id="liberar-espaco" ${liberando ? 'disabled' : ''} style="margin-left:12px">${liberando ? 'Liberando…' : 'Liberar espaço (apagar imagens sem uso)'}</button>` : ''}</div>` : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
       <strong>Arraste os PDFs das listas para cá</strong>
@@ -3000,6 +3034,7 @@ function telaEnviar() {
     <p class="dica">O PDF é recortado aqui no navegador. As questões vão ao Claude em lotes de ${porChamada()} para transcrição (LaTeX, formatação) e classificação, usando o seu plano do claude.ai. Depois entram no banco, junto com a lista do PDF. Uma lista de 30 questões leva alguns minutos; mantenha esta aba aberta enquanto processa.</p>
     <div class="envios" id="envios"></div>`;
   document.getElementById('testar-imagem')?.addEventListener('click', () => sondarImagens(true));
+  document.getElementById('liberar-espaco')?.addEventListener('click', liberarEspaco);
   document.getElementById('testar-formulas')?.addEventListener('click', async () => { formula.carregando = null; const pr = leitorFormulas(); desenhar(); try { await pr; toast('Leitor de fórmulas pronto.'); } catch (e) { toast(`Leitor de fórmulas falhou: ${e.message || e}`); } desenhar(); });
   document.getElementById('testar-ocr')?.addEventListener('click', async () => { ocr.estado = 'carregando'; ocr.carregando = null; ocr.worker = null; desenhar(); try { await workerOcr(); toast('OCR pronto.'); } catch (e) { toast(`OCR falhou: ${e.message || e}`); } desenhar(); });
   const zona = document.getElementById('soltar'), input = document.getElementById('arquivo');
