@@ -247,11 +247,13 @@ const UPQRecorte = (() => {
     };
     const fina = g => g.a1 - g.a0 + 1 <= 2 * ESCALA;   // fio de grade: até 2 pt (faixa grossa = cabeçalho pintado)
     const hs = linhasDe(H, W, (y, x) => tinta[y * W + x], Math.round(0.4 * W));
-    if (hs.length < 3 || hs.filter(fina).length < 2) return null;   // fios finos + faixas pintadas (cabeçalho)
+    // fios finos + faixas pintadas (cabeçalho): dois fios, ou um fio e a faixa do cabeçalho (tabela de uma linha)
+    const fiosOk = g => g.filter(fina).length >= 2 || (g.filter(fina).length >= 1 && g.some(h => !fina(h)));
+    if (hs.length < 2 || !fiosOk(hs)) return null;
     // horizontais da grade: mesma extensão que a mais larga
     const larga = hs.filter(fina).reduce((a, b) => (b.b1 - b.b0 > a.b1 - a.b0 ? b : a));
     const grade = hs.filter(h => Math.abs(h.b0 - larga.b0) < 0.04 * W && Math.abs(h.b1 - larga.b1) < 0.04 * W);
-    if (grade.length < 3 || grade.filter(fina).length < 2) return null;
+    if (grade.length < 2 || !fiosOk(grade)) return null;
     const topo = grade[0].a0, base = grade[grade.length - 1].a1, esq = larga.b0, dir = larga.b1;
     // miolo das células claro: entre dois fios seguidos, pouca tinta (foto escura não passa)
     const finas = grade.filter(fina);
@@ -1157,9 +1159,10 @@ const UPQRecorte = (() => {
       const centradas = new Set(faixas.filter(u => noCentro(u.x0, u.x1)).flatMap(u => u.k));
       const figuras = [];
       for (let k = 0; k < aparadas.length; k++) {
-        const alternativa = tabelas.has(k) ? null : letraDaFigura(aparadas[k], corpo);
+        const alternativa = letraDaFigura(aparadas[k], corpo);   // (tabela também: alternativa que é uma tabela)
         figuras.push({regiao: {...aparadas[k], pagina: p.pn}, centralizada: centradas.has(k) && !alternativa, tabela: tabelas.has(k), alternativa,
-          linha: entradas.filter(e => e.y < aparadas[k].y0).length, blob: await recortar(canvas, aparadas[k])});
+          // marca no texto: figura de alternativa vem depois da linha da sua letra (a letra fica no alto da figura)
+          linha: entradas.filter(e => e.y < (alternativa ? (aparadas[k].y0 + aparadas[k].y1) / 2 : aparadas[k].y0)).length, blob: await recortar(canvas, aparadas[k])});
       }
       // imagem da parte só até onde há conteúdo (sem o branco até o fim da coluna); fórmulas contam
       const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0), ...formulas.map(f => f.y0)];
@@ -1185,8 +1188,11 @@ const UPQRecorte = (() => {
       const canvas = await renderizar(p.page);
       negritoPorPalavra(canvas, p.uma.linhas, p.duas.linhas);
       const todas = await imagensDaPagina(p.page, p.vp);
-      const imagens = todas.filter(r => r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN && r.y0 > MARGEM_TOPO);
-      const pequenas = todas.filter(r => !(r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN) && r.y0 > MARGEM_TOPO);
+      // figura: grande nos dois lados, ou larga e baixa (tabela de uma linha, faixa de alternativa) — não só
+      // as "pequenas" (círculo da letra, fórmula curta), que vão para a busca de fórmulas
+      const ehFigura = r => (r.x1 - r.x0 >= FIGURA_MIN && r.y1 - r.y0 >= FIGURA_MIN) || (r.x1 - r.x0 >= 80 && r.y1 - r.y0 >= 12);
+      const imagens = todas.filter(r => ehFigura(r) && r.y0 > MARGEM_TOPO);
+      const pequenas = todas.filter(r => !ehFigura(r) && r.y0 > MARGEM_TOPO);
       // modelo da página pela barra; sem barra, pelo texto que atravessa o meio; página só de
       // continuação segue o modelo da anterior
       // Voto de cada barra: começa na metade esquerda e passa do meio = questão na largura toda; começa na

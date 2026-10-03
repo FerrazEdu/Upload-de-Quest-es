@@ -494,6 +494,9 @@ function validarQuestao(q, lista) {
     && !new RegExp(`figura:${f.nome}\\b`).test(String(q.alternativas[f.alternativa])));
   if (foraDoLugar.length) erros.push(`alternativa em imagem fora do lugar: ${foraDoLugar.map(f => `${f.nome} é a alternativa ${f.alternativa}`).join('; ')}`);
   // alternativas em imagem: se várias são figuras, nenhuma pode ficar sem a sua (recorte ou leitura falhou)
+  // alternativa que no PDF é uma tabela (print): tem de sair como tabela no texto dela
+  const semTabela = (q.figuras || []).filter(f => f.tabela && f.alternativa && q.alternativas && !/\|[^\n]*\|/.test(String(q.alternativas[f.alternativa] || ''))).map(f => f.alternativa);
+  if (semTabela.length) erros.push(`alternativa sem a tabela do PDF: ${semTabela.join(', ')} (transcreva a tabela no texto da alternativa)`);
   const comFigura = new Set((q.figuras || []).filter(f => f.alternativa && !f.tabela).map(f => f.alternativa));
   if (comFigura.size >= 2) {
     const semFigura = Object.keys(q.alternativas || {}).filter(l => !comFigura.has(l) && !/figura:/.test(String(q.alternativas[l])) && !String(q.alternativas[l]).replace(/[\s.]/g, ''));
@@ -620,7 +623,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.deFormula ? `, fica no ponto marcado ⟦FIGURA ${f.nome}⟧ no texto (desenho do PDF sem texto)` : ''}${f.alternativa && !f.tabela ? `, é a ALTERNATIVA ${f.alternativa} (o texto dessa alternativa é esta figura: ![Alternativa ${f.alternativa}: descrição](figura:${f.nome}))` : ''}${f.tabela ? (q.ocr?.[f.nome] && !comImagens() ? ', é uma TABELA colada como imagem: o conteúdo dela está no texto abaixo, na marca [TABELA DA FIGURA ' + f.nome + '] (lido por OCR); transcreva-a como tabela e NÃO use esta figura' : ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura') : ''})`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.deFormula ? `, fica no ponto marcado ⟦FIGURA ${f.nome}⟧ no texto (desenho do PDF sem texto)` : ''}${f.alternativa && !f.tabela ? `, é a ALTERNATIVA ${f.alternativa} (o texto dessa alternativa é esta figura: ![Alternativa ${f.alternativa}: descrição](figura:${f.nome}))` : ''}${f.tabela && f.alternativa ? `, é a TABELA da ALTERNATIVA ${f.alternativa} (o texto da alternativa ${f.alternativa} é essa tabela em Markdown, | col | col |, com todas as linhas e colunas)` : ''}${f.tabela ? (q.ocr?.[f.nome] && !comImagens() ? ', é uma TABELA colada como imagem: o conteúdo dela está no texto abaixo, na marca [TABELA DA FIGURA ' + f.nome + '] (lido por OCR); transcreva-a como tabela e NÃO use esta figura' : ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura') : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}

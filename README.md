@@ -57,6 +57,10 @@ texto é montada no recorte (a letra da alternativa fica fora); sistema inteiro 
 é partido em rótulo, chave e linhas, e cada linha (longa: em pedaços) é lida pelo leitor; sistemas
 empilhados que se tocam são separados (um por chave) e o rótulo usa a grafia do texto da questão ("André").
 
+Tabela colada como imagem também quando é de uma linha só, com cabeçalho pintado (um fio e a faixa
+colorida bastam), inclusive nas alternativas: a tabela da alternativa fica ligada à sua letra, é lida
+por OCR e transcrita como tabela no texto dessa alternativa (a validação recusa alternativa sem ela).
+
 Cada questão do banco tem o botão **Reprocessar**: instrução opcional do revisor ("o que corrigir") e,
 opcionalmente, o PDF da lista — com ele a questão é recortada de novo com os critérios atuais antes da
 nova transcrição; a versão nova substitui a antiga.
