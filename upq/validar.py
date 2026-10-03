@@ -146,6 +146,9 @@ def recorte_misturado(texto_pdf: str, numero: int) -> str | None:
         return f'o texto da questão não começa na barra "Questão {numero:02d}" (colunas ou questões misturadas)'
     if any(re.match(r"^\s*Quest[aã]o\s*\d", l, re.I) for l in linhas[1:]):
         return "há a barra de outra questão dentro desta (questões misturadas)"
+    so_banca = re.compile(r"^(⟦FIGURA \S+⟧\s*)*[A-ZÀ-Ú][A-ZÀ-Ú0-9ª\-/(). ]*\s(19|20)\d{2}(/\d)?\s*(⟦FIGURA \S+⟧\s*)*$")
+    if not re.search(r"\b(19|20)\d{2}\b", linhas[0]) and any(so_banca.match(l.strip()) for l in linhas[1:]):
+        return "a barra da questão foi partida ao meio (banca e ano soltos no texto): página lida em colunas erradas"
     letras = [m.group(1) for l in linhas if (m := re.match(r"^(?:\*\*)?([A-E])(?:\*\*)?\s+\S", l))]
     viu_b = False
     for a, b in zip(letras, letras[1:]):

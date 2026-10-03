@@ -383,6 +383,10 @@ function recorteMisturado(textoPdf, numero) {
   const barra = linhas[0].match(/^\s*Quest[aã]o\s*(\d[\d ]*)/i);
   if (!barra || +barra[1].replace(/ /g, '') !== +numero) return `o texto da questão não começa na barra "Questão ${nn(numero)}" (colunas ou questões misturadas)`;
   if (linhas.slice(1).some(l => /^\s*Quest[aã]o\s*\d/i.test(l))) return 'há a barra de outra questão dentro desta (questões misturadas)';
+  // barra partida: "Questão NN" sem banca/ano e, no texto, uma linha que é só "BANCA ANO" (com pedaços de barra)
+  const soBanca = /^(⟦FIGURA \S+⟧\s*)*[A-ZÀ-Ú][A-ZÀ-Ú0-9ª\-\/(). ]*\s(19|20)\d{2}(\/\d)?\s*(⟦FIGURA \S+⟧\s*)*$/;
+  if (!/\b(19|20)\d{2}\b/.test(linhas[0]) && linhas.slice(1).some(l => soBanca.test(l.trim())))
+    return 'a barra da questão foi partida ao meio (banca e ano soltos no texto): página lida em colunas erradas';
   const letras = linhas.map(l => (l.match(/^(?:\*\*)?([A-E])(?:\*\*)?\s+\S/) || [])[1]).filter(Boolean);
   let viuB = false;
   for (let i = 1; i < letras.length; i++) {
@@ -1061,10 +1065,16 @@ function comFormulas(texto, formulas) {
 }
 // Leitura sem fim, longa demais ou com cara de lixo (\\begin{array}, \\atop…) é desenho, não fórmula:
 // o trecho entra na questão como FIGURA (imagem recortada), com aviso, em vez de erro ou LaTeX sem sentido.
-const LIXO_LATEX = /\\begin|\\end|\\atop|\\bigr|\\biggr|\\displaystyle|\\bf\b|\{\{\{|\\overline\{\{|\\mathbf\{\\/;
+const LIXO_LATEX = /\\begin|\\end|\\atop|\\bigr|\\biggr|\\displaystyle|\\textstyle|\\boldsymbol|\\bf\b|\{\{\{|\\overline\{\{|\\mathbf\{\\|\\(?:frac|dfrac|sqrt)\{\s*\}|\\(?:frac|dfrac)\{[^{}]*\}\{\s*\}/;
+// leitura incoerente (de desenho, não de fórmula): grupo vazio, \left sem \right, chaves desbalanceadas
+function latexIncoerente(t) {
+  if ((t.match(/\\left\b/g) || []).length !== (t.match(/\\right\b/g) || []).length) return true;
+  let n = 0; for (const c of t.replace(/\\[{}]/g, '')) { if (c === '{') n++; else if (c === '}' && --n < 0) return true; }
+  return n !== 0;
+}
 function formulaValida(r) {
   if (!r || r.invalida || !r.latex) return false;
-  if (r.latex.length > 160 || LIXO_LATEX.test(r.latex)) return false;
+  if (r.latex.length > 160 || LIXO_LATEX.test(r.latex) || latexIncoerente(r.latex)) return false;
   if (r.votos >= 2) return true;
   // uma leitura só (sem confirmação de outra escala): aceita só com comandos de matemática comuns
   const cmds = r.latex.match(/\\[a-zA-Z]+/g) || [];
@@ -1075,6 +1085,9 @@ const COMANDOS_COMUNS = new Set(('frac dfrac sqrt cdot times div pm mp left righ
 async function lerFormula(f) {
   const leitor = await leitorFormulas();
   const r = await leitor.ler(f.blob);
+  // fórmula que no PDF é uma imagem inteira: só vira LaTeX com a leitura confirmada por duas escalas
+  // e unânime (desenho lido como fórmula dá leituras diferentes em cada escala)
+  if (f.deImagem && !(r?.votos >= 2 && r.votos === r.de)) return {comoFigura: true};
   return formulaValida(r) ? {latex: r.latex, votos: r.votos, de: r.de} : {comoFigura: true};
 }
 // fórmulas que não são fórmula viram figuras da questão, no mesmo ponto do texto
@@ -1085,7 +1098,8 @@ function formulasViramFiguras(q) {
   let k = (q.figuras || []).length;
   for (const f of viram) {
     const nome = `Q${nn2}_fig${++k}`;
-    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: null, deFormula: true, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
+    // (imagem do PDF que não se leu como fórmula volta a ser a figura que é, sem aviso de "trecho sem texto")
+    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: f.alternativa || null, deFormula: !f.deImagem, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
     q.textoPdf = String(q.textoPdf).replace(`⟦FÓRMULA ${f.nome}⟧`, `⟦FIGURA ${nome}⟧`);
   }
   q.formulas = q.formulas.filter(f => !f.comoFigura);
@@ -1106,6 +1120,8 @@ async function lerFormulasPorOcr(job) {
   };
   // tantas leituras ao mesmo tempo quantos leitores (Workers) houver; os extras entram quando ficam prontos
   await Promise.all(Array.from({length: leitor ? 3 : 1}, umaPorVez));
+  // sem leitor (ou sem leitura): imagem do PDF continua figura, nunca some
+  for (const [, f] of alvos) if (f.deImagem && !f.latex) f.comoFigura = true;
   for (const q of job.m.questoes) { formulasViramFiguras(q); if (q.formulas?.length) q.textoPdf = comFormulas(q.textoPdf, q.formulas); }
 }
 
@@ -1292,6 +1308,7 @@ async function processar(job, {reprocessar = false} = {}) {
     if (!job.ctx) {
       if (!comImagens()) { atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: 'Testando se o Claude recebe imagens nesta visualização…'}); await sondarImagens(); }
       if (!comImagens()) { await lerTabelasPorOcr(job); await lerFormulasPorOcr(job); }
+      else for (const q of job.m.questoes) { for (const f of q.formulas || []) if (f.deImagem) f.comoFigura = true; formulasViramFiguras(q); }   // com imagem, o Claude vê a figura
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).

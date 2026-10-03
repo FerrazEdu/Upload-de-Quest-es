@@ -73,6 +73,38 @@ def fim_da_barra(pagina, r) -> float | None:
     return max(fins) if fins else None
 
 
+RE_BANCA = re.compile(r"^[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9ª.\-/() ]*\s(19|20)\d{2}(/\d+)?$")
+
+
+def voto_do_texto(pagina, r, meio) -> str | None:
+    """Voto pelo texto da barra "Questão NN ........ BANCA ANO" (igual a votoDoTexto em recorte.js):
+    banca na ponta direita depois do meio = largura toda; terminando antes do meio = coluna."""
+    yc = (r.y0 + r.y1) / 2
+    ts = []
+    for bloco in pagina.get_text("dict")["blocks"]:
+        for linha in bloco.get("lines", []):
+            for sp in linha["spans"]:
+                b = pymupdf.Rect(sp["bbox"])
+                if sp["text"].strip() and abs((b.y0 + b.y1) / 2 - yc) < 3:
+                    ts.append((b.x0, b.x1, sp["text"].strip()))
+    ts.sort()
+    if len(ts) < 2:
+        return None
+    i = len(ts) - 1
+    while i > 0 and ts[i][0] - ts[i - 1][1] < 12 and not RE_QUESTAO.match(ts[i - 1][2]):
+        i -= 1
+    if i == 0:
+        return None
+    banca, antes = " ".join(t[2] for t in ts[i:]), ts[:i]
+    if not RE_BANCA.match(banca) or not RE_QUESTAO.match(" ".join(t[2] for t in antes)):
+        return None
+    if ts[i][0] > meio + 30 and max(t[1] for t in antes) < meio - 30:
+        return "uma"
+    if ts[-1][1] < meio + 4:
+        return "duas"
+    return None
+
+
 def cabecalhos_da_pagina(pagina, colunas):
     saida = []
     for texto, r in linhas(pagina):
@@ -431,9 +463,17 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
         # Voto por barra: começa na metade esquerda e passa do meio = largura toda; barra que começa na
         # coluna da direita (sempre passa do meio) prova duas colunas (igual a recorte.js).
         meio = pagina.rect.width / 2
-        votos = [c["r"].x0 < meio - 30 and x > meio + 30 for c, x in ((c, fim_da_barra(pagina, c["r"])) for c in cabs2) if x is not None]
+        # o texto da barra ("BANCA ANO" na ponta direita) decide antes do desenho da barra
+        votos = []
+        for c in cabs2:
+            v = voto_do_texto(pagina, c["r"], meio)
+            x = fim_da_barra(pagina, c["r"]) if v is None else None
+            if v is not None:
+                votos.append(v == "uma")
+            elif x is not None:
+                votos.append(c["r"].x0 < meio - 30 and x > meio + 30)
         fins = votos
-        if any(c["col"] == 1 for c in cabs2):
+        if any(c["col"] == 1 for c in cabs2) and not all(voto_do_texto(pagina, c["r"], meio) == "uma" for c in cabs2):
             uma = False
         elif fins:
             uma = sum(votos) * 2 > len(votos)

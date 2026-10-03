@@ -588,6 +588,41 @@ const UPQRecorte = (() => {
     return melhor ? melhor.letra : null;
   }
 
+  // Imagem que é uma fórmula (e não desenho, foto ou tabela): do tamanho de uma fórmula, sem texto do PDF
+  // por cima, na linha de uma alternativa (letra à esquerda) ou no meio de uma linha de texto, em tons de
+  // cinza (sem cor), com tinta esparsa em traços (fundo claro e traço escuro, quase sem meio-tom de foto).
+  // Na dúvida fica figura: a leitura ainda tem de ser confirmada por duas escalas no leitor.
+  function pareceFormula(canvas, f, linhas) {
+    const w = f.x1 - f.x0, h = f.y1 - f.y0;
+    if (h > 90 || w > 360 || h < 6 || w < 6) return false;
+    if (linhas.some(l => (l.trechos || []).some(t => t.x0 >= f.x0 - 1 && t.x1 <= f.x1 + 1 && t.base - 0.5 * t.h >= f.y0 && t.base <= f.y1 + 1))) return false;
+    // no meio da linha: da altura de uma fórmula de texto, centrada na linha e colada no texto (desenho
+    // "ao lado" do texto é mais alto e não fica centrado numa linha só)
+    const naLinha = linhas.some(l => { const hl = l.y1 - l.y0;
+      return h <= 2.5 * hl && Math.abs((f.y0 + f.y1) / 2 - (l.y0 + l.y1) / 2) <= 0.4 * hl
+        && (l.trechos || [l]).some(t => (t.x1 <= f.x0 + 2 && f.x0 - t.x1 < 12) || (t.x0 >= f.x1 - 2 && t.x0 - f.x1 < 12)); });
+    if (!letraDaFigura(f, linhas) && !naLinha) return false;
+    const px = pixelsDe(canvas), CW = canvas.width;
+    const X0 = Math.max(0, Math.floor(f.x0 * ESCALA)), X1 = Math.min(CW - 1, Math.ceil(f.x1 * ESCALA));
+    const Y0 = Math.max(0, Math.floor(f.y0 * ESCALA)), Y1 = Math.min(canvas.height - 1, Math.ceil(f.y1 * ESCALA));
+    let n = 0, escuro = 0, meio = 0, cor = 0;
+    for (let y = Y0; y <= Y1; y += 1) for (let x = X0; x <= X1; x += 1) {
+      const j = (y * CW + x) * 4, mx = Math.max(px[j], px[j + 1], px[j + 2]), mn = Math.min(px[j], px[j + 1], px[j + 2]);
+      n++;
+      if (mx - mn > 50 && mn < 200) cor++;
+      if (mx < 110) escuro++; else if (mn < 200) meio++;
+    }
+    return n > 0 && cor < 0.01 * n && escuro > 0.01 * n && escuro < 0.35 * n && meio < Math.max(0.12 * n, 1.5 * escuro);
+  }
+
+  // Recorte de uma imagem com o fundo claro (creme, cinza-claro) passado a branco, para o leitor de fórmulas.
+  async function recorteClaro(canvas, f) {
+    const c = recortarCanvas(canvas, f), ctx = c.getContext('2d'), im = ctx.getImageData(0, 0, c.width, c.height), d = im.data;
+    for (let j = 0; j < d.length; j += 4) if (Math.min(d[j], d[j + 1], d[j + 2]) > 200) d[j] = d[j + 1] = d[j + 2] = 255;
+    ctx.putImageData(im, 0, 0);
+    return new Promise(res => c.toBlob(res, 'image/png'));
+  }
+
   // Ordem de leitura das figuras: por faixas horizontais (figuras lado a lado, como alternativas
   // A e B numa mesma linha, ficam da esquerda para a direita), depois de cima para baixo.
   function ordemDeLeitura(figs) {
@@ -745,6 +780,13 @@ const UPQRecorte = (() => {
       const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
       if (!g.imagem && contemTexto(caixa)) continue;
       if (h > 45 || w > 360) continue;   // desenho (triângulo, gráfico, esquema) sem texto: não é fórmula
+      // bloco cheio de uma cor só (pedaço de barra "Questão NN", ponta arredondada, faixa): não é conteúdo
+      if (h <= 20 && g.celulas.length > 0.75 * w * h) {
+        let cor = 0, n = 0;
+        for (const k of g.celulas.slice(0, 400)) { const x = k % W, y = (k - x) / W, j = ((OY + y * E + 1) * CW + OX + x * E + 1) * 4;
+          n++; if (Math.max(px[j], px[j + 1], px[j + 2]) - Math.min(px[j], px[j + 1], px[j + 2]) > 60) cor++; }
+        if (cor > 0.6 * n) continue;
+      }
       // recorte só com a tinta do grupo (vizinhos apagados), com margem branca
       const M = 4, c = document.createElement('canvas');
       c.width = (w + 2 * M) * E; c.height = (h + 2 * M) * E;
@@ -1137,6 +1179,23 @@ const UPQRecorte = (() => {
     }
 
     // Até onde vai a barra colorida da "Questão NN": além do meio da página = questão na largura toda.
+    // Voto pelo texto da barra "Questão NN ........ BANCA ANO": a banca (que termina no ano) é o último
+    // grupo de trechos da linha; antes dela só pode haver o "Questão NN" (senão é texto da outra coluna).
+    const RE_BANCA = /^[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9ª.\-\/() ]*\s(19|20)\d{2}(\/\d+)?$/;
+    function votoDoTexto(l, meio) {
+      const ts = (l.trechos || []).filter(t => String(t.t).trim());
+      if (ts.length < 2) return null;
+      let i = ts.length - 1;
+      while (i > 0 && ts[i].x0 - ts[i - 1].x1 < 12 && !RE_QUESTAO.test(String(ts[i - 1].t))) i--;
+      if (i === 0) return null;
+      const banca = ts.slice(i).map(t => String(t.t).trim()).join(' '), antes = ts.slice(0, i);
+      if (!RE_BANCA.test(banca) || !RE_QUESTAO.test(antes.map(t => String(t.t).trim()).join(' '))) return null;
+      const fimAntes = Math.max(...antes.map(t => t.x1)), x0b = ts[i].x0, x1b = ts[ts.length - 1].x1;
+      if (x0b > meio + 30 && fimAntes < meio - 30) return 'uma';
+      if (x1b < meio + 4) return 'duas';
+      return null;
+    }
+
     function fimDaBarra(canvas, cab) {
       const y = Math.round(((cab.y + cab.base) / 2) * ESCALA);
       if (y < 0 || y >= canvas.height) return null;
@@ -1181,8 +1240,12 @@ const UPQRecorte = (() => {
       const largura = Math.max(1, dir - esq), centro = (esq + dir) / 2;
       const centralizado = (x0, x1, n) => n >= 3 && x1 - x0 < 0.8 * largura && x0 - esq > 0.06 * largura
         && (Math.abs((x0 + x1) / 2 - centro) < 0.04 * largura || Math.abs((x0 + x1) / 2 - (regiao.x0 + regiao.x1) / 2) < 0.04 * largura);
-      const dentro = juntarLadrilhos(imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
+      const naRegiao = juntarLadrilhos(imagens.filter(f => { const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2;
         return cx > regiao.x0 && cx < regiao.x1 && cy > regiao.y0 && cy < regiao.y1; }));
+      // Fórmula colada como imagem (maior que as "pequenas"): vai para o leitor de fórmulas, com o recorte
+      // da própria imagem; se a leitura não for válida, volta a ser a figura que é (no mesmo ponto).
+      const imagensFormula = naRegiao.filter(f => pareceFormula(canvas, f, corpo));
+      const dentro = naRegiao.filter(f => !imagensFormula.includes(f));
       ordemDeLeitura(dentro);
       // print de tabela: recorta só a grade (sem o texto que veio junto no print) e marca como tabela
       const tabelas = new Set();
@@ -1191,7 +1254,10 @@ const UPQRecorte = (() => {
       // Fórmula sem texto (imagem pequena ou desenho): entra no texto como ⟦FÓRMULA #k⟧, no ponto em que
       // aparece (na linha da letra da alternativa, ou numa linha própria), e o recorte vai junto.
       // a imagem inteira (não só a grade recortada de uma tabela) fica fora da busca por fórmulas
-      const formulas = await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, [...aparadas, ...visiveis, ...dentro], comCabecalho ? daParte[0] : null, pequenas);
+      const formulas = (await tintaSemTexto(canvas, regiao, comCabecalho ? daParte.slice(1) : daParte, [...aparadas, ...visiveis, ...dentro, ...imagensFormula], comCabecalho ? daParte[0] : null, pequenas))
+        .concat(await Promise.all(imagensFormula.map(async f => ({x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, deImagem: true,
+          alternativa: letraDaFigura(f, corpo), blob: await recorteClaro(canvas, f)}))))
+        .sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
       const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
       formulas.forEach((f, k) => {
         f.k = k;
@@ -1244,7 +1310,8 @@ const UPQRecorte = (() => {
       const ys0 = [...daParte.map(l => l.y0), ...aparadas.map(f => f.y0), ...formulas.map(f => f.y0)];
       const ys1 = [...daParte.map(l => l.y1), ...aparadas.map(f => f.y1), ...formulas.map(f => f.y1)];
       const util = ys1.length ? {...regiao, y0: comCabecalho ? regiao.y0 : Math.max(regiao.y0, Math.min(...ys0) - 6), y1: Math.min(regiao.y1, Math.max(...ys1) + 8)} : regiao;
-      return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob})),
+      return {texto, figuras, formulas: formulas.map(f => ({regiao: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, pagina: p.pn}, blob: f.blob,
+                ...(f.deImagem ? {deImagem: true, alternativa: f.alternativa || null} : {})})),
               recorte: await parteComprimida(recortarCanvas(canvas, util))};
     }
 
@@ -1268,8 +1335,14 @@ const UPQRecorte = (() => {
       // continuação segue o modelo da anterior
       // Voto de cada barra: começa na metade esquerda e passa do meio = questão na largura toda; começa na
       // metade direita (barra da 2ª coluna, que sempre "passa do meio") ou acaba antes do meio = duas colunas.
+      // O texto da barra decide antes dos pixels: "BANCA ANO" na mesma linha do "Questão NN", na ponta
+      // direita depois do meio = barra na largura toda; terminando antes do meio = barra de coluna.
       const meio = p.vp.width / 2;
-      const votos = p.uma.cabecalhos.map(c => { const fim = fimDaBarra(canvas, c); return fim === null ? null : c.x0 < meio - 30 && fim > meio + 30 ? 'uma' : 'duas'; })
+      const votos = p.uma.cabecalhos.map(c => {
+        const l = p.uma.linhas.find(x => x.base === c.base && RE_QUESTAO.test(x.texto));
+        const v = l && votoDoTexto(l, meio);
+        if (v) return v;
+        const fim = fimDaBarra(canvas, c); return fim === null ? null : c.x0 < meio - 30 && fim > meio + 30 ? 'uma' : 'duas'; })
         .filter(Boolean);
       // duas barras "Questão NN" na mesma altura, uma em cada coluna: a página é de duas colunas
       const lado = p.duas.cabecalhos.some(a => a.col === 0 && p.duas.cabecalhos.some(b => b.col === 1 && Math.abs(a.base - b.base) < 4))
@@ -1278,10 +1351,33 @@ const UPQRecorte = (() => {
         : temCab ? p.cruzam >= 3 : umaColunaAnterior;
       // trava: "uma coluna" com várias linhas que têm um vão bem no meio da página (texto das duas colunas
       // lado a lado) é página de duas colunas — senão as duas questões se misturam linha a linha
-      if (umaColuna) {
-        const vaoNoMeio = p.uma.linhas.filter(l => l.y0 > MARGEM_TOPO && (l.trechos || []).some((t, i, ts) => i + 1 < ts.length
-          && t.x1 < meio - 4 && ts[i + 1].x0 > meio + 4 && ts[i + 1].x0 - t.x1 >= 8)).length;
+      // (a barra "Questão NN ........ BANCA ANO" da questão na largura toda também tem um vão no meio:
+      //  não conta; o vão tem de estar na calha entre as colunas, com texto corrido dos dois lados, e só
+      //  vale quando as barras não disseram, todas, "largura toda")
+      const palavras = ts => ts.reduce((a, t) => a + (t.t || '').trim().split(/\s+/).filter(Boolean).length, 0);
+      if (umaColuna && !(votos.length && votos.every(v => v === 'uma'))) {
+        const vaoNoMeio = p.uma.linhas.filter(l => l.y0 > MARGEM_TOPO && !RE_QUESTAO.test(l.texto) && (l.trechos || []).some((t, i, ts) => i + 1 < ts.length
+          && t.x1 < meio - 4 && t.x1 > meio - 40 && ts[i + 1].x0 > meio + 4 && ts[i + 1].x0 < meio + 40
+          && palavras(ts.slice(0, i + 1)) >= 3 && palavras(ts.slice(i + 1)) >= 3)).length;
         if (vaoNoMeio >= 3) umaColuna = false;
+      }
+      // Trava de coerência: toda barra da página tem "Questão NN" à esquerda e a banca na ponta direita:
+      // partir em duas colunas cortaria as barras ao meio (banca solta, pedaços de barra como figura).
+      if (!umaColuna && !lado) {
+        const barrasUma = p.uma.linhas.filter(l => l.y0 > MARGEM_TOPO && RE_QUESTAO.test(l.texto));
+        if (barrasUma.length && barrasUma.every(l => votoDoTexto(l, meio) === 'uma')) umaColuna = true;
+      }
+      // Autocorreção: com o modelo escolhido, algum texto ou imagem da página ficaria fora de todas as
+      // partes (sinal de colunas erradas)? Se o outro modelo cobre a página melhor, fica o outro.
+      const fora = mm => {
+        const pts = partesDaPagina(p, mm, imagens);
+        const dentro = r => pts.some(pt => r.x0 >= pt.regiao.x0 - 6 && r.x1 <= pt.regiao.x1 + Math.max(8, 0.08 * (pt.regiao.x1 - pt.regiao.x0)) && (r.y0 + r.y1) / 2 >= pt.regiao.y0 && (r.y0 + r.y1) / 2 <= pt.regiao.y1 + 2);
+        return mm.linhas.filter(l => !(l.texto.trim().length < 2 || ETAPAS.includes(l.texto.trim()) || RE_QUESTAO.test(l.texto) || l.y0 < MARGEM_TOPO || l.y0 >= p.fundo - 2 || dentro(l))).length
+          + imagens.filter(f => !dentro(f) && f.y0 >= MARGEM_TOPO && f.y0 < p.fundo).length;
+      };
+      if (temCab) {
+        const nEste = fora(umaColuna ? p.uma : p.duas);
+        if (nEste > 0 && fora(umaColuna ? p.duas : p.uma) < nEste) umaColuna = !umaColuna;
       }
       umaColunaAnterior = umaColuna;
       const m = umaColuna ? p.uma : p.duas;
@@ -1852,6 +1948,10 @@ function recorteMisturado(textoPdf, numero) {
   const barra = linhas[0].match(/^\s*Quest[aã]o\s*(\d[\d ]*)/i);
   if (!barra || +barra[1].replace(/ /g, '') !== +numero) return `o texto da questão não começa na barra "Questão ${nn(numero)}" (colunas ou questões misturadas)`;
   if (linhas.slice(1).some(l => /^\s*Quest[aã]o\s*\d/i.test(l))) return 'há a barra de outra questão dentro desta (questões misturadas)';
+  // barra partida: "Questão NN" sem banca/ano e, no texto, uma linha que é só "BANCA ANO" (com pedaços de barra)
+  const soBanca = /^(⟦FIGURA \S+⟧\s*)*[A-ZÀ-Ú][A-ZÀ-Ú0-9ª\-\/(). ]*\s(19|20)\d{2}(\/\d)?\s*(⟦FIGURA \S+⟧\s*)*$/;
+  if (!/\b(19|20)\d{2}\b/.test(linhas[0]) && linhas.slice(1).some(l => soBanca.test(l.trim())))
+    return 'a barra da questão foi partida ao meio (banca e ano soltos no texto): página lida em colunas erradas';
   const letras = linhas.map(l => (l.match(/^(?:\*\*)?([A-E])(?:\*\*)?\s+\S/) || [])[1]).filter(Boolean);
   let viuB = false;
   for (let i = 1; i < letras.length; i++) {
@@ -2530,10 +2630,16 @@ function comFormulas(texto, formulas) {
 }
 // Leitura sem fim, longa demais ou com cara de lixo (\\begin{array}, \\atop…) é desenho, não fórmula:
 // o trecho entra na questão como FIGURA (imagem recortada), com aviso, em vez de erro ou LaTeX sem sentido.
-const LIXO_LATEX = /\\begin|\\end|\\atop|\\bigr|\\biggr|\\displaystyle|\\bf\b|\{\{\{|\\overline\{\{|\\mathbf\{\\/;
+const LIXO_LATEX = /\\begin|\\end|\\atop|\\bigr|\\biggr|\\displaystyle|\\textstyle|\\boldsymbol|\\bf\b|\{\{\{|\\overline\{\{|\\mathbf\{\\|\\(?:frac|dfrac|sqrt)\{\s*\}|\\(?:frac|dfrac)\{[^{}]*\}\{\s*\}/;
+// leitura incoerente (de desenho, não de fórmula): grupo vazio, \left sem \right, chaves desbalanceadas
+function latexIncoerente(t) {
+  if ((t.match(/\\left\b/g) || []).length !== (t.match(/\\right\b/g) || []).length) return true;
+  let n = 0; for (const c of t.replace(/\\[{}]/g, '')) { if (c === '{') n++; else if (c === '}' && --n < 0) return true; }
+  return n !== 0;
+}
 function formulaValida(r) {
   if (!r || r.invalida || !r.latex) return false;
-  if (r.latex.length > 160 || LIXO_LATEX.test(r.latex)) return false;
+  if (r.latex.length > 160 || LIXO_LATEX.test(r.latex) || latexIncoerente(r.latex)) return false;
   if (r.votos >= 2) return true;
   // uma leitura só (sem confirmação de outra escala): aceita só com comandos de matemática comuns
   const cmds = r.latex.match(/\\[a-zA-Z]+/g) || [];
@@ -2544,6 +2650,9 @@ const COMANDOS_COMUNS = new Set(('frac dfrac sqrt cdot times div pm mp left righ
 async function lerFormula(f) {
   const leitor = await leitorFormulas();
   const r = await leitor.ler(f.blob);
+  // fórmula que no PDF é uma imagem inteira: só vira LaTeX com a leitura confirmada por duas escalas
+  // e unânime (desenho lido como fórmula dá leituras diferentes em cada escala)
+  if (f.deImagem && !(r?.votos >= 2 && r.votos === r.de)) return {comoFigura: true};
   return formulaValida(r) ? {latex: r.latex, votos: r.votos, de: r.de} : {comoFigura: true};
 }
 // fórmulas que não são fórmula viram figuras da questão, no mesmo ponto do texto
@@ -2554,7 +2663,8 @@ function formulasViramFiguras(q) {
   let k = (q.figuras || []).length;
   for (const f of viram) {
     const nome = `Q${nn2}_fig${++k}`;
-    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: null, deFormula: true, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
+    // (imagem do PDF que não se leu como fórmula volta a ser a figura que é, sem aviso de "trecho sem texto")
+    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: f.alternativa || null, deFormula: !f.deImagem, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
     q.textoPdf = String(q.textoPdf).replace(`⟦FÓRMULA ${f.nome}⟧`, `⟦FIGURA ${nome}⟧`);
   }
   q.formulas = q.formulas.filter(f => !f.comoFigura);
@@ -2575,6 +2685,8 @@ async function lerFormulasPorOcr(job) {
   };
   // tantas leituras ao mesmo tempo quantos leitores (Workers) houver; os extras entram quando ficam prontos
   await Promise.all(Array.from({length: leitor ? 3 : 1}, umaPorVez));
+  // sem leitor (ou sem leitura): imagem do PDF continua figura, nunca some
+  for (const [, f] of alvos) if (f.deImagem && !f.latex) f.comoFigura = true;
   for (const q of job.m.questoes) { formulasViramFiguras(q); if (q.formulas?.length) q.textoPdf = comFormulas(q.textoPdf, q.formulas); }
 }
 
@@ -2761,6 +2873,7 @@ async function processar(job, {reprocessar = false} = {}) {
     if (!job.ctx) {
       if (!comImagens()) { atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: 'Testando se o Claude recebe imagens nesta visualização…'}); await sondarImagens(); }
       if (!comImagens()) { await lerTabelasPorOcr(job); await lerFormulasPorOcr(job); }
+      else for (const q of job.m.questoes) { for (const f of q.formulas || []) if (f.deImagem) f.comoFigura = true; formulasViramFiguras(q); }   // com imagem, o Claude vê a figura
       atualizar(job, {etapa: 1, estado: 'rodando', progresso: 0, mensagem: `${m.questoes.length} questões recortadas. Lendo o gabarito e classificando a lista…`});
       // Gabarito obrigatório e sempre da tabela do fim da lista: lido no navegador; se não der,
       // o Claude lê a imagem da tabela; se ainda faltar, a lista para aqui (nada é transcrito).

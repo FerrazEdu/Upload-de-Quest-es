@@ -49,7 +49,15 @@ são achadas no recorte (tinta sem texto) e entram no texto como `⟦FÓRMULA NO
 no modo só texto, o próprio navegador as lê em LaTeX (pix2tex/RapidLaTeXOCR em onnxruntime-web, lido
 em várias escalas, por maioria). Os arquivos vão em `formula/`: `python scripts/preparar_formulas.py`
 monta `dist/formula/`. A validação barra fórmula não lida, fórmula ausente da transcrição e aviso no
-lugar do texto ("expressão não legível").
+lugar do texto ("expressão não legível"). Fórmula colada como imagem grande (alternativa inteira em
+imagem) também vai ao leitor, com o recorte da própria imagem: vira LaTeX só com leitura unânime em
+duas escalas e coerente (sem `\frac{}{}`, `\left` sem `\right`); senão continua a figura que é.
+
+Colunas: cada página é lida em uma ou duas colunas pela barra "Questão NN". O texto da barra decide
+primeiro ("BANCA ANO" na ponta direita, depois do meio = barra na largura toda); sem isso, a cor da
+barra. Se com o modelo escolhido algum texto ou imagem da página ficaria fora de todas as questões, o
+recorte refaz a página com o outro modelo e fica com o que cobre tudo. A validação recusa barra partida
+(questão sem banca e com "BANCA ANO" solto no texto).
 Negrito: lido pela fonte e, nas fontes Type3
 (sem nome), pela espessura do traço de cada palavra na página renderizada.
 
