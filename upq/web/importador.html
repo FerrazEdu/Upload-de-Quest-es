@@ -102,6 +102,8 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .envio { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; padding: 14px 16px; }
 .envio .nome { font-weight: 600; overflow-wrap: anywhere; }
 .envio .msg { color: var(--suave); font-size: 13px; }
+.envio .tempo-envio { color: var(--texto); font-size: 12.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.envio .tempo-envio:empty { display: none; }
 .envio .acoes-envio { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .etapas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .etapa { font-size: 12px; color: var(--fraco); display: grid; gap: 5px; }
@@ -239,7 +241,9 @@ const ETAPAS = ['Recorte', 'Transcrição', 'Validação', 'No banco'];
 const DIFICULDADE = {1: 'Muito Fácil', 2: 'Fácil', 3: 'Média', 4: 'Difícil', 5: 'Muito Difícil'};
 const FAIXA_ETAPA = {'Fixação': [1, 2], 'Treinamento': [2, 3], 'Aprofundamento': [3, 4], 'Desafios': [4, 5]};
 const QUESTOES_POR_PARTE = 20;     // questões por documento do banco (cada documento ≤ 256 KiB)
-const SIMULTANEAS = 2;             // chamadas ao Claude ao mesmo tempo
+const SIMULTANEAS = 3;             // chamadas ao Claude ao mesmo tempo, por lista
+const LISTAS_JUNTAS = 2;
+const MAX_RETOMADAS = 40;          // lista grande (1000 questões) pode bater no limite de uso várias vezes           // listas processadas ao mesmo tempo (uma recorta enquanto a outra espera o Claude)
 const LIMITE_LINHAS = 300;
 
 // ============================================================ utilidades
@@ -289,6 +293,7 @@ async function iniciarCapacidades() {
   Object.assign(cap, {db, assets, sample, downloads, user});
   if (sample) cap.limites = await sample.limits().catch(e => { cap.limitesErro = e?.code || e?.message || String(e); return null; });
   cap.prontas = true;
+  medirArmazenamento();
   if (db) {
     const erro = e => toast(`Banco do artefato indisponível: ${e.message || e.code}`);
     db.collection('importacoes').limit(1000).onSnapshot(s => { estado.importacoes = new Map(s.docs.map(d => [d.id, d.data()])); aoMudarDados(); }, erro);
@@ -442,6 +447,8 @@ function validarQuestao(q, lista) {
   const foraDoLugar = (q.figuras || []).filter(f => f.alternativa && !f.tabela && q.alternativas?.[f.alternativa] !== undefined
     && !new RegExp(`figura:${f.nome}\\b`).test(String(q.alternativas[f.alternativa])));
   if (foraDoLugar.length) erros.push(`alternativa em imagem fora do lugar: ${foraDoLugar.map(f => `${f.nome} é a alternativa ${f.alternativa}`).join('; ')}`);
+  const deFormula = (q.figuras || []).filter(f => f.deFormula).map(f => f.nome);
+  if (deFormula.length) avisos.push(`trecho sem texto do PDF entrou como imagem (${deFormula.join(', ')}): confira se é desenho ou fórmula`);
   const sobras = [...nomes].filter(n => !usadas.has(n) && !tabelasImg.has(n));
   if (sobras.length) erros.push(`figura recortada mas não usada no texto: ${sobras.join(', ')}`);
   // Fórmula em imagem no PDF: tem de estar na transcrição (a lida por OCR, com o mesmo conteúdo)
@@ -521,9 +528,23 @@ function porChamada() { return comImagens() ? (cap.limites?.images ? Math.max(1,
 function textoBase() {
   return DADOS.base.map(([d, t, a]) => `${d} | ${t}${a.length ? ': ' + a.join('; ') : ''}`).join('\n');
 }
+// Toda chamada ao Claude tem prazo: uma resposta que não vem (rede, fila) não pode prender a lista.
+// Estourou → 'timeout' (passageiro): o lote é refeito e, se insistir, a lista retoma sozinha.
+const PRAZO_CLAUDE_MS = window.__PRAZO_CLAUDE_MS || 4 * 60 * 1000;   // (o teste automático encurta)
 async function perguntar(prompt, opcoes = {}) {
   if (!cap.sample) throw {code: 'sem_claude', message: 'O Claude não está disponível nesta visualização.'};
-  return cap.sample.json(prompt, {modelTier: 'default', ...opcoes});
+  const ctl = new AbortController();
+  let estourou = false;
+  const t = setTimeout(() => { estourou = true; ctl.abort(); }, PRAZO_CLAUDE_MS);
+  try {
+    return await Promise.race([
+      cap.sample.json(prompt, {modelTier: 'default', ...opcoes, signal: ctl.signal}),
+      new Promise((_, falha) => ctl.signal.addEventListener('abort', () => falha({code: 'timeout', message: 'o Claude não respondeu em 4 minutos'}), {once: true})),
+    ]);
+  } catch (e) {
+    if (estourou) throw {code: 'timeout', message: 'o Claude não respondeu em 4 minutos'};
+    throw e;
+  } finally { clearTimeout(t); }
 }
 async function lerGabarito(imagem) {
   const r = await perguntar(DADOS.gabarito + '\n\nResponda somente com JSON: {"itens": [{"numero": 1, "letra": "C"}, ...]}', {images: [imagem]});
@@ -532,7 +553,10 @@ async function lerGabarito(imagem) {
   return g;
 }
 async function classificar(m) {
-  const amostras = m.questoes.map(q => `- ${nn(q.numero)}: ${q.textoPdf.split(/\s+/).slice(0, 40).join(' ')}`).join('\n');
+  // lista grande (até 1000 questões): uma amostra espalhada de até 60 questões cabe no limite da chamada
+  const passo = Math.max(1, m.questoes.length / 60);
+  const escolhidas = m.questoes.length <= 60 ? m.questoes : Array.from({length: 60}, (_, i) => m.questoes[Math.floor(i * passo)]);
+  const amostras = escolhidas.map(q => `- ${nn(q.numero)}: ${semMarcasFormula(q.textoPdf).split(/\s+/).slice(0, 40).join(' ')}`).join('\n');
   const prompt = DADOS.classificacao.replace('{titulo}', m.titulo).replace('{amostras}', amostras)
     + '\n\nBASE DE TÓPICOS (Disciplina | Tópico: assuntos):\n' + textoBase()
     + '\n\nResponda somente com JSON: {"disciplina": "...", "topico": "...", "assunto": "...", "descartados": ["..."], "confiante": true, "justificativa": "..."}';
@@ -542,7 +566,7 @@ async function classificar(m) {
 }
 function promptLote(lote, ctx) {
   const blocos = lote.map((q, i) => {
-    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.alternativa && !f.tabela ? `, é a ALTERNATIVA ${f.alternativa} (o texto dessa alternativa é esta figura: ![Alternativa ${f.alternativa}: descrição](figura:${f.nome}))` : ''}${f.tabela ? (q.ocr?.[f.nome] && !comImagens() ? ', é uma TABELA colada como imagem: o conteúdo dela está no texto abaixo, na marca [TABELA DA FIGURA ' + f.nome + '] (lido por OCR); transcreva-a como tabela e NÃO use esta figura' : ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura') : ''})`).join(', ') || 'nenhuma';
+    const figs = q.figuras.map((f, k) => `${f.nome} (${k + 1}ª figura em ordem de leitura${f.centralizada ? ', centralizada no PDF' : ''}${f.deFormula ? `, fica no ponto marcado ⟦FIGURA ${f.nome}⟧ no texto (desenho do PDF sem texto)` : ''}${f.alternativa && !f.tabela ? `, é a ALTERNATIVA ${f.alternativa} (o texto dessa alternativa é esta figura: ![Alternativa ${f.alternativa}: descrição](figura:${f.nome}))` : ''}${f.tabela ? (q.ocr?.[f.nome] && !comImagens() ? ', é uma TABELA colada como imagem: o conteúdo dela está no texto abaixo, na marca [TABELA DA FIGURA ' + f.nome + '] (lido por OCR); transcreva-a como tabela e NÃO use esta figura' : ', é uma TABELA colada como imagem: transcreva-a como tabela, com todos os dados, e NÃO use esta figura') : ''})`).join(', ') || 'nenhuma';
     return `${comImagens() ? `IMAGEM ${i + 1}` : `QUESTÃO ${i + 1}`} = Questão ${nn(q.numero)}
 - Etapa: ${q.etapa || 'não informada'}
 - Gabarito oficial: ${ctx.gabarito[nn(q.numero)] || 'NÃO ENCONTRADO — marque revisar'}
@@ -937,18 +961,25 @@ function comTabelasOcr(texto, figuras, lidas) {
   for (const f of alvo) linhas.splice(Math.min(f.linha ?? linhas.length, linhas.length), 0, ...blocoOcr(f.nome, lidas[f.nome]));
   return linhas.join('\n');
 }
+// promessa com prazo: estourou, chama o limpador (ex.: derruba o Worker travado) e rejeita com 'timeout'
+function comPrazo(promessa, ms, limpar = () => {}) {
+  let t;
+  return Promise.race([promessa, new Promise((_, falha) => { t = setTimeout(() => { limpar(); falha({code: 'timeout', message: 'passou do tempo'}); }, ms); })])
+    .finally(() => clearTimeout(t));
+}
 async function lerTabelasPorOcr(job) {
+  job.fase = 'ocr';
   const alvos = job.m.questoes.flatMap(q => (q.figuras || []).filter(f => f.tabela && !(q.ocr && q.ocr[f.nome])).map(f => [q, f]));
   let feitas = 0;
   for (const [q, f] of alvos) {
     atualizar(job, {mensagem: `Lendo tabelas coladas como imagem (OCR): ${++feitas} de ${alvos.length}…`});
     try {
-      const lidas = await ocrDaFigura(f.blob);
+      const lidas = await comPrazo(ocrDaFigura(f.blob), 90000, () => { try { ocr.worker?.terminate(); } catch {} ocr.worker = null; ocr.carregando = null; });
       // quase tudo vazio: não era tabela (desenho com cara de grade) — fica como figura comum
       const celulas = (lidas || []).flat(), cheias = celulas.filter(c => String(c || '').trim().length > 0);
       if (!lidas || cheias.length < 0.4 * celulas.length) { f.tabela = false; continue; }
       q.ocr = {...(q.ocr || {}), [f.nome]: lidas};
-    } catch (e) { console.warn('OCR indisponível', e); break; }
+    } catch (e) { console.warn('OCR', e); if (e?.code !== 'timeout') break; }   // travou nesta tabela: segue para a próxima
   }
   for (const q of job.m.questoes) if (q.ocr && !q.ocrNoTexto) { q.textoPdf = comTabelasOcr(q.textoPdf, q.figuras, q.ocr); q.ocrNoTexto = true; }
 }
@@ -962,32 +993,66 @@ async function leitorFormulas() {
   if (formula.carregando) return formula.carregando;
   formula.estado = 'carregando';
   formula.carregando = UPQFormulas.carregar(urlLocal('formula/'))
-    .then(l => { formula.estado = 'pronto'; formula.modo = l.modo; formula.erro = null; return l; })
+    .then(l => { formula.estado = 'pronto'; formula.modo = l.modo; formula.leitor = l; formula.erro = null; return l; })
     .catch(e => { formula.estado = 'falhou'; formula.erro = e?.message || String(e); formula.carregando = null; throw e; });
   return formula.carregando;
 }
 const RE_MARCA_FORMULA = /⟦FÓRMULA ([A-Za-z0-9_]+)(?: = \$([^⟧]*?)\$)?⟧/g;
 const marcasFormula = t => [...String(t || '').matchAll(RE_MARCA_FORMULA)].map(m => ({nome: m[1], latex: m[2] || null}));
 // texto do PDF para conferências: a marca vira o conteúdo da fórmula (sem os comandos LaTeX)
-const semMarcasFormula = t => String(t || '').replace(RE_MARCA_FORMULA, (m0, n, lx) => lx ? ' ' + lx.replace(/\\[a-zA-Z]+/g, ' ') + ' ' : ' ');
+const semMarcasFormula = t => String(t || '').replace(RE_MARCA_FORMULA, (m0, n, lx) => lx ? ' ' + lx.replace(/\\[a-zA-Z]+/g, ' ') + ' ' : ' ').replace(/⟦FIGURA [A-Za-z0-9_]+⟧/g, ' ');
 function comFormulas(texto, formulas) {
   const por = new Map((formulas || []).filter(f => f.latex).map(f => [f.nome, f.latex]));
   return String(texto || '').replace(RE_MARCA_FORMULA, (m0, nome, lx) => por.has(nome) ? `⟦FÓRMULA ${nome} = $${por.get(nome)}$⟧` : m0);
 }
+// Leitura sem fim, longa demais ou com cara de lixo (\\begin{array}, \\atop…) é desenho, não fórmula:
+// o trecho entra na questão como FIGURA (imagem recortada), com aviso, em vez de erro ou LaTeX sem sentido.
+const LIXO_LATEX = /\\begin|\\end|\\atop|\\bigr|\\biggr|\\displaystyle|\\bf\b|\{\{\{|\\overline\{\{|\\mathbf\{\\/;
+function formulaValida(r) {
+  if (!r || r.invalida || !r.latex) return false;
+  if (r.latex.length > 160 || LIXO_LATEX.test(r.latex)) return false;
+  if (r.votos >= 2) return true;
+  // uma leitura só (sem confirmação de outra escala): aceita só com comandos de matemática comuns
+  const cmds = r.latex.match(/\\[a-zA-Z]+/g) || [];
+  return r.latex.length <= 60 && cmds.every(c => COMANDOS_COMUNS.has(c.slice(1)));
+}
+const COMANDOS_COMUNS = new Set(('frac dfrac sqrt cdot times div pm mp left right pi alpha beta gamma delta theta lambda mu rho sigma omega ' +
+  'Delta Omega phi varphi le ge leq geq neq approx sin cos tan log ln text mathrm circ degree quad qquad infty vec').split(' '));
 async function lerFormula(f) {
   const leitor = await leitorFormulas();
   const r = await leitor.ler(f.blob);
-  return r.latex ? {latex: r.latex, votos: r.votos, de: r.de} : null;
+  return formulaValida(r) ? {latex: r.latex, votos: r.votos, de: r.de} : {comoFigura: true};
+}
+// fórmulas que não são fórmula viram figuras da questão, no mesmo ponto do texto
+function formulasViramFiguras(q) {
+  const viram = (q.formulas || []).filter(f => f.comoFigura);
+  if (!viram.length) return;
+  const nn2 = nn(q.numero);
+  let k = (q.figuras || []).length;
+  for (const f of viram) {
+    const nome = `Q${nn2}_fig${++k}`;
+    q.figuras = [...(q.figuras || []), {nome, centralizada: false, tabela: false, alternativa: null, deFormula: true, ...(f.blob ? {blob: f.blob} : {}), ...(f.asset ? {asset: f.asset} : {})}];
+    q.textoPdf = String(q.textoPdf).replace(`⟦FÓRMULA ${f.nome}⟧`, `⟦FIGURA ${nome}⟧`);
+  }
+  q.formulas = q.formulas.filter(f => !f.comoFigura);
 }
 async function lerFormulasPorOcr(job) {
+  job.fase = 'formulas';
   const alvos = job.m.questoes.flatMap(q => (q.formulas || []).filter(f => !f.latex && f.blob).map(f => [q, f]));
   if (alvos.length && formula.estado !== 'pronto') atualizar(job, {mensagem: `${alvos.length} fórmula(s) em imagem no PDF. Carregando o leitor de fórmulas (≈85 MB na primeira vez)…`});
-  let feitas = 0;
-  for (const [q, f] of alvos) {
-    atualizar(job, {mensagem: `Lendo fórmulas que estão como imagem no PDF: ${++feitas} de ${alvos.length}…`});
-    try { Object.assign(f, await lerFormula(f) || {}); } catch (e) { console.warn('leitor de fórmulas indisponível', e); break; }
-  }
-  for (const q of job.m.questoes) if (q.formulas?.length) q.textoPdf = comFormulas(q.textoPdf, q.formulas);
+  let feitas = 0, proxima = 0, parar = false;
+  const leitor = alvos.length ? await leitorFormulas().catch(() => null) : null;
+  const umaPorVez = async () => {
+    while (!parar && proxima < alvos.length) {
+      const [, f] = alvos[proxima++];
+      try { Object.assign(f, await lerFormula(f) || {}); }
+      catch (e) { console.warn('leitor de fórmulas', e); if (e?.code !== 'timeout') { parar = true; break; } f.comoFigura = true; }   // travou nesta: vira figura e segue
+      atualizar(job, {mensagem: `Lendo fórmulas que estão como imagem no PDF: ${++feitas} de ${alvos.length}…`, progresso: feitas / alvos.length});
+    }
+  };
+  // tantas leituras ao mesmo tempo quantos leitores (Workers) houver; os extras entram quando ficam prontos
+  await Promise.all(Array.from({length: leitor ? 3 : 1}, umaPorVez));
+  for (const q of job.m.questoes) { formulasViramFiguras(q); if (q.formulas?.length) q.textoPdf = comFormulas(q.textoPdf, q.formulas); }
 }
 
 // ============================================================ reprocessamento de questões com erro
@@ -1023,13 +1088,14 @@ async function rodadaCorrecao(itens, ctx, aoAvancar = () => {}, repetir = true) 
 }
 // Durante a importação: valida o que veio do Claude e reprocessa as questões com erro.
 async function corrigirComErro(job) {
+  job.fase = 'correcao';
   const ctx = job.ctx, itens = [];
   for (const q of job.m.questoes) {
     const r = job.resultados.get(q.numero);
     if (!r) continue;
-    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, alternativa: f.alternativa || null}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
+    const v = validarQuestao({...r, figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, alternativa: f.alternativa || null, deFormula: !!f.deFormula}))}, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico});
     const erros = errosReprocessaveis(v);
-    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, centralizada: !!f.centralizada, alternativa: f.alternativa || null}))}});
+    if (erros.length) itens.push({q, erros, imagem: q.imagem, manter: {figuras: q.figuras.map(f => ({nome: f.nome, tabela: !!f.tabela, centralizada: !!f.centralizada, alternativa: f.alternativa || null, deFormula: !!f.deFormula}))}});
   }
   job.reprocessadas = 0; job.corrigidas = 0;
   if (!itens.length) return;
@@ -1076,10 +1142,12 @@ async function reprocessarQuestoes(qs) {
             if (f.latex || !f.asset) { formulas.push(f); continue; }
             try { formulas.push({...f, ...(await lerFormula({blob: await baixarImagem(f.asset)}) || {})}); } catch (e) { console.warn('fórmula', e); formulas.push(f); }
           }
-          q = {...q, formulas, textoPdf: comFormulas(q.textoPdf, formulas)};
+          q = {...q, formulas, figuras: [...(q.figuras || [])]};
+          formulasViramFiguras(q);   // o recorte guardado (asset) passa a ser a figura
+          q.textoPdf = comFormulas(q.textoPdf, q.formulas);
         }
         itens.push({q, erros: errosReprocessaveis(q0), imagem: comImagens() ? await baixarImagem(q.imagem) : null,
-        manter: {imagem: q.imagem, figuras: q.figuras, formulas: q.formulas || [], gabaritoRecorte: q.gabaritoRecorte || null}});
+        manter: {imagem: q.imagem, figuras: q.figuras, formulas: (q.formulas || []).map(({blob, comoFigura, ...f}) => f), gabaritoRecorte: q.gabaritoRecorte || null}});
       }
       const melhores = await rodadaCorrecao(itens, ctx, (f) => toast(`Reprocessando: ${feitas + f} de ${qs.length}…`));
       feitas += grupo.length;
@@ -1107,14 +1175,62 @@ function novoJob(arquivo) {
 }
 function atualizar(job, campos) { Object.assign(job, campos); if (tela.nome === 'enviar') desenharEnvios(); }
 
+// ---------------- previsão de término (cartão de cada lista)
+// Custos típicos de cada passo; a transcrição usa o ritmo medido assim que as primeiras respostas chegam.
+const CUSTO_MS = {pagina: 700, tabela: 6000, formula: 2500, chamada: 75000, classificacao: 25000, gravacaoQ: 150};
+const FASES = ['recorte', 'ocr', 'formulas', 'classificacao', 'transcricao', 'correcao', 'gravacao'];
+function previsaoMs(job) {
+  if (job.estado !== 'rodando' || !job.fase) return null;
+  const m = job.m, n = m?.questoes?.length || Math.round((job.paginas || 0) * 3.5);   // antes de recortar: ~3,5 questões/página
+  if (!n) return null;
+  const lote = porChamada();
+  const feitas = job.resultados?.size || 0;
+  const ritmo = job.trans && feitas - job.trans.feitas0 >= lote ? (Date.now() - job.trans.inicio) / (feitas - job.trans.feitas0) : null;   // ms por questão
+  const transcrever = q => ritmo ? q * ritmo : Math.ceil(q / lote / SIMULTANEAS) * CUSTO_MS.chamada;
+  const semImagem = !comImagens();
+  const tabelas = semImagem && m ? m.questoes.reduce((a, q) => a + (q.figuras || []).filter(f => f.tabela && !(q.ocr && q.ocr[f.nome])).length, 0) : 0;
+  const formulas = semImagem && m ? m.questoes.reduce((a, q) => a + (q.formulas || []).filter(f => !f.latex && !f.comoFigura).length, 0) : 0;
+  const resto = {
+    recorte: job.fase === 'recorte' ? (job.paginas || 0) * (1 - (job.progresso || 0)) * CUSTO_MS.pagina * (job.lendo ? 1.3 : 1) : 0,
+    ocr: tabelas * CUSTO_MS.tabela,
+    formulas: formulas * CUSTO_MS.formula / Math.max(1, formula.leitor?.paralelos?.() || 1),
+    classificacao: CUSTO_MS.classificacao,
+    transcricao: transcrever(n - feitas),
+    correcao: 0.12 * transcrever(n),
+    gravacao: n * CUSTO_MS.gravacaoQ * (job.fase === 'gravacao' ? 1 - (job.progresso || 0) : 1),
+  };
+  const i = FASES.indexOf(job.fase);
+  return FASES.slice(Math.max(0, i)).reduce((a, f) => a + (resto[f] || 0), 0);
+}
+const mmss = ms => { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600), mi = Math.floor(t % 3600 / 60), se = t % 60;
+  return h ? `${h}h${String(mi).padStart(2, '0')}` : `${mi}:${String(se).padStart(2, '0')}`; };
+function textoTempo(job) {
+  if (job.estado === 'fila') return 'Na fila: começa quando uma das listas em andamento terminar.';
+  if (!job.inicio || ['concluido', 'falhou', 'duplicado', 'gabarito'].includes(job.estado)) return '';
+  const decorrido = `⏱ ${mmss(Date.now() - job.inicio)} decorridos`;
+  if (job.estado === 'parado') return decorrido + ' · pausada';
+  const falta = previsaoMs(job);
+  if (falta === null) return decorrido + ' · calculando o tempo restante…';
+  const fim = new Date(Date.now() + falta).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+  return `${decorrido} · faltam ~${falta < 60000 ? 'menos de 1 min' : Math.ceil(falta / 60000) + ' min'} · deve terminar por volta de ${fim}`;
+}
+setInterval(() => {   // o relógio anda sozinho, sem redesenhar os cartões
+  document.querySelectorAll('[data-tempo-job]').forEach(el => { const j = estado.jobs.find(x => x.id === el.dataset.tempoJob); if (j) el.textContent = textoTempo(j); });
+}, 1000);
+
 async function processar(job, {reprocessar = false} = {}) {
+  job.inicio ||= Date.now();
   try {
     if (!job.m) {
       atualizar(job, {etapa: 0, estado: 'rodando', mensagem: 'Recortando questões e figuras…', progresso: 0});
       await pdfjsPronto;
-      job.m = await UPQRecorte.segmentar(job.file, p => atualizar(job, {mensagem: p.etapa === 'lendo' ? `Lendo a página ${p.pagina} de ${p.total}…` : `Recortando a página ${p.pagina} de ${p.total}…`, progresso: p.pagina / p.total}));
+      job.fase = 'recorte';
+      job.m = await UPQRecorte.segmentar(job.file, p => atualizar(job, {mensagem: p.etapa === 'lendo' ? `Lendo a página ${p.pagina} de ${p.total}…` : `Recortando a página ${p.pagina} de ${p.total}…`,
+        progresso: p.pagina / p.total, paginas: p.total, lendo: p.etapa === 'lendo'}));
       if (!job.m.questoes.length) return atualizar(job, {estado: 'falhou', mensagem: 'Nenhuma barra "Questão NN" encontrada. Este PDF segue outro modelo de lista.'});
       job.idImp = job.m.hash.slice(0, 16);
+      if (estado.jobs.some(j => j !== job && j.idImp === job.idImp && ['rodando', 'parado'].includes(j.estado)))
+        return atualizar(job, {estado: 'duplicado', mensagem: 'Este mesmo PDF já está sendo processado em outro cartão.'});
       if (estado.importacoes.has(job.idImp) && !reprocessar)
         return atualizar(job, {estado: 'duplicado', mensagem: `Esta lista já está no banco (${job.m.questoes.length} questões). Reprocessar substitui a transcrição.`});
     }
@@ -1138,6 +1254,7 @@ async function processar(job, {reprocessar = false} = {}) {
         guardarFalhaGabarito(job, motivo).catch(() => {});
         return atualizar(job, {estado: 'gabarito', mensagem: `Não consegui ler a tabela de gabarito automaticamente (${motivo}). A lista não foi processada e nada foi enviado ao Claude.`});
       }
+      job.fase = 'classificacao';
       const classe = m.tipo === 'lista' ? await classificar(m) : null;
       job.ctx = {titulo: m.titulo, tipo: m.tipo, gabarito, gabaritoOrigem: origem, disciplina: classe?.disciplina || null, topico: classe?.topico || null,
                  classificacao: classe, simulado: m.tipo === 'simulado' ? dadosSimulado(m.arquivo) : null};
@@ -1164,15 +1281,15 @@ function pararComErro(job, e) {
     images_unavailable: 'Esta visualização não consegue enviar imagens ao Claude. Abra o artefato no claude.ai pelo navegador.',
     sem_claude: 'O Claude não está disponível nesta visualização. Abra o artefato no claude.ai.',
   };
-  // Limite de uso ou falha passageira do Claude: retoma sozinho depois de uma pausa (até 6 vezes),
+  // Limite de uso ou falha passageira do Claude: retoma sozinho depois de uma pausa (até MAX_RETOMADAS),
   // para uma fila de várias listas não parar no meio esperando um clique.
-  const passageiro = ['rate_limited', 'upstream_error', 'empty_completion', 'invalid_json', 'timeout', 'overloaded'].includes(codigo);
+  const passageiro = ['rate_limited', 'upstream_error', 'empty_completion', 'invalid_json', 'timeout', 'overloaded', 'incompleto'].includes(codigo);
   job.retomadas = job.retomadas || 0;
-  if (passageiro && job.retomadas < 6 && estado.jobs.includes(job)) {
-    const espera = codigo === 'rate_limited' ? 90 : 20;
+  if (passageiro && job.retomadas < MAX_RETOMADAS && estado.jobs.includes(job)) {
+    const espera = codigo === 'rate_limited' ? Math.min(600, 90 * 2 ** Math.min(3, job.retomadas)) : 20;
     job.retomadas++;
     let falta = espera;
-    atualizar(job, {estado: 'parado', mensagem: `${codigo === 'rate_limited' ? 'Limite de uso do Claude atingido' : 'O Claude não respondeu direito'}. Retomando sozinho em ${falta} s (tentativa ${job.retomadas} de 6)…`});
+    atualizar(job, {estado: 'parado', mensagem: `${codigo === 'rate_limited' ? 'Limite de uso do Claude atingido' : 'O Claude não respondeu direito'}. Retomando sozinho em ${falta} s (tentativa ${job.retomadas} de ${MAX_RETOMADAS})…`});
     job.contagem = setInterval(() => {
       if (job.estado !== 'parado' || !estado.jobs.includes(job)) { clearInterval(job.contagem); return; }
       if (--falta > 0) return atualizar(job, {mensagem: job.mensagem.replace(/em \d+ s/, `em ${falta} s`)});
@@ -1184,6 +1301,8 @@ function pararComErro(job, e) {
 }
 
 async function transcreverPendentes(job) {
+  job.fase = 'transcricao';
+  job.trans = {inicio: Date.now(), feitas0: job.resultados.size};   // ritmo medido desta rodada
   const total = job.m.questoes.length;
   atualizar(job, {etapa: 1, estado: 'rodando', mensagem: `Transcrevendo com o Claude: ${job.resultados.size} de ${total} questões…`, progresso: job.resultados.size / total});
   let erroFatal = null;
@@ -1199,9 +1318,9 @@ async function transcreverPendentes(job) {
         });
         const faltaram = lote.questoes.filter(q => !job.resultados.has(q.numero));
         if (faltaram.length && lote.tentativas < 1) job.pendentes.push({questoes: faltaram, tentativas: lote.tentativas + 1});
-        else if (faltaram.length) { job.pendentes.unshift({questoes: faltaram, tentativas: 0}); erroFatal = {message: `a IA não devolveu as questões ${faltaram.map(q => nn(q.numero)).join(', ')}`}; }
+        else if (faltaram.length) { job.pendentes.unshift({questoes: faltaram, tentativas: 0}); erroFatal = {code: 'incompleto', message: `a IA não devolveu as questões ${faltaram.map(q => nn(q.numero)).join(', ')}`}; }
       } catch (e) {
-        const transitorio = ['invalid_json', 'upstream_error', 'empty_completion'].includes(e?.code);
+        const transitorio = ['invalid_json', 'upstream_error', 'empty_completion', 'timeout', 'overloaded'].includes(e?.code);
         if (transitorio && lote.tentativas < 1) job.pendentes.push({...lote, tentativas: lote.tentativas + 1});
         else { job.pendentes.unshift({...lote, tentativas: 0}); erroFatal = e; }
       }
@@ -1223,25 +1342,37 @@ async function guardarFalhaGabarito(job, motivo) {
 }
 
 async function salvarNoBanco(job) {
+  job.fase = 'gravacao';
   if (!cap.db || !cap.assets) throw {message: 'só quem pode editar este artefato grava no banco'};
   const m = job.m, ctx = job.ctx, id = job.idImp;
   atualizar(job, {etapa: 2, estado: 'rodando', mensagem: 'Validando e guardando as imagens…', progresso: 0});
-  const questoes = [];
-  let feitas = 0;
-  for (const q of m.questoes) {
+  const questoes = new Array(m.questoes.length);
+  let feitas = 0, proxima = 0;
+  // 4 questões subindo imagens ao mesmo tempo (lista de 1000 questões: milhares de imagens)
+  const guardarUma = async q => {
     const base = job.resultados.get(q.numero);
     const up = await cap.assets.upload(q.imagem, {type: 'image/jpeg'});
     const figuras = [];
-    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, alternativa: f.alternativa || null, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, alternativa: f.alternativa || null, deFormula: !!f.deFormula, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
     const formulas = [];
-    for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
-    const recGab = m.gabaritoRecortes?.[nn(q.numero)];
+    // recorte da fórmula só quando a leitura não foi confirmada (é o que um reprocessamento relê)
+    for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null,
+      asset: f.latex && (f.votos ?? 0) >= 2 ? null : (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+    // recorte da linha do gabarito: só quando a tabela foi lida do desenho (o texto do PDF é exato) —
+    // cada arquivo conta no limite de 5000 do artefato
+    const recGab = m.gabaritoPorImagem ? m.gabaritoRecortes?.[nn(q.numero)] : null;
     const gabaritoRecorte = recGab ? (await cap.assets.upload(recGab, {type: 'image/png'})).id : null;
     const final = {...base, imagem: up.id, figuras, formulas, gabaritoRecorte};
     Object.assign(final, validarQuestao(final, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
-    questoes.push(final);
-    atualizar(job, {progresso: ++feitas / m.questoes.length});
-  }
+    return final;
+  };
+  await Promise.all(Array.from({length: 4}, async () => {
+    while (proxima < m.questoes.length) {
+      const i = proxima++;
+      questoes[i] = await guardarUma(m.questoes[i]);
+      atualizar(job, {progresso: ++feitas / m.questoes.length, mensagem: `Guardando imagens e validando: ${feitas} de ${m.questoes.length} questões…`});
+    }
+  }));
   const gabaritoImagem = m.paginaGabarito ? (await cap.assets.upload(m.paginaGabarito, {type: 'image/jpeg'})).id : null;
   atualizar(job, {etapa: 3, mensagem: 'Gravando no banco…', progresso: 0.5});
   const tags = [...new Set(questoes.flatMap(q => q.assuntos))];
@@ -1260,12 +1391,19 @@ async function salvarNoBanco(job) {
     status: padrao?.[1]?.status || 'rascunho', criado_em: padrao?.[1]?.criado_em || agora(), atualizado_em: agora()});
   const erros = questoes.filter(q => q.erros.length).length, avisos = questoes.filter(q => q.avisos.length).length;
   atualizar(job, {estado: 'concluido', progresso: 1, lista: listaId,
-    mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.` + (job.reprocessadas ? ` ${job.corrigidas} de ${job.reprocessadas} com erro foram corrigidas no reprocessamento automático.` : '')});
+    mensagem: `${questoes.length} questões no banco · ${erros} com erro e ${avisos} para revisar.` + (job.reprocessadas ? ` ${job.corrigidas} de ${job.reprocessadas} com erro foram corrigidas no reprocessamento automático.` : '')
+      + (job.inicio ? ` · processada em ${Math.max(1, Math.round((Date.now() - job.inicio) / 60000))} min` : '')});
   liberarJob(job);
 }
 // Lista já gravada: solta recortes, figuras e o PDF da memória (com várias listas seguidas, guardar
 // tudo de todas pesava a aba até travar). O cartão fica só com o resumo.
+// Armazenamento do artefato (limite de arquivos): medido ao abrir e depois de cada lista gravada.
+async function medirArmazenamento() {
+  try { cap.uso = (await cap.assets?.list())?.usage || null; } catch { cap.uso = null; }
+  if (tela.nome === 'enviar') desenhar();
+}
 function liberarJob(job) {
+  medirArmazenamento();
   if (job.urlGabarito) { URL.revokeObjectURL(job.urlGabarito); job.urlGabarito = null; }
   clearInterval(job.contagem);
   job.m = null; job.file = null; job.resultados = new Map(); job.pendentes = [];
@@ -1329,6 +1467,7 @@ function telaEnviar() {
       <button class="botao" id="testar-ocr" ${ocr.estado === 'carregando' ? 'disabled' : ''}>Testar OCR</button>
       <button class="botao" id="testar-formulas" ${formula.estado === 'carregando' ? 'disabled' : ''}>Testar leitor de fórmulas</button></div></details>` : ''}
     ${!semClaude && semGravar ? '<div class="aviso-topo">Você pode ver o banco, mas só quem pode editar este artefato envia listas.</div>' : ''}
+    ${cap.uso?.maxFiles ? `<div class="aviso-topo ${cap.uso.files / cap.uso.maxFiles > 0.8 ? '' : 'info'}">Armazenamento de imagens deste artefato: ${cap.uso.files.toLocaleString('pt-BR')} de ${cap.uso.maxFiles.toLocaleString('pt-BR')} arquivos (${Math.round(100 * cap.uso.files / cap.uso.maxFiles)}%)${cap.uso.files / cap.uso.maxFiles > 0.8 ? ' — quase cheio: exporte as listas prontas e libere espaço antes de enviar mais.' : '.'}</div>` : ''}
     <label class="soltar ${bloqueado ? 'desligado' : ''}" id="soltar" for="arquivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5"/></svg>
       <strong>Arraste os PDFs das listas para cá</strong>
@@ -1380,25 +1519,27 @@ function cartaoEnvio(e) {
   const manual = e.estado !== 'gabarito' ? '' : `<div class="gab-manual">
     ${e.m?.paginaGabarito ? `<img src="${e.urlGabarito ||= URL.createObjectURL(e.m.paginaGabarito)}" alt="Página da tabela de gabarito">` : '<div class="sub">O PDF não tem página de gabarito depois das questões.</div>'}
     <div class="sub">A página da tabela foi guardada para análise do leitor de gabarito.</div></div>`;
-  return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div></div>
+  return `<div class="painel envio"><div><div class="nome">${esc(e.arquivo)}</div><div class="msg">${esc(e.mensagem)}</div><div class="tempo-envio" data-tempo-job="${e.id}">${esc(textoTempo(e))}</div></div>
     <div class="acoes-envio">${acoes}</div><div class="etapas">${etapas}</div>${manual}</div>`;
 }
-// Uma lista por vez: as chamadas ao Claude de listas diferentes não competem entre si.
-let filaRodando = false;
+// Fila com LISTAS_JUNTAS listas andando ao mesmo tempo: enquanto uma espera o Claude, a outra
+// recorta e lê tabelas/fórmulas no navegador.
+let rodando = 0;
 const fila = [];
 function enfileirar(job, opcoes = {}) {
   atualizar(job, {estado: 'fila', mensagem: 'Na fila…'});
   fila.push([job, opcoes]);
-  if (!filaRodando) rodarFila();
+  while (rodando < LISTAS_JUNTAS && fila.length) rodarFila();
 }
 async function rodarFila() {
-  filaRodando = true;
-  while (fila.length) {
-    const [job, opcoes] = fila.shift();
-    if (!estado.jobs.includes(job)) continue;
-    await processar(job, opcoes);
-  }
-  filaRodando = false;
+  rodando++;
+  try {
+    while (fila.length) {
+      const [job, opcoes] = fila.shift();
+      if (!estado.jobs.includes(job)) continue;
+      await processar(job, opcoes);
+    }
+  } finally { rodando--; }
 }
 function receber(arquivos) {
   for (const a of arquivos) {

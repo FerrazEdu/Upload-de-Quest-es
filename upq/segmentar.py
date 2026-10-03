@@ -324,7 +324,8 @@ def aparar_figura(figura, linhas_texto):
     dentro = sorted((t for t in linhas_texto
                      if t.x0 < r.x1 and t.x1 > r.x0 and t.y0 >= r.y0 - 1 and t.y1 <= r.y1 + 1
                      and (len(getattr(t, "texto", "").split()) >= 5 and t.width >= 0.5 * r.width
-                          or RE_QUESTAO.match(getattr(t, "texto", "")))), key=lambda t: t.y0)
+                          or RE_QUESTAO.match(getattr(t, "texto", "")))
+                     and r.width >= 0.4 * t.width), key=lambda t: t.y0)   # imagem pequena no meio da frase fica
     if dentro:
         cortes = [r.y0] + [v for t in dentro for v in (t.y0 - 1, t.y1 + 1)] + [r.y1]
         trechos = [(cortes[k], cortes[k + 1]) for k in range(0, len(cortes) - 1, 2) if cortes[k + 1] > cortes[k]]

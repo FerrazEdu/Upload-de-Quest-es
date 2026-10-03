@@ -361,8 +361,13 @@ const UPQRecorte = (() => {
       if (t.y0 < r.y1 && r.y1 < t.y1) r.y1 = t.y0 - 1;
       else if (t.y0 < r.y0 && r.y0 < t.y1) r.y0 = t.y1 + 1;
     }
-    const corrida = t => (t.texto || '').trim().split(/\s+/).length >= 5 && t.x1 - t.x0 >= 0.5 * (r.x1 - r.x0)
-      || RE_QUESTAO.test(t.texto || '');
+    // o texto tem de passar POR CIMA da figura (pedaços sobrepostos a ela na horizontal); frase com
+    // uma imagem pequena no meio ("observe o esquema [img] ao lado") tem os pedaços dos lados e fica
+    const sobre = t => (t.trechos || [t]).reduce((a, p) => a + Math.max(0, Math.min(p.x1, r.x1) - Math.max(p.x0, r.x0)), 0);
+    // e a figura tem de ocupar boa parte da linha: imagem pequena no meio de uma frase (o pdf.js junta
+    // os dois lados num pedaço só) não é print vazando
+    const corrida = t => ((t.texto || '').trim().split(/\s+/).length >= 5 || RE_QUESTAO.test(t.texto || ''))
+      && sobre(t) >= 0.3 * (r.x1 - r.x0) && r.x1 - r.x0 >= 0.4 * (t.x1 - t.x0);
     const dentro = linhas.filter(t => t.x0 < r.x1 && t.x1 > r.x0 && t.y0 >= r.y0 - 1 && t.y1 <= r.y1 + 1 && corrida(t)).sort((a, b) => a.y0 - b.y0);
     if (dentro.length) {
       // a figura é o maior trecho vertical sem texto corrido
@@ -486,7 +491,7 @@ const UPQRecorte = (() => {
       if (w > 20 * h || h > 20 * w) continue;
       const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
       if (!g.imagem && contemTexto(caixa)) continue;
-      if (h > 60 && w > 30) continue;   // desenho grande sem texto: não é fórmula
+      if (h > 45 || w > 360) continue;   // desenho (triângulo, gráfico, esquema) sem texto: não é fórmula
       // recorte só com a tinta do grupo (vizinhos apagados), com margem branca
       const M = 4, c = document.createElement('canvas');
       c.width = (w + 2 * M) * E; c.height = (h + 2 * M) * E;
@@ -595,9 +600,17 @@ const UPQRecorte = (() => {
     const numeros = [], letras = [];
     for (const l of linhas) {
       const t = l.texto.trim();
-      let m;
-      if ((m = t.match(/^(\d{1,3})\s+([A-E])$/))) { pares[nn(m[1])] = m[2]; caixas[nn(m[1])] = uniao(l, l); }
-      else if (/^\d{1,3}$/.test(t)) numeros.push(l);
+      // uma linha pode ter vários pares lado a lado ("01 A  51 C  101 B"); listas vão até 1000+ questões
+      if (/^(\d{1,4}\s+[A-E]\s*)+$/.test(t)) {
+        for (const tr of l.trechos?.length ? l.trechos : [l]) {
+          for (const m of String(tr.t ?? tr.texto).matchAll(/(\d{1,4})\s+([A-E])\b/g)) { pares[nn(m[1])] = m[2]; caixas[nn(m[1])] = uniao(tr, tr); }
+        }
+        // pares partidos entre pedaços ("01" num pedaço, "A" no outro)
+        const pedacos = (l.trechos || []).map(tr => ({...tr, texto: String(tr.t).trim(), y0: l.y0, y1: l.y1, base: l.base}));
+        for (const tr of pedacos) { if (/^\d{1,4}$/.test(tr.texto)) numeros.push(tr); else if (/^[A-E]$/.test(tr.texto)) letras.push(tr); }
+        continue;
+      }
+      if (/^\d{1,4}$/.test(t)) numeros.push(l);
       else if (/^[A-E]$/.test(t)) letras.push(l);
     }
     for (const n of numeros) {
@@ -1067,11 +1080,13 @@ const UPQRecorte = (() => {
     if (pUltima) candidatas.push(pUltima);
     let paginaGabarito = null, gabaritoPdf = {}, gabaritoMotivo = 'nenhuma página de gabarito depois das questões';
     const motivos = [], gabaritoRecortes = {};
+    let porImagem = false;   // gabarito lido do desenho da tabela (não do texto): recortes guardados para conferência
     for (const pg of candidatas) {
       const menor = Math.min(...numeros), proximo = menor + Object.keys(gabaritoPdf).length;   // a lista pode não começar na 1
       let {pares, caixas} = gabaritoEmTexto(pg.linhas);
       const c = await renderizar(pg.page);
       if (!Object.keys(pares).length) {
+        porImagem = true;
         const r = gabaritoNaImagem(c, proximo);
         ({pares, caixas = {}} = r);
         if (r.motivo) motivos.push(`página ${pg.pn}: ${r.motivo}`);
@@ -1102,7 +1117,7 @@ const UPQRecorte = (() => {
     return {
       arquivo: nome, hash: hashPdf, titulo: tituloLista || nome.replace(/\.pdf$/i, '').replace(/_/g, ' '),
       tipo: /simulado/i.test(nome + ' ' + tituloLista) ? 'simulado' : 'lista',
-      etapas: inicio, questoes, faltando, repetidos, paginaGabarito, gabaritoPdf, gabaritoMotivo, gabaritoRecortes, paginas: doc.numPages,
+      etapas: inicio, questoes, faltando, repetidos, paginaGabarito, gabaritoPdf, gabaritoMotivo, gabaritoRecortes, gabaritoPorImagem: porImagem, paginas: doc.numPages,
     };
   }
 

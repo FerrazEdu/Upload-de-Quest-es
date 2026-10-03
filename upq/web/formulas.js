@@ -13,7 +13,7 @@
  * não deixar criar o Worker, roda na página, cedendo a vez à tela entre os passos.
  */
 function fabricaFormulas() {
-  const MAX_W = 672, MAX_H = 192, MIN_W = 32, MIN_H = 32, BOS = 1, EOS = 2, MAX_TOKENS = 400;
+  const MAX_W = 672, MAX_H = 192, MIN_W = 32, MIN_H = 32, BOS = 1, EOS = 2, MAX_TOKENS = 100, ORCAMENTO_MS = 12000;
   const MEDIA = 0.7931 * 255, DESVIO = 0.1738 * 255;
   let carregando = null;
 
@@ -135,22 +135,33 @@ function fabricaFormulas() {
   const RARO = /\\(aleph|beth|gimel|daleth|mho|wp|Re|Im|mathbf|mathfrak|propto|natural|flat|sharp|clubsuit|spadesuit|heartsuit|diamondsuit|bigstar|maltese|S|P)\b/;
   const chave = t => t.replace(/\\[,;:! ]|\s|[{}]/g, '').replace(/\\left|\\right/g, '');
   async function ler(m, img) {
-    const base = await paraCanvas(img), leituras = [];
+    const inicio = Date.now(), base = await paraCanvas(img), leituras = [];
     const em = e => e === 1 ? base : redimensionar(base, Math.max(8, Math.round(base.width * e)), Math.max(8, Math.round(base.height * e)));
     const votar = () => {
       const grupos = new Map();
-      for (const l of leituras) { const k = chave(l.latex); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); }
+      for (const l of leituras.filter(l => l.completa)) { const k = chave(l.latex); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); }
       return [...grupos.values()].sort((a, b) => b.length - a.length || RARO.test(a[0].latex) - RARO.test(b[0].latex)
-        || Math.max(...b.map(x => x.media)) - Math.max(...a.map(x => x.media)))[0];
+        || Math.max(...b.map(x => x.media)) - Math.max(...a.map(x => x.media)))[0] || [];
     };
-    for (const e of ESCALAS) leituras.push(await lerUma(m, em(e)));
+    const resultado = melhor => {
+      const escolhida = [...melhor].sort((a, b) => b.media - a.media)[0];
+      return escolhida ? {...escolhida, votos: melhor.length, de: leituras.length, ms: Date.now() - inicio}
+        : {latex: '', invalida: true, votos: 0, de: leituras.length, ms: Date.now() - inicio};
+    };
+    // 1ª leitura sem fim (não chegou ao fim da fórmula): é desenho, não fórmula — para aqui
+    leituras.push(await lerUma(m, em(1), inicio));
+    if (!leituras[0].completa) return resultado([]);
+    // duas escalas que concordam bastam; senão, a terceira desempata; sem maioria, mais duas (se der tempo)
+    leituras.push(await lerUma(m, em(0.75), inicio));
     let melhor = votar();
-    if (melhor.length < 2) { for (const e of EXTRAS) leituras.push(await lerUma(m, em(e))); melhor = votar(); }
-    const escolhida = [...melhor].sort((a, b) => b.media - a.media)[0];
-    return {...escolhida, votos: melhor.length, de: leituras.length, leituras: leituras.map(l => l.latex)};
+    if (melhor.length >= 2) return resultado(melhor);
+    leituras.push(await lerUma(m, em(1.5), inicio));
+    melhor = votar();
+    for (const e of EXTRAS) { if (melhor.length >= 2 || Date.now() - inicio > ORCAMENTO_MS) break; leituras.push(await lerUma(m, em(e), inicio)); melhor = votar(); }
+    return resultado(melhor);
   }
 
-  async function lerUma(m, img) {
+  async function lerUma(m, img, inicio = Date.now()) {
     const {ort} = m;
     const entrada = minmax(pad(img));
     // o "resizer" escolhe a largura em que a fórmula fica na escala do treino
@@ -166,9 +177,10 @@ function fabricaFormulas() {
     }
     const contexto = (await m.encoder.run({[m.encoder.inputNames[0]]: final}))[m.encoder.outputNames[0]];
     const ids = [BOS];
-    let minimo = 1, somaLog = 0;
+    let minimo = 1, somaLog = 0, completa = false;
     for (let passo = 0; passo < MAX_TOKENS; passo++) {
       if (passo % 8 === 7) await folga();
+      if (Date.now() - inicio > ORCAMENTO_MS) break;   // orçamento da fórmula estourado
       const x = new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
       const mascara = new ort.Tensor('bool', new Uint8Array(ids.length).fill(1), [1, ids.length]);
       const saida = (await m.decoder.run({x, mask: mascara, context: contexto}))[m.decoder.outputNames[0]];
@@ -180,11 +192,11 @@ function fabricaFormulas() {
       const p = 1 / soma;   // probabilidade do token escolhido
       minimo = Math.min(minimo, p); somaLog += Math.log(p);
       ids.push(k);
-      if (k === EOS) break;
+      if (k === EOS) { completa = true; break; }
     }
     const tokens = ids.slice(1).filter(i => i > 2).map(i => m.vocab[i] ?? '');
     const latex = enxugar(posProcessar(tokens.join('').replace(/Ġ/g, ' ').trim())).replace(/(\\[,;:!]|\\ )+$/, '').trim();
-    return {latex, confianca: minimo, media: Math.exp(somaLog / Math.max(1, ids.length - 1))};
+    return {latex, completa, confianca: minimo, media: Math.exp(somaLog / Math.max(1, ids.length - 1))};
   }
 
   // mesmo pós-processamento do pix2tex: tira espaços que não separam comandos
@@ -248,18 +260,42 @@ self.onmessage = async e => {
     let seq = 0;
     const pendentes = new Map();
     w.onmessage = e => { const p = pendentes.get(e.data.id); if (!p) return; pendentes.delete(e.data.id); e.data.ok ? p.ok(e.data.r) : p.falha(new Error(e.data.erro)); };
-    w.onerror = e => { for (const p of pendentes.values()) p.falha(new Error(e.message || 'o Worker do leitor de fórmulas parou')); pendentes.clear(); };
-    const pedir = msg => new Promise((ok, falha) => { const id = ++seq; pendentes.set(id, {ok, falha}); w.postMessage({...msg, id}); });
-    return pedir({tipo: 'carregar', base}).then(() => ({ler: blob => pedir({tipo: 'ler', blob}), modo: 'worker'}),
+    w.onerror = e => { for (const p of pendentes.values()) p.falha(new Error(e.message || 'o Worker do leitor de fórmulas parou')); pendentes.clear(); morto = true; };
+    const pedir = (msg, limiteMs) => new Promise((ok, falha) => {
+      const id = ++seq;
+      const t = setTimeout(() => { if (!pendentes.has(id)) return; pendentes.delete(id); morto = true; w.terminate();
+        falha(Object.assign(new Error('leitor de fórmulas não respondeu a tempo'), {code: 'timeout'})); }, limiteMs);
+      pendentes.set(id, {ok: r => { clearTimeout(t); ok(r); }, falha: e => { clearTimeout(t); falha(e); }});
+      w.postMessage({...msg, id});
+    });
+    let morto = false, substituto = null;   // Worker que travou/morreu é trocado UMA vez por um novo
+    return pedir({tipo: 'carregar', base}, 180000).then(() => ({
+      ler: blob => morto ? (substituto ||= noWorker(base)).then(l => l.ler(blob)) : pedir({tipo: 'ler', blob}, 40000), modo: 'worker'}),
       e => { w.terminate(); throw e; });
   }
+  // Vários Workers em paralelo (um por núcleo livre, até 3): uma lista de 1000 questões tem centenas de
+  // fórmulas. O 1º carrega antes; os outros entram assim que ficam prontos. Cada pedido vai para o
+  // Worker com menos pedidos na fila.
+  const NUCLEOS = Math.max(1, Math.min(3, ((typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 2) - 1));
   function carregar(base) {
     if (carregando) return carregando;
     carregando = (async () => {
-      try { if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined') return await noWorker(base); }
-      catch (e) { console.warn('leitor de fórmulas sem Worker:', e); }
+      try {
+        if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined') {
+          const pool = [{l: await noWorker(base), fila: 0}];
+          for (let k = 1; k < NUCLEOS; k++) noWorker(base).then(l => pool.push({l, fila: 0})).catch(() => {});
+          return {
+            modo: `worker × ${NUCLEOS}`, paralelos: () => pool.length,
+            ler: async blob => {
+              const w = pool.reduce((a, b) => (b.fila < a.fila ? b : a));
+              w.fila++;
+              try { return await w.l.ler(blob); } finally { w.fila--; }
+            },
+          };
+        }
+      } catch (e) { console.warn('leitor de fórmulas sem Worker:', e); }
       const l = await local.carregar(base);
-      return {ler: l.ler, modo: 'página'};
+      return {ler: l.ler, modo: 'página', paralelos: () => 1};
     })();
     carregando.catch(() => { carregando = null; });
     return carregando;
