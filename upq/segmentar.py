@@ -318,6 +318,18 @@ def aparar_figura(figura, linhas_texto):
             r.y1 = t.y0 - 1
         elif t.y0 < r.y0 < t.y1:      # cruza a borda de cima
             r.y0 = t.y1 + 1
+    # Linha de texto corrido do PDF DENTRO da imagem (print grande escondido por clip ou coberto,
+    # barra "Questão NN") não é da figura: a figura fica com o maior trecho sem texto corrido
+    # (igual a aparar() em upq/web/recorte.js).
+    dentro = sorted((t for t in linhas_texto
+                     if t.x0 < r.x1 and t.x1 > r.x0 and t.y0 >= r.y0 - 1 and t.y1 <= r.y1 + 1
+                     and (len(getattr(t, "texto", "").split()) >= 5 and t.width >= 0.5 * r.width
+                          or RE_QUESTAO.match(getattr(t, "texto", "")))), key=lambda t: t.y0)
+    if dentro:
+        cortes = [r.y0] + [v for t in dentro for v in (t.y0 - 1, t.y1 + 1)] + [r.y1]
+        trechos = [(cortes[k], cortes[k + 1]) for k in range(0, len(cortes) - 1, 2) if cortes[k + 1] > cortes[k]]
+        if trechos:
+            r.y0, r.y1 = max(trechos, key=lambda a: a[1] - a[0])
     return r
 
 
@@ -387,6 +399,8 @@ def segmentar(caminho_pdf: Path, saida: Path) -> dict:
         linhas_texto = []
         for texto, r in linhas(pagina):
             if texto.strip():
+                r = pymupdf.Rect(r)
+                r.texto = texto   # aparar_figura usa o texto (linha corrida dentro da imagem)
                 linhas_texto.append(r)
             if not titulo_lista and texto.startswith("Lista de Exercícios"):
                 titulo_lista = texto.split("|", 1)[-1].strip()
