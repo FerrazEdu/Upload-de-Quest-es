@@ -1179,9 +1179,12 @@ async function lerSistema(f, leitor) {
   let rotulo = '';
   if (p.rotulo) {
     const r = await leitor.ler(p.rotulo);
-    const t = String(r?.latex || '').replace(/\\(mathrm|text|textrm|mathit)\{([^{}]*)\}/g, '$2').replace(/[\s~]/g, '');
+    const t = String(r?.latex || '').replace(/\\(?:mathrm|mathbf|mathit|mathsf|text|textrm|textbf|textit|boldsymbol|bf|rm)\b\s*/g, '')
+      .replace(/\\['`^~"]\{?([a-zA-Z])\}?/g, '$1').replace(/[{}\s~]/g, '');
     if (!/^[A-Za-zÀ-ú]{1,20}$/.test(t)) return null;   // rótulo ilegível: melhor a figura do que um sistema sem nome
-    rotulo = `\\text{${t}}`;
+    // grafia do próprio texto da questão (o leitor perde acentos: "Andre" → "André")
+    const doTexto = String(f.contexto || '').match(/[A-Za-zÀ-ú]+/g)?.find(w => semAcento(w) === semAcento(t));
+    rotulo = `\\text{${doTexto || t}}`;
   }
   return {latex: `${rotulo}\\begin{cases} ${lidas.map(r => r.latex).join(' \\\\ ')} \\end{cases}`, sistema: true,
     votos: Math.min(...lidas.map(r => r.votos ?? 1)), de: Math.max(...lidas.map(r => r.de ?? 1))};
@@ -1213,7 +1216,7 @@ function formulasViramFiguras(q) {
 }
 async function lerFormulasPorOcr(job) {
   job.fase = 'formulas';
-  const alvos = job.m.questoes.flatMap(q => (q.formulas || []).filter(f => !f.latex && f.blob).map(f => [q, f]));
+  const alvos = job.m.questoes.flatMap(q => (q.formulas || []).filter(f => !f.latex && f.blob).map(f => (f.contexto = q.textoPdf, [q, f])));
   if (alvos.length && formula.estado !== 'pronto') atualizar(job, {mensagem: `${alvos.length} fórmula(s) em imagem no PDF. Carregando o leitor de fórmulas (≈85 MB na primeira vez)…`});
   let feitas = 0, proxima = 0, parar = false;
   const leitor = alvos.length ? await leitorFormulas().catch(() => null) : null;
@@ -1317,7 +1320,7 @@ async function reprocessarQuestoes(qs) {
           const formulas = [];
           for (const f of q.formulas) {
             if (f.latex || !f.asset) { formulas.push(f); continue; }
-            try { formulas.push({...f, ...(await lerFormula({blob: await baixarImagem(f.asset)}) || {})}); } catch (e) { console.warn('fórmula', e); formulas.push(f); }
+            try { formulas.push({...f, ...(await lerFormula({blob: await baixarImagem(f.asset), contexto: q.textoPdf}) || {})}); } catch (e) { console.warn('fórmula', e); formulas.push(f); }
           }
           q = {...q, formulas, figuras: [...(q.figuras || [])]};
           formulasViramFiguras(q);   // o recorte guardado (asset) passa a ser a figura
@@ -1338,6 +1341,72 @@ async function reprocessarQuestoes(qs) {
       }
     }
     toast(`Reprocessamento concluído: ${corrigidas} de ${qs.length} questão(ões) corrigida(s).${corrigidas < qs.length ? ' As demais continuam com erro para revisão.' : ''}`);
+  } catch (e) {
+    toast(e?.code === 'rate_limited' ? 'Limite de uso do Claude atingido. Tente de novo em alguns minutos.' : `Reprocessamento parou: ${e?.message || e?.code || e}`);
+  } finally { reprocessando = false; desenhar(); }
+}
+
+// Uma questão do banco, a pedido de quem revisa (botão "Reprocessar" na questão): o Claude transcreve de
+// novo, com a instrução opcional do revisor; com o PDF da lista anexado, a questão é antes recortada de novo
+// (figuras, fórmulas, sistemas e tabelas refeitos com os critérios atuais). Substitui a questão no banco.
+async function reprocessarUma(q0, {pedido = '', arquivo = null} = {}, aoAvancar = () => {}) {
+  if (reprocessando) return toast('Já há um reprocessamento em andamento.');
+  if (!cap.sample || !cap.db || !cap.assets) return toast('Reprocessar exige o Claude e permissão de edição neste artefato.');
+  const imp = estado.importacoes.get(q0.origem);
+  if (!imp) return toast('A importação desta questão não foi encontrada.');
+  reprocessando = true;
+  try {
+    const ctx = {titulo: imp.titulo, tipo: imp.tipo, gabarito: imp.gabarito || {}, disciplina: imp.disciplina, topico: imp.topico,
+      simulado: imp.tipo === 'simulado' ? dadosSimulado(imp.arquivo) : null};
+    let q, recortada = false;
+    if (arquivo) {
+      aoAvancar('Recortando o PDF de novo…');
+      const m = await UPQRecorte.segmentar(arquivo);
+      if (m.hash.slice(0, 16) !== q0.origem) throw {message: 'este PDF não é o da lista desta questão (o conteúdo é diferente)'};
+      q = m.questoes.find(x => x.numero === q0.numero);
+      if (!q) throw {message: `a questão ${nn(q0.numero)} não foi encontrada no PDF`};
+      const job = {m: {...m, questoes: [q]}};
+      aoAvancar('Lendo fórmulas e tabelas da questão…');
+      if (!comImagens()) { await lerTabelasPorOcr(job); await lerFormulasPorOcr(job); }
+      else { for (const f of q.formulas || []) if (f.deImagem) f.comoFigura = true; formulasViramFiguras(q); }
+      recortada = true;
+    } else {
+      q = {...q0, figuras: [...(q0.figuras || [])]};
+      if (!comImagens() && (q.formulas || []).some(f => !f.latex && f.asset)) {
+        const formulas = [];
+        for (const f of q.formulas) {
+          if (f.latex || !f.asset) { formulas.push(f); continue; }
+          try { formulas.push({...f, ...(await lerFormula({blob: await baixarImagem(f.asset), contexto: q.textoPdf}) || {})}); } catch { formulas.push(f); }
+        }
+        q.formulas = formulas; formulasViramFiguras(q); q.textoPdf = comFormulas(q.textoPdf, q.formulas);
+      }
+    }
+    const erros = [...errosReprocessaveis(q0), ...(pedido.trim() ? [`pedido de quem revisa: ${pedido.trim()}`]
+      : errosReprocessaveis(q0).length ? [] : ['reprocessamento pedido por quem revisa: confira cada trecho com o PDF (fórmulas em LaTeX, figuras no lugar, negrito)'])];
+    aoAvancar('Transcrevendo com o Claude…');
+    const imagem = comImagens() ? (recortada ? q.imagem : await baixarImagem(q0.imagem)) : null;
+    const r = await perguntar(promptLote([comCorrecao(recortada ? q : {...q, enunciado: q0.enunciado}, erros, ctx)], ctx), comImagens() ? {images: [imagem]} : {});
+    const achada = (Array.isArray(r?.questoes) ? r.questoes : []).find(y => y && +y.numero === q0.numero) || r?.questoes?.[0];
+    if (!achada || !String(achada.enunciado || '').trim()) throw {message: 'o Claude não devolveu a questão; tente de novo'};
+    let nova;
+    if (recortada) {
+      aoAvancar('Guardando as imagens…');
+      const figuras = [];
+      for (const f of q.figuras) figuras.push({nome: f.nome, centralizada: !!f.centralizada, tabela: !!f.tabela, alternativa: f.alternativa || null, deFormula: !!f.deFormula, asset: (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+      const formulas = [];
+      for (const f of q.formulas || []) formulas.push({nome: f.nome, latex: f.latex || null, votos: f.votos ?? null, de: f.de ?? null, ...(f.deTexto ? {deTexto: true} : {}),
+        asset: !f.blob || f.latex && (f.votos ?? 0) >= 2 ? null : (await cap.assets.upload(f.blob, {type: 'image/png'})).id});
+      nova = {...normalizarIA(achada, q, ctx), imagem: (await cap.assets.upload(q.imagem, {type: 'image/jpeg'})).id, figuras, formulas, gabaritoRecorte: q0.gabaritoRecorte || null};
+    } else {
+      const manter = {imagem: q0.imagem, figuras: q.figuras, formulas: (q.formulas || []).map(({blob, comoFigura, contexto, ...f}) => f), gabaritoRecorte: q0.gabaritoRecorte || null};
+      nova = {...manter, ...normalizarIA(achada, q, ctx), ...manter};
+    }
+    Object.assign(nova, validarQuestao(nova, {tipo: ctx.tipo, disciplina: ctx.disciplina, topico: ctx.topico}));
+    const parte = estado.partes.get(q0.parte_id);
+    const questoes = parte.questoes.map(x => x.numero === q0.numero ? {...nova, revisada: false} : x);
+    await cap.db.doc(`partes/${q0.parte_id}`).set({...parte, questoes});
+    toast(`Questão ${nn(q0.numero)} reprocessada${nova.erros.length ? ` — ainda com ${nova.erros.length} erro(s) para revisar` : nova.avisos.length ? ' — com avisos para conferir' : ' sem pendências'}.`);
+    return nova;
   } catch (e) {
     toast(e?.code === 'rate_limited' ? 'Limite de uso do Claude atingido. Tente de novo em alguns minutos.' : `Reprocessamento parou: ${e?.message || e?.code || e}`);
   } finally { reprocessando = false; desenhar(); }
@@ -2069,7 +2138,7 @@ function detalheQuestao(q, comBotoes) {
   return `
     <div class="cab" style="margin:0"><h2>Detalhes da questão</h2>${comBotoes && cap.db ? `<div class="form-linha">
       ${q.avisos?.length && !q.erros?.length ? '<button class="botao" data-acao-q="revisada">Marcar como revisada</button>' : ''}
-      ${cap.sample && errosReprocessaveis(q).length ? `<button class="botao primario" data-acao-q="reprocessar" ${reprocessando ? 'disabled' : ''}>Reprocessar</button>` : ''}
+      ${cap.sample && cap.assets ? `<button class="botao ${errosReprocessaveis(q).length ? 'primario' : ''}" data-acao-q="painel-reprocessar" ${reprocessando ? 'disabled' : ''}>Reprocessar</button>` : ''}
       <button class="botao" data-acao-q="editar">Editar</button></div>` : ''}</div>
     ${q.erros?.length ? `<ul class="avisos erro sem-tex">${q.erros.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
     ${q.avisos?.length ? `<ul class="avisos alerta sem-tex">${q.avisos.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
@@ -2088,6 +2157,20 @@ function detalheQuestao(q, comBotoes) {
     <div><div class="rotulo">Gabarito (tabela do PDF)</div><div class="gab-tabela"><span class="valor num">${esc(q.gabarito || '—')}</span>
       ${q.gabaritoRecorte ? `<img src="${blobUrl(q.gabaritoRecorte)}" alt="Linha da questão ${q.numero} na tabela de gabarito" loading="lazy">` : ''}</div></div>
     <details class="original"><summary>Ver original no PDF (${esc(q.lista_origem)}, página ${q.pagina})</summary><img src="${blobUrl(q.imagem)}" alt="Recorte original da questão ${q.numero}" loading="lazy"></details>`;
+}
+function painelReprocessar(q) {
+  return `
+    <div class="cab" style="margin:0"><h2>Reprocessar a questão ${nn(q.numero)}</h2></div>
+    <p class="sub sem-tex">O Claude transcreve a questão de novo e ela é validada outra vez. A versão nova substitui a atual no banco.</p>
+    <div class="detalhe" style="padding:0">
+      <label class="rotulo-campo">O que corrigir? (opcional)
+        <textarea class="campo" id="rep-pedido" rows="3" style="min-height:70px;font-family:inherit" placeholder="Ex.: os sistemas de André e Bruno saíram como imagem; escreva todos em LaTeX."></textarea></label>
+      <label class="rotulo-campo">PDF da lista (opcional, recomendado para problemas de imagem, fórmula ou recorte)
+        <input class="campo" type="file" id="rep-pdf" accept="application/pdf,.pdf">
+        <span class="sub sem-tex" style="font-weight:400">Com o PDF, a questão é recortada de novo com os critérios atuais (figuras, fórmulas, sistemas e tabelas). Sem ele, só a transcrição é refeita.</span></label>
+      <p class="sub sem-tex" id="rep-estado" aria-live="polite"></p>
+      <div class="form-linha"><button class="botao primario" data-acao-q="reprocessar-agora">Reprocessar agora</button><button class="botao" type="button" data-acao-q="cancelar">Cancelar</button></div>
+    </div>`;
 }
 function formEdicao(q) {
   const assuntos = BASE.get(q.disciplina + '\u0000' + q.topico) || [];
@@ -2127,6 +2210,16 @@ function ligarDetalhe(raiz, q, aoFechar) {
     else if (acao === 'cancelar') { trocarConteudo(raiz, detalheQuestao(q, true), q, aoFechar); }
     else if (acao === 'revisada') { await gravarQuestao(q, {revisada: true}); aoFechar?.(); }
     else if (acao === 'reprocessar') { b.disabled = true; b.textContent = 'Reprocessando…'; await reprocessarQuestoes([q]); aoFechar?.(); }
+    else if (acao === 'painel-reprocessar') trocarConteudo(raiz, painelReprocessar(q), q, aoFechar);
+    else if (acao === 'reprocessar-agora') {
+      const pedido = raiz.querySelector('#rep-pedido')?.value || '', arquivo = raiz.querySelector('#rep-pdf')?.files?.[0] || null;
+      const est = raiz.querySelector('#rep-estado');
+      raiz.querySelectorAll('[data-acao-q]').forEach(x => { x.disabled = true; });
+      b.textContent = 'Reprocessando…';
+      const nova = await reprocessarUma(q, {pedido, arquivo}, msg => { if (est) est.textContent = msg; });
+      if (nova) trocarConteudo(raiz, detalheQuestao({...q, ...nova, revisada: false}, true), {...q, ...nova}, aoFechar);
+      else { raiz.querySelectorAll('[data-acao-q]').forEach(x => { x.disabled = false; }); b.textContent = 'Reprocessar agora'; if (est) est.textContent = 'Não foi possível reprocessar (veja a mensagem acima).'; }
+    }
   }));
   raiz.querySelector('#form-q')?.addEventListener('submit', async e => {
     e.preventDefault();

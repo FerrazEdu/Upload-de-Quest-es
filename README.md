@@ -54,7 +54,12 @@ imagem) também vai ao leitor, com o recorte da própria imagem: vira LaTeX só 
 duas escalas e coerente (sem `\frac{}{}`, `\left` sem `\right`); senão continua a figura que é.
 Sistema com chave vira uma fórmula só, `\begin{cases} … \end{cases}`: chave desenhada com as equações em
 texto é montada no recorte (a letra da alternativa fica fora); sistema inteiro sem texto (ex.: "Bruno {…")
-é partido em rótulo, chave e linhas, e cada linha (longa: em pedaços) é lida pelo leitor.
+é partido em rótulo, chave e linhas, e cada linha (longa: em pedaços) é lida pelo leitor; sistemas
+empilhados que se tocam são separados (um por chave) e o rótulo usa a grafia do texto da questão ("André").
+
+Cada questão do banco tem o botão **Reprocessar**: instrução opcional do revisor ("o que corrigir") e,
+opcionalmente, o PDF da lista — com ele a questão é recortada de novo com os critérios atuais antes da
+nova transcrição; a versão nova substitui a antiga.
 
 Colunas: cada página é lida em uma ou duas colunas pela barra "Questão NN". O texto da barra decide
 primeiro ("BANCA ANO" na ponta direita, depois do meio = barra na largura toda); sem isso, a cor da

@@ -458,13 +458,36 @@ const UPQRecorte = (() => {
   function temChave(g, W) {
     const h = g.y1 - g.y0 + 1, w = g.x1 - g.x0 + 1, cols = new Map();
     for (const k of g.celulas) { const x = k % W - g.x0, y = (k - k % W) / W; if (x > 0.6 * w) continue; (cols.get(x) || cols.set(x, []).get(x)).push(y); }
-    for (const ys of cols.values()) {
-      ys.sort((a, b) => a - b);
+    // a chave é curva (o bico do meio sai da coluna das pontas): olha faixas de 4 colunas
+    for (const x of cols.keys()) {
+      const ys = [...new Set([0, 1, 2, 3].flatMap(d => cols.get(x + d) || []))].sort((a, b) => a - b);
       let ini = ys[0], ok = false;
-      for (let i = 1; i <= ys.length; i++) if (i === ys.length || ys[i] - ys[i - 1] > 2) { if (ys[i - 1] - ini + 1 >= 0.7 * h) ok = true; ini = ys[i]; }
+      for (let i = 1; i <= ys.length; i++) if (i === ys.length || ys[i] - ys[i - 1] > 3) { if (ys[i - 1] - ini + 1 >= 0.7 * h) ok = true; ini = ys[i]; }
       if (ok) return true;
     }
     return false;
+  }
+
+  function dividirSistemas(g, W) {
+    const porLinha = new Map();
+    for (const k of g.celulas) { const y = (k - k % W) / W; (porLinha.get(y) || porLinha.set(y, []).get(y)).push(k); }
+    const ys = [...porLinha.keys()].sort((a, b) => a - b), faixas = [];
+    for (const y of ys) { const u = faixas[faixas.length - 1]; if (u && y - u.y1 <= 2) { u.y1 = y; u.ys.push(y); } else faixas.push({y0: y, y1: y, ys: [y]}); }
+    if (faixas.length < 2) return [g];
+    const pedaco = fs => { const celulas = fs.flatMap(f => f.ys.flatMap(y => porLinha.get(y))); const xs = celulas.map(k => k % W);
+      return {x0: Math.min(...xs), x1: Math.max(...xs), y0: fs[0].y0, y1: fs[fs.length - 1].y1, celulas, imagem: g.imagem}; };
+    const saida = []; let ini = 0;
+    for (let i = 1; i < faixas.length; i++) {
+      const acima = pedaco(faixas.slice(ini, i));
+      if (!temChave(acima, W)) continue;
+      // logo abaixo começa outro sistema (algum trecho a partir daqui tem a sua chave)?
+      let outro = false;
+      for (let j = i + 1; j <= faixas.length && !outro; j++) outro = temChave(pedaco(faixas.slice(i, j)), W);
+      if (outro) { saida.push(acima); ini = i; }
+    }
+    if (!saida.length) return [g];
+    saida.push(pedaco(faixas.slice(ini)));
+    return saida;
   }
 
   async function tintaSemTexto(canvas, regiao, linhas, figuras, cabecalho, pequenas = []) {
@@ -567,13 +590,23 @@ const UPQRecorte = (() => {
       }
       grupos = grupos.filter((g, k) => vivo[k]);
     }
+    // sistemas com chave empilhados (André logo acima de Bruno) se juntam numa mancha só: parte nas linhas
+    // em branco de modo que cada pedaço tenha a sua chave (fração e fórmula de uma linha não têm chave)
+    grupos = grupos.flatMap(g => g.y1 - g.y0 > 30 ? dividirSistemas(g, W) : [g]);
     const saida = [];
     for (const g of grupos) {
       const w = g.x1 - g.x0 + 1, h = g.y1 - g.y0 + 1;
       if (w < 3 || h < 3 || w * h < 30 || g.celulas.length < 12) continue;
       if (w > 20 * h || h > 20 * w) continue;
       const caixa = {x0: X0 + g.x0, y0: Y0 + g.y0, x1: X0 + g.x1 + 1, y1: Y0 + g.y1 + 1};
-      if (!g.imagem && contemTexto(caixa)) continue;
+      // texto dentro da mancha: não é fórmula — salvo sistema com chave cujo texto são só letras soltas (o "é"
+      // de \text{André} que o PDF guarda como texto): esses pedaços entram no recorte e saem do texto
+      let consumidos = null;
+      if (!g.imagem && contemTexto(caixa)) {
+        const dentro = trechos.filter(t => { const b = caixaDe(t); return b.x0 + 0.8 >= caixa.x0 - 1 && b.x1 - 0.8 <= caixa.x1 + 1 && t.base - 0.6 * t.h >= caixa.y0 - 1 && t.base <= caixa.y1 + 1; });
+        if (!(temChave(g, W) && dentro.every(t => String(t.t).trim().length <= 2))) continue;
+        consumidos = dentro;
+      }
       // desenho (triângulo, gráfico, esquema) sem texto: não é fórmula — salvo sistema desenhado (com chave)
       if ((h > 45 && !(h <= 110 && temChave(g, W))) || w > 360) continue;
       // bloco cheio de uma cor só (pedaço de barra "Questão NN", ponta arredondada, faixa): não é conteúdo
@@ -590,6 +623,8 @@ const UPQRecorte = (() => {
       im.data.fill(255);
       const meu = new Uint8Array(W * H);
       for (const k of g.celulas) { const x = k % W, y = (k - x) / W; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < W && ny < H) meu[ny * W + nx] = 1; } }
+      for (const t of consumidos || []) { const b = caixaDe(t);   // as letras de texto do sistema entram no recorte
+        for (let y = Math.max(0, Math.floor(b.y0 - Y0)); y <= Math.min(H - 1, Math.ceil(b.y1 - Y0)); y++) for (let x = Math.max(0, Math.floor(b.x0 - X0)); x <= Math.min(W - 1, Math.ceil(b.x1 - X0)); x++) meu[y * W + x] = 1; }
       for (let y = 0; y < h + 2 * M; y++) for (let x = 0; x < w + 2 * M; x++) {
         const cx = g.x0 - M + x, cy = g.y0 - M + y;
         if (cx < 0 || cy < 0 || cx >= W || cy >= H || !meu[cy * W + cx]) continue;
@@ -599,7 +634,7 @@ const UPQRecorte = (() => {
         }
       }
       ctx.putImageData(im, 0, 0);
-      saida.push({...caixa, blob: await new Promise(res => c.toBlob(res, 'image/png'))});
+      saida.push({...caixa, ...(consumidos ? {consumidos} : {}), blob: await new Promise(res => c.toBlob(res, 'image/png'))});
     }
     return saida.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
   }
@@ -1072,6 +1107,7 @@ const UPQRecorte = (() => {
         formulas.splice(formulas.indexOf(f), 1, sis);
         linhas.forEach((l, i) => doSistema.set(l, i ? null : {sis, esquerda: l.trechos.filter(t => t.x1 <= f.x0 + 3)}));
       }
+      const usados = new Set(formulas.flatMap(f => f.consumidos || []));
       const entradas = daParte.map((l, i) => ({y: (l.y0 + l.y1) / 2, l, i, formulas: []}));
       formulas.forEach((f, k) => {
         f.k = k;
@@ -1093,9 +1129,11 @@ const UPQRecorte = (() => {
         if (doSistema.has(l)) { const d = doSistema.get(l);   // linha de sistema com chave
           return d ? [marcadoDe({trechos: d.esquerda}).trim(), marca(d.sis), ...e.formulas.map(marca)].filter(Boolean).join(' ') : ''; }
         const prefixo = centralizado(l.x0, l.x1, l.texto.trim().length) ? '[centralizado] ' : '';
-        if (!e.formulas.length) return prefixo + marcadoDe(l);
+        const resto = (l.trechos || []).filter(t => !usados.has(t));   // sem as letras que entraram num sistema
+        if (l.trechos && resto.length < l.trechos.length && !resto.some(t => String(t.t).trim()) && !e.formulas.length) return '';
+        if (!e.formulas.length) return prefixo + (resto.length < (l.trechos || []).length ? marcadoDe({trechos: resto}).trim() : marcadoDe(l));
         // fórmulas na linha: na posição x entre os trechos de texto
-        const itens = [...(l.trechos || []).map(t => ({x: (t.x0 + t.x1) / 2, t})), ...e.formulas.map(f => ({x: f.x0, f}))].sort((a, b) => a.x - b.x);
+        const itens = [...resto.map(t => ({x: (t.x0 + t.x1) / 2, t})), ...e.formulas.map(f => ({x: f.x0, f}))].sort((a, b) => a.x - b.x);
         const pedacos = [];
         let grupo = [];
         for (const it of itens) {
